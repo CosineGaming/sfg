@@ -1,1 +1,2 @@
-log("hi")
+fn main()
+	log("hi")
