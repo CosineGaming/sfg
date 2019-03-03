@@ -18,8 +18,17 @@ struct Identifier {
 	id_type: Type,
 }
 enum Statement {
-	Assignment(Assignment),
+	//Assignment(Assignment),
 	FnCall(FnCall),
+}
+enum Expression {
+	Literal(Literal),
+	//BinaryExpr,
+}
+enum Literal {
+	String(String),
+	//Int(i32),
+	//Float(f32),
 }
 struct Assignment {
 	lvalue: Identifier,
@@ -29,7 +38,6 @@ struct FnCall {
 	name: String,
 	arguments: Vec<Expression>,
 }
-type Expression = isize; // TODO
 
 fn parse_id(rtokens: &mut Vec<Token>, type_required: bool) -> Identifier {
 	let name = match rtokens.pop() {
@@ -60,8 +68,15 @@ fn parse_id(rtokens: &mut Vec<Token>, type_required: bool) -> Identifier {
 }
 
 fn parse_expression(mut rtokens: &mut Vec<Token>) -> Result<Expression, &str> {
-	rtokens.pop();
-	Ok(5)
+	println!("WARNING: parse expression not implemented");
+	match rtokens.last() {
+		Some(Token::StringLit(_)) => {
+			if let Some(Token::StringLit(string)) = rtokens.pop() {
+				return Ok(Expression::Literal(Literal::String(string)));
+			} else { unreachable!() }
+		},
+		_ => panic!("other expressions unimplemented"),
+	}
 }
 
 fn parse_call(mut rtokens: &mut Vec<Token>) -> Result<FnCall, &str> {
@@ -207,18 +222,5 @@ pub fn parse(tokens: &mut Vec<Token>) -> AST {
 		};
 		rtokens.pop();
 	}
-	vec![Function {
-		name: String::from("test"),
-		statements: vec![Statement::Assignment(Assignment {
-			lvalue: Identifier {
-				name: String::from("hi"),
-				id_type: Type::Int,
-			},
-			rvalue: 7040,
-		})],
-		signature: Signature {
-			parameters: vec![],
-			return_type: Type::Int,
-		}
-	}]
+	ast
 }
