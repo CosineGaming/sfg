@@ -93,6 +93,21 @@ pub fn lex(text: &str) -> Vec<Token> {
 				Ok(number) => IntLit(number),
 				Err(err) => panic!("{}", err),
 			}
+		} else if c == '/' {
+			rchars.pop();
+			match rchars.last() {
+				Some('/') => {
+					// Comment
+					while rchars.last() != None && rchars.last() != Some(&'\n') {
+						rchars.pop();
+					}
+					continue;
+				}
+				_ => {
+					// Division
+					panic!("division operator not yet supported");
+				}
+			}
 		} else if c == '\n' {
 			rchars.pop();
 			Newline
@@ -136,7 +151,7 @@ mod test {
 		use super::lex;
 		use super::Token::*;
 		let lexed = lex(
-r#"fn main()
+r#"fn main() // hello world
 	log("hi")"#);
 		assert_eq!(lexed, vec![
 			Fn,
