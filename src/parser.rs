@@ -166,42 +166,8 @@ fn parse_fn(mut rtokens: &mut Vec<Token>) -> Function {
 			}
 		};
 		match t {
-			Token::Tab(text) => {
-				let mut chars = text.chars();
-				let mut new_count = 1;
-				let is_tab = match chars.next() {
-					Some('\t') => true,
-					Some(' ') => false,
-					Some(_) => panic!("lexer gave non-space space"),
-					None => {
-						println!("WARNING: no-space space (safe to ignore due to hack from lexer)");
-						continue
-					}, // TODO
-				};
-				for c in chars {
-					if ('\t' == c) == is_tab {
-						new_count += 1;
-					} else {
-						panic!("mixing tabs and spaces at the indent level");
-					}
-				}
-				if !is_tab {
-					println!("WARNING: spaces must be 4 for partial implementation"); // TODO
-					if new_count % 4 != 0 {
-						panic!("space count undivisible by 4!");
-					}
-					new_count = new_count / 4;
-				}
-				if new_count != 1 {
-					// We've collected all the statements
-					break;
-				}
-				// Eat the space
-				rtokens.pop();
-			},
-			_ => {
-				panic!("expected indented block in function, got {:?}", t);
-			}
+			Token::Tab => { rtokens.pop(); },
+			_ => break,
 		}
 		statements.push(parse_statement(rtokens));
 		match rtokens.pop() {

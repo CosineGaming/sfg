@@ -54,10 +54,9 @@ pub fn lex(text: String) -> Vec<Token> {
 					Tab
 				} else {
 					// Figure out how many spaces we're using
-					let mut text = String::new();
 					let mut count = 0;
 					loop {
-						let x = match rchars.last() {
+						match rchars.last() {
 							Some(' ') =>  {
 								rchars.pop();
 								count += 1;
@@ -72,7 +71,7 @@ pub fn lex(text: String) -> Vec<Token> {
 						spaces_count = count;
 					}
 					if count == spaces_count {
-						Tab(text)
+						Tab
 					} else {
 						panic!("expected {} spaces, got {}", spaces_count, count);
 					}
