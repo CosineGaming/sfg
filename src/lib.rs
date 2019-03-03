@@ -50,10 +50,11 @@ pub fn lex(text: String) -> Vec<Token> {
 					None => break, // End of ID is fine
 				};
 				if is_id(x) {
-					text.push(c);
+					text.push(x);
 				} else {
 					break;
 				}
+				rchars.pop();
 			}
 			let symbol_or_id = match text.as_ref() {
 				"fn" => Fn,
@@ -103,7 +104,7 @@ pub fn lex(text: String) -> Vec<Token> {
 			// Don't include literal quote
 			rchars.pop();
 			loop {
-				// Pop immediately because don't include literal pop
+				// Pop immediately because don't include literal quote anyway
 				match rchars.pop() {
 					Some('"') => break StringLit(text),
 					Some(_) => text.push(c),
@@ -134,9 +135,17 @@ struct Identifier {
 	name: String,
 	id_type: Type,
 }
-struct Statement {
+enum Statement {
+	Assignment(Assignment),
+	FnCall(FnCall),
+}
+struct Assignment {
 	lvalue: Identifier,
 	rvalue: Expression,
+}
+struct FnCall {
+	name: String,
+	arguments: Vec<Expression>,
 }
 type Expression = isize; // TODO
 
@@ -168,19 +177,73 @@ fn parse_id(rtokens: &mut Vec<Token>, type_required: bool) -> Identifier {
 	}
 }
 
-fn parse_statement(rtokens: &mut Vec<Token>) -> Statement {
-	println!("WARNING: parse statement unimplemented");
-	Statement {
-		lvalue: Identifier {
-			name: "TODO".to_string(),
-			id_type: Type::Infer,
-		},
-		rvalue: 7040,
+fn parse_expression(mut rtokens: &mut Vec<Token>) -> Result<Expression, &str> {
+	rtokens.pop();
+	Ok(5)
+}
+
+fn parse_call(mut rtokens: &mut Vec<Token>) -> Result<FnCall, &str> {
+	let name = match rtokens.pop() {
+		Some(Token::Identifier(name)) => name,
+		_ => return Err("expected identifier in function call"),
+	};
+	// Arguments
+	match rtokens.pop() {
+		Some(Token::LParen) => (),
+		Some(_) => panic!("expected ("),
+		None => panic!("unexpected EOF parsing arguments"),
+	}
+	let mut arguments = vec![];
+	loop {
+		// TODO: is allowing commas at the beginning the worst idea ive had?
+		let result = match rtokens.last() {
+			Some(Token::RParen) => { rtokens.pop(); break },
+			Some(Token::Comma) => { rtokens.pop(); continue },
+			_ => parse_expression(rtokens),
+		};
+		match result {
+			Ok(expr) => arguments.push(expr),
+			Err(err) => panic!(format!("{}", err)),
+		}
+	}
+	Ok(FnCall {
+		name,
+		arguments,
+	})
+}
+
+fn parse_args(mut rtokens: &mut Vec<Token>) -> Vec<Identifier> {
+	let mut args = vec![];
+	match rtokens.pop() {
+		Some(Token::LParen) => (),
+		Some(_) => panic!("expected ("),
+		None => panic!("unexpected EOF parsing parameters"),
+	}
+	loop {
+		args.push(match rtokens.last() {
+			Some(Token::Identifier(_)) => parse_id(&mut rtokens, true),
+			Some(Token::RParen) => { rtokens.pop(); break },
+			Some(_) => panic!("expected Identifier or RParen"),
+			None => panic!("unexpected EOF parsing parameters"),
+		});
+		match rtokens.pop() {
+			Some(Token::Comma) => (),
+			Some(Token::RParen) => break,
+			_ => panic!("expected comma or RParen"),
+		}
+	}
+	args
+}
+
+fn parse_statement(mut rtokens: &mut Vec<Token>) -> Statement {
+	println!("WARNING: assignment statement unimplemented");
+	match parse_call(&mut rtokens) {
+		Ok(call) => Statement::FnCall(call),
+		Err(err) => { println!("{}", err); panic!("^^^^^ this, bro") },
 	}
 }
 
 fn parse_fn(mut rtokens: &mut Vec<Token>) -> Function {
-	let mut parameters = Vec::<Identifier>::new();
 	// Parse signature
 	match rtokens.pop() {
 		Some(Token::Fn) => (),
@@ -192,24 +255,7 @@ fn parse_fn(mut rtokens: &mut Vec<Token>) -> Function {
 		Some(_) => panic!("expected fn name"),
 		None => panic!("unexpected EOF parsing fn"),
 	};
-	match rtokens.pop() {
-		Some(Token::LParen) => (),
-		Some(_) => panic!("expected ("),
-		None => panic!("unexpected EOF parsing fn"),
-	}
-	loop {
-		parameters.push(match rtokens.last() {
-			Some(Token::Identifier(_)) => parse_id(&mut rtokens, true),
-			Some(Token::RParen) => break,
-			Some(_) => panic!("expected Identifier or RParen"),
-			None => panic!("unexpected EOF parsing fn"),
-		});
-		match rtokens.pop() {
-			Some(Token::Comma) => (),
-			Some(Token::RParen) => break,
-			_ => panic!("expected comma or RParen"),
-		}
-	}
+	let parameters = parse_args(&mut rtokens);
 	let return_type = match rtokens.last() {
 		Some(Token::Type(_)) => match rtokens.pop() {
 			Some(Token::Type(r_type)) => r_type,
@@ -276,6 +322,11 @@ fn parse_fn(mut rtokens: &mut Vec<Token>) -> Function {
 			}
 		}
 		statements.push(parse_statement(rtokens));
+		match rtokens.pop() {
+			Some(Token::Newline) => (),
+			None => (),
+			Some(t) => panic!("expected newline after statement, got {:?}", t),
+		}
 	}
 	Function {
 		name,
@@ -310,13 +361,13 @@ fn parse(tokens: &mut Vec<Token>) -> AST {
 	}
 	vec![Function {
 		name: String::from("test"),
-		statements: vec![Statement {
+		statements: vec![Statement::Assignment(Assignment {
 			lvalue: Identifier {
 				name: String::from("hi"),
 				id_type: Type::Int,
 			},
 			rvalue: 7040,
-		}],
+		})],
 		signature: Signature {
 			parameters: vec![],
 			return_type: Type::Int,
