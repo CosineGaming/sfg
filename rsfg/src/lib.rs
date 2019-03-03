@@ -8,6 +8,7 @@ pub enum Token {
 	Identifier(String),
 	Tab,
 	StringLit(String),
+	IntLit(i32),
 	Type(Type),
 	Fn,
 	Comma,

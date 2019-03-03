@@ -33,7 +33,7 @@ enum Expression {
 #[derive(PartialEq, Eq, Debug)]
 enum Literal {
 	String(String),
-	//Int(i32),
+	Int(i32),
 	//Float(f32),
 }
 #[derive(PartialEq, Eq, Debug)]
@@ -83,7 +83,12 @@ fn parse_expression(mut rtokens: &mut Vec<Token>) -> Result<Expression, &str> {
 				return Ok(Expression::Literal(Literal::String(string)));
 			} else { unreachable!() }
 		},
-		_ => panic!("other expressions unimplemented"),
+		Some(Token::IntLit(_)) => {
+			if let Token::IntLit(number) = rtokens.pop().unwrap() {
+				return Ok(Expression::Literal(Literal::Int(number)));
+			} else { unreachable!() }
+		},
+		_ => return Err("other expressions unimplemented"),
 	}
 }
 

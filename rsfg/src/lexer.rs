@@ -80,6 +80,19 @@ pub fn lex(text: &str) -> Vec<Token> {
 				rchars.pop();
 				continue
 			}
+		} else if c >= '0' && c <= '9' {
+			let mut string = String::new();
+			loop {
+				match rchars.last() {
+					Some('0'...'9') => string.push(rchars.pop().unwrap()),
+					Some('.')|Some('f') => panic!("floats not yet implemented"), // TODO
+					_ => break,
+				}
+			}
+			match string.parse() {
+				Ok(number) => IntLit(number),
+				Err(err) => panic!("{}", err),
+			}
 		} else if c == '\n' {
 			rchars.pop();
 			Newline
