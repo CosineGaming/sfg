@@ -12,11 +12,11 @@ pub struct Function {
 }
 #[derive(PartialEq, Eq, Debug)]
 struct Signature {
-	parameters: Vec<Identifier>,
+	parameters: Vec<TypedId>,
 	return_type: Type,
 }
 #[derive(PartialEq, Eq, Debug)]
-struct Identifier {
+struct TypedId {
 	name: String,
 	id_type: Type,
 }
@@ -28,6 +28,7 @@ enum Statement {
 #[derive(PartialEq, Eq, Debug)]
 enum Expression {
 	Literal(Literal),
+	Identifier(String),
 	//BinaryExpr,
 }
 #[derive(PartialEq, Eq, Debug)]
@@ -38,7 +39,7 @@ enum Literal {
 }
 #[derive(PartialEq, Eq, Debug)]
 struct Assignment {
-	lvalue: Identifier,
+	lvalue: String,
 	rvalue: Expression,
 }
 #[derive(PartialEq, Eq, Debug)]
@@ -47,7 +48,7 @@ struct FnCall {
 	arguments: Vec<Expression>,
 }
 
-fn parse_id(rtokens: &mut Vec<Token>, type_required: bool) -> Identifier {
+fn parse_id(rtokens: &mut Vec<Token>, type_required: bool) -> TypedId {
 	let name = match rtokens.pop() {
 		Some(Token::Identifier(name)) => name,
 		Some(_) => panic!("identifier wasn't identifier (compiler bug)"),
@@ -60,7 +61,7 @@ fn parse_id(rtokens: &mut Vec<Token>, type_required: bool) -> Identifier {
 				Some(Token::Type(id_type)) => id_type,
 				_ => panic!("expected type after colon"),
 			};
-			return Identifier {
+			return TypedId {
 				name,
 				id_type,
 			};
@@ -69,7 +70,7 @@ fn parse_id(rtokens: &mut Vec<Token>, type_required: bool) -> Identifier {
 			panic!("type required and not given for {}", name);
 		},
 	}
-	Identifier {
+	TypedId {
 		name,
 		id_type: Type::Infer,
 	}
@@ -81,15 +82,21 @@ fn parse_expression(mut rtokens: &mut Vec<Token>) -> Result<Expression, &str> {
 		Some(Token::StringLit(_)) => {
 			if let Some(Token::StringLit(string)) = rtokens.pop() {
 				return Ok(Expression::Literal(Literal::String(string)));
-			} else { unreachable!() }
+			}
 		},
 		Some(Token::IntLit(_)) => {
 			if let Token::IntLit(number) = rtokens.pop().unwrap() {
 				return Ok(Expression::Literal(Literal::Int(number)));
-			} else { unreachable!() }
+			}
+		},
+		Some(Token::Identifier(_)) => {
+			if let Token::Identifier(name) = rtokens.pop().unwrap() {
+				return Ok(Expression::Identifier(name));
+			}
 		},
 		_ => return Err("other expressions unimplemented"),
 	}
+	unreachable!();
 }
 
 fn parse_call(mut rtokens: &mut Vec<Token>) -> Result<FnCall, &str> {
@@ -122,7 +129,7 @@ fn parse_call(mut rtokens: &mut Vec<Token>) -> Result<FnCall, &str> {
 	})
 }
 
-fn parse_args(mut rtokens: &mut Vec<Token>) -> Vec<Identifier> {
+fn parse_args(mut rtokens: &mut Vec<Token>) -> Vec<TypedId> {
 	let mut args = vec![];
 	match rtokens.pop() {
 		Some(Token::LParen) => (),
