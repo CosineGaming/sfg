@@ -50,7 +50,7 @@ another compiler, or an interpreter if they wanted. This implementation is
 written in *Rust* (hence the name).
 
 `rsfg` is included in this repository for now because it is the only known
-implementation of `sfg`. It can be found in the `src/` directory.
+implementation of `sfg`. The crate root is the `rsfg/` directory.
 
 Note that this application is **theoretical**, work has not yet begun.
 
@@ -68,7 +68,7 @@ that VM implementations may be as simple as possible: re-implementation is
 an assumed cost.
 
 `rvmfg` is included in this repository for now because it is the only known
-implementation of a VM for `bcfg`. It can be found in the `src/` directory.
+implementation of a VM for `bcfg`. It can be found in the `rvmfg/` directory.
 
 Note that this library is **theoretical**, it has not yet been implemented.
 

@@ -1,5 +1,5 @@
 [package]
-name = "sfg"
+name = "rsfg"
 version = "0.1.0"
 authors = ["Luna <lucidlyluna@gmail.com>"]
 edition = "2018"

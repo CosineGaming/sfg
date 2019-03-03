@@ -1,5 +1,5 @@
-extern crate sfg;
-use sfg::compile;
+extern crate rsfg;
+use rsfg::compile;
 
 fn compile_file(filename: &str) {
 	let script_string = std::fs::read_to_string(filename)

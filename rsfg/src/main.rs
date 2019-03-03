@@ -1,5 +1,5 @@
-extern crate sfg;
-use sfg::compile;
+extern crate rsfg;
+use rsfg::compile;
 
 fn main() {
 	let script_filename = std::env::args().nth(1)
