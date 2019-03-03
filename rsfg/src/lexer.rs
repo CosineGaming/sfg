@@ -136,8 +136,8 @@ mod test {
 		use super::lex;
 		use super::Token::*;
 		let lexed = lex(
-"fn main()
-	log(\"hi\")");
+r#"fn main()
+	log("hi")"#);
 		assert_eq!(lexed, vec![
 			Fn,
 			Identifier("main".to_string()),
@@ -148,6 +148,17 @@ mod test {
 			LParen,
 			StringLit("hi".to_string()),
 			RParen,
+		]);
+	}
+	#[test]
+	fn digit() {
+		use super::lex;
+		use super::Token::*;
+		let lexed = lex(
+r#"578 9"#);
+		assert_eq!(lexed, vec![
+			IntLit(578),
+			IntLit(9),
 		]);
 	}
 }
