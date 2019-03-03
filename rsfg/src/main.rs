@@ -7,6 +7,6 @@ fn main() {
 	let script_string = std::fs::read_to_string(script_filename)
 		.expect("could not load given file");
     println!("{}", script_string);
-    println!("{}", compile(script_string));
+    println!("{}", &compile(&script_string));
 }
 

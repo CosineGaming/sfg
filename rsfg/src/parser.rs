@@ -4,36 +4,44 @@ use crate::{Token, Type};
 
 pub type AST = Vec<Function>;
 
+#[derive(PartialEq, Eq, Debug)]
 pub struct Function {
 	name: String,
 	statements: Vec<Statement>,
 	signature: Signature,
 }
+#[derive(PartialEq, Eq, Debug)]
 struct Signature {
 	parameters: Vec<Identifier>,
 	return_type: Type,
 }
+#[derive(PartialEq, Eq, Debug)]
 struct Identifier {
 	name: String,
 	id_type: Type,
 }
+#[derive(PartialEq, Eq, Debug)]
 enum Statement {
 	//Assignment(Assignment),
 	FnCall(FnCall),
 }
+#[derive(PartialEq, Eq, Debug)]
 enum Expression {
 	Literal(Literal),
 	//BinaryExpr,
 }
+#[derive(PartialEq, Eq, Debug)]
 enum Literal {
 	String(String),
 	//Int(i32),
 	//Float(f32),
 }
+#[derive(PartialEq, Eq, Debug)]
 struct Assignment {
 	lvalue: Identifier,
 	rvalue: Expression,
 }
+#[derive(PartialEq, Eq, Debug)]
 struct FnCall {
 	name: String,
 	arguments: Vec<Expression>,
@@ -224,3 +232,43 @@ pub fn parse(tokens: &mut Vec<Token>) -> AST {
 	}
 	ast
 }
+
+#[cfg(test)]
+mod test {
+	use super::*;
+	#[test]
+	fn hello_world() {
+		use super::Token::*;
+		let ast = parse(&mut vec![
+			Fn,
+			Identifier("main".to_string()),
+			LParen, RParen,
+			Newline,
+			Tab,
+			Identifier("log".to_string()),
+			LParen,
+			StringLit("hi".to_string()),
+			RParen,
+		]);
+		assert_eq!(ast, vec![
+			Function {
+				name: "main".to_string(),
+				signature: Signature {
+					parameters: vec![],
+					return_type: crate::Type::Infer,
+				},
+				statements: vec![
+					Statement::FnCall(
+						FnCall {
+							name: "log".to_string(),
+							arguments: vec![Expression::Literal(
+								Literal::String("hi".to_string())
+							)],
+						}
+					)
+				],
+			}
+		]);
+	}
+}
+

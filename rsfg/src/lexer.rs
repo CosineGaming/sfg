@@ -13,7 +13,7 @@ fn is_id(c: char) -> bool {
 	is_id_1st(c) || (c >= '0' && c <= '9')
 }
 
-pub fn lex(text: String) -> Vec<Token> {
+pub fn lex(text: &str) -> Vec<Token> {
 	use Token::*;
 	// Start with a newline. We could probly find a better way but meh
 	let mut tokens = Vec::<Token>::new();
@@ -103,7 +103,7 @@ pub fn lex(text: String) -> Vec<Token> {
 				// Pop immediately because don't include literal quote anyway
 				match rchars.pop() {
 					Some('"') => break StringLit(text),
-					Some(_) => text.push(c),
+					Some(x) => text.push(x),
 					None => panic!("unexpected EOF parsing string literal"),
 				}
 			}
@@ -115,3 +115,27 @@ pub fn lex(text: String) -> Vec<Token> {
 	}
 	tokens
 }
+
+#[cfg(test)]
+mod test {
+	#[test]
+	fn hello_world() {
+		use super::lex;
+		use super::Token::*;
+		let lexed = lex(
+"fn main()
+	log(\"hi\")");
+		assert_eq!(lexed, vec![
+			Fn,
+			Identifier("main".to_string()),
+			LParen, RParen,
+			Newline,
+			Tab,
+			Identifier("log".to_string()),
+			LParen,
+			StringLit("hi".to_string()),
+			RParen,
+		]);
+	}
+}
+

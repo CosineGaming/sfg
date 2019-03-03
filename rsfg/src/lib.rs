@@ -17,13 +17,13 @@ pub enum Token {
 	RParen,
 }
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Type {
 	Int,
 	Infer,
 }
 
-pub fn compile(text: String) -> String {
+pub fn compile(text: &str) -> String {
 	parser::parse(&mut lexer::lex(text));
 	String::from("not implemented yet")
 }

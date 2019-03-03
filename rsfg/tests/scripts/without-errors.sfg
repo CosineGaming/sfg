@@ -1,0 +1,3 @@
+fn complex(thing: int, another: int)
+	log("hello")
+
