@@ -1,52 +1,6 @@
 // This is the parser. yay.
 
-use crate::{Token, Type};
-
-pub type AST = Vec<Function>;
-
-#[derive(PartialEq, Eq, Debug)]
-pub struct Function {
-	name: String,
-	statements: Vec<Statement>,
-	signature: Signature,
-}
-#[derive(PartialEq, Eq, Debug)]
-struct Signature {
-	parameters: Vec<TypedId>,
-	return_type: Type,
-}
-#[derive(PartialEq, Eq, Debug)]
-struct TypedId {
-	name: String,
-	id_type: Type,
-}
-#[derive(PartialEq, Eq, Debug)]
-enum Statement {
-	//Assignment(Assignment),
-	FnCall(FnCall),
-}
-#[derive(PartialEq, Eq, Debug)]
-enum Expression {
-	Literal(Literal),
-	Identifier(String),
-	//BinaryExpr,
-}
-#[derive(PartialEq, Eq, Debug)]
-enum Literal {
-	String(String),
-	Int(i32),
-	//Float(f32),
-}
-#[derive(PartialEq, Eq, Debug)]
-struct Assignment {
-	lvalue: String,
-	rvalue: Expression,
-}
-#[derive(PartialEq, Eq, Debug)]
-struct FnCall {
-	name: String,
-	arguments: Vec<Expression>,
-}
+use crate::{Token, Type, ast::*};
 
 fn parse_id(rtokens: &mut Vec<Token>, type_required: bool) -> TypedId {
 	let name = match rtokens.pop() {
@@ -175,10 +129,10 @@ fn parse_fn(mut rtokens: &mut Vec<Token>) -> Function {
 	let parameters = parse_args(&mut rtokens);
 	let return_type = match rtokens.last() {
 		Some(Token::Type(_)) => match rtokens.pop() {
-			Some(Token::Type(r_type)) => r_type,
+			Some(Token::Type(r_type)) => Some(r_type),
 			_ => panic!("shouldn't be reachable"),
 		},
-		Some(Token::Newline) => Type::Infer,
+		Some(Token::Newline) => None,
 		Some(_) => panic!("expected newline or return type"),
 		None => panic!("expected end of signature"),
 	};

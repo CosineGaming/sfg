@@ -1,12 +1,17 @@
 extern crate rsfg;
 use rsfg::compile;
+use std::path::Path;
 
 fn main() {
-	let script_filename = std::env::args().nth(1)
+	let script_filename = &std::env::args().nth(1)
 		.expect("no filename given");
-	let script_string = std::fs::read_to_string(script_filename)
+	let script_path = Path::new(&script_filename);
+	let script_string = std::fs::read_to_string(script_path)
 		.expect("could not load given file");
-    println!("{}", script_string);
-    println!("{}", &compile(&script_string));
+	println!("{}", script_string);
+	let compiled = compile(&script_string);
+	let out = script_path.with_extension("bcfg");
+    std::fs::write(out, compiled.clone());
+	println!("{:X?}", compiled);
 }
 
