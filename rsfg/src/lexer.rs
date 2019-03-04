@@ -21,13 +21,12 @@ pub fn lex(text: &str) -> Vec<Token> {
 	let mut rchars: Vec<char> = text.chars().collect();
 	rchars.reverse();
 	loop {
-		let c = match rchars.last() {
-			Some(c) => *c,
+		let c = match rchars.pop() {
+			Some(c) => c,
 			None => break, // We weren't in the middle of anything so successful EOF
 		};
 		let token = if is_id_1st(c) {
 			let mut text = c.to_string();
-			rchars.pop();
 			loop {
 				let x = match rchars.last() {
 					Some(x) => *x,
@@ -50,11 +49,10 @@ pub fn lex(text: &str) -> Vec<Token> {
 		} else if SPACE.contains(c) {
 			if tokens.last() == Some(&Newline) {
 				if c == '\t' {
-					rchars.pop();
 					Tab
 				} else {
 					// Figure out how many spaces we're using
-					let mut count = 0;
+					let mut count = 1;
 					loop {
 						match rchars.last() {
 							Some(' ') =>  {
@@ -67,7 +65,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 							_ => break, // Ending on whitespace is fine
 						};
 					}
-					if spaces_count == 0 && count != 0 {
+					if spaces_count == 0 {
 						spaces_count = count;
 					}
 					if count == spaces_count {
@@ -77,11 +75,10 @@ pub fn lex(text: &str) -> Vec<Token> {
 					}
 				}
 			} else {
-				rchars.pop();
 				continue
 			}
 		} else if c >= '0' && c <= '9' {
-			let mut string = String::new();
+			let mut string = c.to_string();
 			loop {
 				match rchars.last() {
 					Some('0'...'9') => string.push(rchars.pop().unwrap()),
@@ -94,7 +91,6 @@ pub fn lex(text: &str) -> Vec<Token> {
 				Err(err) => panic!("{}", err),
 			}
 		} else if c == '/' {
-			rchars.pop();
 			match rchars.last() {
 				Some('/') => {
 					// Comment
@@ -109,24 +105,18 @@ pub fn lex(text: &str) -> Vec<Token> {
 				}
 			}
 		} else if c == '\n' {
-			rchars.pop();
 			Newline
 		} else if c == '(' {
-			rchars.pop();
 			LParen
 		} else if c == ')' {
-			rchars.pop();
 			RParen
 		} else if c == ':' {
-			rchars.pop();
 			Colon
 		} else if c == ',' {
-			rchars.pop();
 			Comma
 		} else if c == '"' {
-			let mut text = String::new();
 			// Don't include literal quote
-			rchars.pop();
+			let mut text = String::new();
 			loop {
 				// Pop immediately because don't include literal quote anyway
 				match rchars.pop() {
