@@ -2,20 +2,16 @@
 
 use crate::Token;
 
-static SPACE: &str = " \t";
-
-// Rules: A-Z,a-z
-fn is_id_1st(c: char) -> bool {
-	c >= 'A' && c <= 'z'
-}
-
 // A-Z or 0-9
 fn is_id(c: char) -> bool {
-	is_id_1st(c) || (c >= '0' && c <= '9')
+	match c {
+		'0'..='9' | 'A'..='z' => true,
+		_ => false
+	}
 }
 
 enum NextTokenType {
-	None,
+	EOF,
 	SymbolOrId(char),
 	Space(char),
 	Digit(char),
@@ -47,41 +43,24 @@ impl<'src> Lexer<'src> {
 		}
 	}
 
-	fn is_eof(&self) -> bool {
-		self.rchars.len() == 0
-	}
-
 	fn next_symbol_type(&mut self) -> NextTokenType {
 		use NextTokenType::*;
 
-		if self.is_eof() {
-			return None;
-		}
-
-		let c = self.rchars.pop().expect("not supposed to be at EOF");
-
-		if is_id_1st(c) {
-			SymbolOrId(c)
-		} else if SPACE.contains(c) {
-			Space(c)
-		} else if c >= '0' && c <= '9' {
-			Digit(c)
-		} else if c == '/' {
-			Slash
-		} else if c == '\n' {
-			Newline
-		} else if c == '(' {
-			LParen
-		} else if c == ')' {
-			RParen
-		} else if c == ':' {
-			Colon
-		} else if c == ',' {
-			Comma
-		} else if c == '"' {
-			Quote
-		} else {
-			Unknown(c)
+		match self.rchars.pop() {
+			None => EOF,
+			Some(c) => match c {
+				'A'..='z' => SymbolOrId(c),
+				' ' | '\t' => Space(c),
+				'0'..='9' => Digit(c),
+				'/' => Slash,
+				'\n' => Newline,
+				'(' => LParen,
+				')' => RParen,
+				':' => Colon,
+				',' => Comma,
+				'"' => Quote,
+				o => Unknown(o)
+			}
 		}
 	}
 }
@@ -92,7 +71,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 	loop {
 		println!("{:?}", lexer);
 		let token = match lexer.next_symbol_type() {
-			NextTokenType::None => {
+			NextTokenType::EOF => {
 				// This is the end of the file, which is OK, as we are not in the middle
 				// of matching a token
 				break;
