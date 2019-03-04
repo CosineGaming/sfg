@@ -15,6 +15,7 @@ fn serialize(what: Serializable) -> u8 {
 	use Command::*;
 	let typier = match what {
 		S::Type(Int) => 'i' as u8,
+		S::Type(Str) => 'f' as u8,
 		S::Type(Infer) => panic!("type not yet inferred by printing"),
 		S::Command(Sep) => 0,
 		S::Command(Call) => 'c' as u8,
@@ -26,6 +27,8 @@ fn type_size(id_type: Type) -> u8 {
 	use Type::*;
 	match id_type {
 		Int => 4,
+		// Location and length?
+		Str => 8,
 		Infer => panic!("type not yet inferred by size check"),
 	}
 }
