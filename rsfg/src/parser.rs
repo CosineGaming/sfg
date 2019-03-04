@@ -221,7 +221,7 @@ mod test {
 				name: "main".to_string(),
 				signature: Signature {
 					parameters: vec![],
-					return_type: crate::Type::Infer,
+					return_type: None,
 				},
 				statements: vec![
 					Statement::FnCall(
