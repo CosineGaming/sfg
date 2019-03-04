@@ -22,6 +22,7 @@ pub enum Token {
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Type {
 	Int,
+	Str,
 	Infer,
 }
 

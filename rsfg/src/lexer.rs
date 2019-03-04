@@ -44,6 +44,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 				"fn" => Fn,
 				// These names clash, it sucks
 				"int" => Token::Type(crate::Type::Int),
+				"str" => Token::Type(crate::Type::Str),
 				_ => Identifier(text),
 			};
 			symbol_or_id
