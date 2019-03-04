@@ -14,5 +14,5 @@
 //
 // This file is implementations of section (a) of (1) and all the externs of (2)
 
-@fn log(what: String)
+@fn log(what: str)
 
