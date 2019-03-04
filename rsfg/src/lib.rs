@@ -54,7 +54,7 @@ mod ast {
 	#[derive(PartialEq, Eq, Debug)]
 	pub enum Expression {
 		Literal(Literal),
-		Identifier(String),
+		Identifier(TypedId),
 		//pub BinaryExpr,
 	}
 	#[derive(PartialEq, Eq, Debug)]
@@ -71,6 +71,7 @@ mod ast {
 	#[derive(PartialEq, Eq, Debug)]
 	pub struct FnCall {
 		pub name: String,
+		pub id: Option<u8>,
 		pub arguments: Vec<Expression>,
 	}
 
