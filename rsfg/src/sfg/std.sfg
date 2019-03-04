@@ -1,0 +1,18 @@
+// The sfg standard library is composed of two parts:
+// 1. The standard library provided by the compiler, with no support in bcfg
+// This library is part of the language spec, but merely outputs standard bytecode
+// 2. The standard library implemented by the VM
+// This library is expected to be provided by the VM, with extern calls intended
+// to be provided by the game engine
+// 
+// Note that BOTH (1) and (2) must be specified by the compiler, because the
+// entire standard library is typechecked. However only (2) must be provided by
+// the VM
+//
+// (1) is further broken down by rsfg by (a) the standard library /written in/ sfg,
+// and (b) that with special bytecode emitted by the compiler (written in rust).
+//
+// This file is implementations of section (a) of (1) and all the externs of (2)
+
+@fn log(what: String)
+
