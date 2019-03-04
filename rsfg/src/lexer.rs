@@ -15,7 +15,7 @@ enum NextTokenType {
 	SymbolOrId(char),
 	Space(char),
 	Digit(char),
-	Slash,
+	CommentOrDivision,
 	Newline,
 	LParen,
 	RParen,
@@ -52,7 +52,7 @@ impl<'src> Lexer<'src> {
 				'A'..='z' => SymbolOrId(c),
 				' ' | '\t' => Space(c),
 				'0'..='9' => Digit(c),
-				'/' => Slash,
+				'/' => CommentOrDivision,
 				'\n' => Newline,
 				'(' => LParen,
 				')' => RParen,
@@ -143,7 +143,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 					Err(err) => panic!("{}", err),
 				}
 			}
-			NextTokenType::Slash => {
+			NextTokenType::CommentOrDivision => {
 				match lexer.rchars.pop() {
 					Some('/') => {
 						// Comment
