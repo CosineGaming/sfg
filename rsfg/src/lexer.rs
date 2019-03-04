@@ -14,7 +14,7 @@ fn is_id(c: char) -> bool {
 	is_id_1st(c) || (c >= '0' && c <= '9')
 }
 
-enum NextSymbolType {
+enum NextTokenType {
 	None,
 	SymbolOrId(char),
 	Space(char),
@@ -51,8 +51,8 @@ impl<'src> Lexer<'src> {
 		self.rchars.len() == 0
 	}
 
-	fn next_symbol_type(&mut self) -> NextSymbolType {
-		use NextSymbolType::*;
+	fn next_symbol_type(&mut self) -> NextTokenType {
+		use NextTokenType::*;
 
 		if self.is_eof() {
 			return None;
@@ -92,12 +92,12 @@ pub fn lex(text: &str) -> Vec<Token> {
 	loop {
 		println!("{:?}", lexer);
 		let token = match lexer.next_symbol_type() {
-			NextSymbolType::None => {
+			NextTokenType::None => {
 				// This is the end of the file, which is OK, as we are not in the middle
 				// of matching a token
 				break;
 			}
-			NextSymbolType::SymbolOrId(c) => {
+			NextTokenType::SymbolOrId(c) => {
 				let mut text = c.to_string();
 				loop {
 					let x = match lexer.rchars.last() {
@@ -119,7 +119,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 				};
 				symbol_or_id
 			}
-			NextSymbolType::Space(c) => {
+			NextTokenType::Space(c) => {
 				if lexer.tokens.last() == Some(&Newline) {
 					if c == '\t' {
 						Tab
@@ -150,7 +150,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 					continue;
 				}
 			}
-			NextSymbolType::Digit(c) => {
+			NextTokenType::Digit(c) => {
 				let mut string = c.to_string();
 				loop {
 					match lexer.rchars.last() {
@@ -164,7 +164,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 					Err(err) => panic!("{}", err),
 				}
 			}
-			NextSymbolType::Slash => {
+			NextTokenType::Slash => {
 				match lexer.rchars.pop() {
 					Some('/') => {
 						// Comment
@@ -179,12 +179,12 @@ pub fn lex(text: &str) -> Vec<Token> {
 					}
 				}
 			}
-			NextSymbolType::Newline => Newline,
-			NextSymbolType::LParen => LParen,
-			NextSymbolType::RParen => RParen,
-			NextSymbolType::Colon => Colon,
-			NextSymbolType::Comma => Comma,
-			NextSymbolType::Quote => {
+			NextTokenType::Newline => Newline,
+			NextTokenType::LParen => LParen,
+			NextTokenType::RParen => RParen,
+			NextTokenType::Colon => Colon,
+			NextTokenType::Comma => Comma,
+			NextTokenType::Quote => {
 				let mut text = String::new();
 				// Don't include literal quote
 				loop {
@@ -196,7 +196,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 					}
 				}
 			}
-			NextSymbolType::Unknown(c) => {
+			NextTokenType::Unknown(c) => {
 				// TODO: How to make error show these automatically like rust?
 				panic!("lexer doesn't know what to do with character {}", c);
 			}
