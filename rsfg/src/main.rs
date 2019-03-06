@@ -2,6 +2,11 @@ extern crate rsfg;
 use rsfg::compile;
 use std::path::Path;
 
+fn get_stdlib() -> String {
+	let std_filename = "src/sfg/std.sfg";
+	std::fs::read_to_string(std_filename).expect("couldn't find std library")
+}
+
 fn main() {
 	let script_filename = &std::env::args().nth(1)
 		.expect("no filename given");
@@ -9,7 +14,8 @@ fn main() {
 	let script_string = std::fs::read_to_string(script_path)
 		.expect("could not load given file");
 	println!("{}", script_string);
-	let compiled = compile(&script_string);
+	let stdlib = get_stdlib();
+	let compiled = compile(&script_string, &stdlib);
 	let out = script_path.with_extension("bcfg");
     std::fs::write(out, compiled.clone());
 	println!("{:X?}", compiled);

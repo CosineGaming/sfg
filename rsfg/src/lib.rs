@@ -88,7 +88,10 @@ mod ast {
 
 }
 
-pub fn compile(text: &str) -> Vec<u8> {
-	codegen::gen(parser::parse(&mut lexer::lex(text)))
+// TODO: add an actual import system so that we don't use this
+// "#include-but-worse" hack for the stdlib
+pub fn compile(text: &str, stdlib: &str) -> Vec<u8> {
+	let full_text = format!("{}\n{}", text, stdlib);
+	codegen::gen(parser::parse(&mut lexer::lex(&full_text)))
 }
 
