@@ -5,7 +5,7 @@ use crate::Token;
 // A-Z or 0-9
 fn is_id(c: char) -> bool {
 	match c {
-		'0'..='9'|'A'..='Z'|'a'..='z' => true,
+		'0'..='9'|'A'..='Z'|'a'..='z'|'_' => true,
 		_ => false
 	}
 }

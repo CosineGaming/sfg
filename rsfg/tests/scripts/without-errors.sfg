@@ -2,7 +2,7 @@
 // it doesn't throw errors / infinite loops / etc
 // Note that what's in here DOES NOT guarantee correctness!
 
-fn complex(thing: int, another: int) // Same-line
+fn complex_fn(thing: int, another: int) // Same-line
 	log("hello", 5, another)
 
 @fn externfunc(athing: int)
