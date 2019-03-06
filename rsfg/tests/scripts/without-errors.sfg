@@ -5,8 +5,8 @@
 fn complex_fn(thing: int, another: int) // Same-line
 	log("hello", 5, another)
 
-@fn externfunc(athing: int)
+@fn extern_func(athing: int)
 // Nothing below it
 
-@fn @funcwithat(athing: int)
+@fn @func_with_at(athing: int)
 
