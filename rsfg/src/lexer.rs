@@ -2,6 +2,8 @@
 
 use crate::Token;
 
+static DEBUG_LEXER: bool = false;
+
 // A-Z or 0-9
 fn is_id(c: char) -> bool {
 	match c {
@@ -71,7 +73,9 @@ pub fn lex(text: &str) -> Vec<Token> {
 	use Token::*;
 	let mut lexer = Lexer::new(text);
 	loop {
-		println!("lexerr {:?}", lexer);
+		if DEBUG_LEXER {
+			println!("lexer status is {:?}", lexer);
+		}
 		let token = match lexer.next_symbol_type() {
 			NextTokenType::EOF => {
 				// This is the end of the file, which is OK, as we are not in the middle
