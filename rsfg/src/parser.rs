@@ -2,6 +2,10 @@
 
 use crate::{Token, Type, ast::*};
 
+fn pop_no_eof(from: &mut Vec<Token>, parsing_what: &str) -> Token {
+	from.pop().expect(&format!("enexpected EOF parsing {}", parsing_what))
+}
+
 fn parse_id(rtokens: &mut Vec<Token>, type_required: bool) -> TypedId {
 	let name = match rtokens.pop() {
 		Some(Token::Identifier(name)) => name,
@@ -114,18 +118,7 @@ fn parse_statement(mut rtokens: &mut Vec<Token>) -> Statement {
 	}
 }
 
-fn parse_fn(mut rtokens: &mut Vec<Token>) -> Function {
-	// Parse signature
-	match rtokens.pop() {
-		Some(Token::Fn) => (),
-		Some(_) => panic!("fn didn't start with fn"),
-		None => panic!("expected signature after fn"),
-	}
-	let name = match rtokens.pop() {
-		Some(Token::Identifier(name)) => name,
-		Some(_) => panic!("expected fn name"),
-		None => panic!("unexpected EOF parsing fn"),
-	};
+fn parse_signature(mut rtokens: &mut Vec<Token>) -> Signature {
 	let parameters = parse_args(&mut rtokens);
 	let return_type = match rtokens.last() {
 		Some(Token::Type(_)) => match rtokens.pop() {
@@ -140,10 +133,25 @@ fn parse_fn(mut rtokens: &mut Vec<Token>) -> Function {
 		Some(Token::Newline) => (),
 		_ => panic!("expected newline after definition"),
 	}
-	let signature = Signature {
+	Signature {
 		parameters: parameters,
 		return_type: return_type,
+	}
+}
+
+fn parse_fn(mut rtokens: &mut Vec<Token>) -> Function {
+	// Parse signature
+	match rtokens.pop() {
+		Some(Token::Fn) => (),
+		Some(_) => panic!("fn didn't start with fn"),
+		None => panic!("expected signature after fn"),
+	}
+	let name = match rtokens.pop() {
+		Some(Token::Identifier(name)) => name,
+		Some(_) => panic!("expected fn name"),
+		None => panic!("unexpected EOF parsing fn"),
 	};
+	let signature = parse_signature(&mut rtokens);
 	let mut statements = vec![];
 	loop {
 		let t = match rtokens.last() {
@@ -172,6 +180,29 @@ fn parse_fn(mut rtokens: &mut Vec<Token>) -> Function {
 	}
 }
 
+pub fn parse_extern_fn(mut rtokens: &mut Vec<Token>) -> ExternFn {
+	match rtokens.pop() {
+		Some(Token::ExternFn) => (),
+		Some(_) => panic!("extern fn didn't start with @fn"),
+		None => panic!("expected signature after @fn"),
+	}
+	// An extern function that serves only as a typecheck might use the
+	// @ in the name. The lexer misinterprets this as ExternFnCall despite
+	// not being a call
+	let mut includes_at;
+	let name = match rtokens.pop() {
+		Some(Token::ExternFnCall(name)) => { includes_at = true; name },
+		Some(Token::Identifier(name)) => { includes_at = false; name },
+		Some(_) => panic!("expected name of function, with or without leading @"),
+		None => panic!("unexpected EOF parsing fn"),
+	};
+	let signature = parse_signature(&mut rtokens);
+	ExternFn {
+		name,
+		signature,
+	}
+}
+
 pub fn parse(tokens: &mut Vec<Token>) -> AST {
 	tokens.reverse();
 	// This is just for clarity
@@ -187,7 +218,10 @@ pub fn parse(tokens: &mut Vec<Token>) -> AST {
 		match t {
 			// Parse a function
 			Token::Fn => {
-				ast.push(parse_fn(&mut rtokens));
+				ast.push(ASTNode::Function(parse_fn(&mut rtokens)));
+			},
+			Token::ExternFn => {
+				ast.push(ASTNode::ExternFn(parse_extern_fn(&mut rtokens)));
 			},
 			Token::Newline => {},
 			_ => {
@@ -217,7 +251,7 @@ mod test {
 			RParen,
 		]);
 		assert_eq!(ast, vec![
-			Function {
+			ASTNode::Function(Function {
 				name: "main".to_string(),
 				signature: Signature {
 					parameters: vec![],
@@ -233,7 +267,7 @@ mod test {
 						}
 					)
 				],
-			}
+			})
 		]);
 	}
 }
