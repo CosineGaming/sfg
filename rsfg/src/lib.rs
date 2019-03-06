@@ -48,6 +48,8 @@ mod ast {
 	pub struct ExternFn {
 		pub name: String,
 		pub signature: Signature,
+		// Allow to be called with @name as well as name
+		pub allow_at: bool,
 	}
 	#[derive(PartialEq, Eq, Debug)]
 	pub struct Signature {

@@ -95,7 +95,7 @@ pub fn gen(tree: ast::AST) -> Vec<u8> {
 				fn_bodies.push(gen_fn_body(&func.statements));
 			},
 			// Extern fn definitions don't generate code, they're only used for parsing!
-			ast::ASTNode::ExternFn(func) => (),
+			ast::ASTNode::ExternFn(_) => (),
 		}
 	}
 	let mut code_loc = code.len(); // beginning of fn headers
