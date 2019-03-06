@@ -188,7 +188,7 @@ fn expression_type(expr: &Expression) -> Type {
 	match expr {
 		Expression::Literal(lit) => {
 			match lit {
-				Literal::String(_) => Type::Int, // TODO: Add String type and change to that
+				Literal::String(_) => Type::Str,
 				Literal::Int(_) => Type::Int,
 			}
 		},
@@ -209,6 +209,7 @@ fn fill_out_ast(ast: &mut AST) {
 	use std::collections::HashMap;
 	// Nothing to do rn, but this will infer types etc
 	let mut fn_map = HashMap::<String, u8>::new();
+	// Add all functions to the map
 	for (i, node) in ast.iter().enumerate() {
 		match node {
 			ASTNode::Function(func) =>
@@ -217,6 +218,7 @@ fn fill_out_ast(ast: &mut AST) {
 				fn_map.insert(func.name.clone(), i as u8),
 		};
 	}
+	// Find all function calls and set their ID to the map's id
 	for node in ast.iter_mut() {
 		if let ASTNode::Function(func) = node {
 			for statement in func.statements.iter_mut() {
@@ -230,6 +232,7 @@ fn fill_out_ast(ast: &mut AST) {
 			}
 		}
 	}
+	// Typecheck all function calls with their found IDs
 	for node in ast.iter() {
 		if let ASTNode::Function(func) = node {
 			for statement in func.statements.iter() {
@@ -240,6 +243,9 @@ fn fill_out_ast(ast: &mut AST) {
 						ASTNode::Function(f) => &f.signature.parameters,
 						ASTNode::ExternFn(f) => &f.signature.parameters,
 					};
+					assert_eq!(call.arguments.len(), params.len(),
+						"{} expected {} arguments, got {}",
+						call.name, params.len(), call.arguments.len());
 					for (i, arg) in call.arguments.iter().enumerate() {
 						let param = &params[i];
 						let given_type = expression_type(arg);
@@ -312,7 +318,10 @@ pub fn parse(tokens: &mut Vec<Token>) -> AST {
 mod test {
 	use super::*;
 	#[test]
-	fn hello_world() {
+	// This is NOT meant to test recursion, it's meant as a hello-world
+	// that only uses function definition and calling, which means we have
+	// no one to call but ourselves
+	fn recurse() {
 		use super::Token::*;
 		let ast = parse(&mut vec![
 			Fn,
@@ -320,9 +329,8 @@ mod test {
 			LParen, RParen,
 			Newline,
 			Tab,
-			Identifier("log".to_string()),
+			Identifier("main".to_string()),
 			LParen,
-			StringLit("hi".to_string()),
 			RParen,
 		]);
 		assert_eq!(ast, vec![
@@ -335,11 +343,9 @@ mod test {
 				statements: vec![
 					Statement::FnCall(
 						FnCall {
-							name: "log".to_string(),
-							id: None,
-							arguments: vec![Expression::Literal(
-								Literal::String("hi".to_string())
-							)],
+							name: "main".to_string(),
+							id: Some(0),
+							arguments: vec![],
 						}
 					)
 				],

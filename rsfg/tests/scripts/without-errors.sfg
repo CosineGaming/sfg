@@ -3,7 +3,7 @@
 // Note that what's in here DOES NOT guarantee correctness!
 
 fn complex_fn(thing: int, another: int) // Same-line
-	log("hello", 5, another)
+	log("hello")
 
 @fn extern_func(athing: int)
 // Nothing below it
