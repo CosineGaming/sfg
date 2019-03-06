@@ -49,10 +49,6 @@ fn gen_fn_header(func: ast::Function) -> Vec<u8> {
 	no_code_loc
 }
 
-fn gen_extern_fn_header(func: ast::ExternFn) -> Vec<u8> {
-	panic!("extern fn codegen unimplemented!");
-}
-
 pub fn gen(ast: ast::AST) -> Vec<u8> {
 	println!("WARNING: codegen is incomplete!");
 	let mut code = Vec::new();
@@ -60,7 +56,8 @@ pub fn gen(ast: ast::AST) -> Vec<u8> {
 	for node in ast {
 		fn_headers.push(match node {
 			ast::ASTNode::Function(func) => gen_fn_header(func),
-			ast::ASTNode::ExternFn(func) => gen_extern_fn_header(func),
+			// Extern fn definitions don't generate code, they're only used for parsing!
+			ast::ASTNode::ExternFn(func) => continue,
 		})
 	}
 	// TODO: actually we need to add the code_loc so this isn't done
