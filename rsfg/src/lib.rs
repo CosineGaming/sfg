@@ -12,6 +12,8 @@ pub enum Token {
 	IntLit(i32),
 	Type(Type),
 	Fn,
+	ExternFn,
+	ExternFnCall(String),
 	Comma,
 	Colon,
 	Newline,
@@ -29,12 +31,22 @@ pub enum Type {
 mod ast {
 	use super::Type;
 
-	pub type AST = Vec<Function>;
+	pub type AST = Vec<ASTNode>;
 
+	#[derive(PartialEq, Eq, Debug)]
+	pub enum ASTNode {
+		Function(Function),
+		ExternFn(ExternFn),
+	}
 	#[derive(PartialEq, Eq, Debug)]
 	pub struct Function {
 		pub name: String,
 		pub statements: Vec<Statement>,
+		pub signature: Signature,
+	}
+	#[derive(PartialEq, Eq, Debug)]
+	pub struct ExternFn {
+		pub name: String,
 		pub signature: Signature,
 	}
 	#[derive(PartialEq, Eq, Debug)]

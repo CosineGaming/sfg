@@ -88,9 +88,15 @@ pub fn gen(tree: ast::AST) -> Vec<u8> {
 	let mut code = b"bcfg".to_vec();
 	let mut fn_headers = Vec::new();
 	let mut fn_bodies = Vec::new();
-	for func in tree {
-		fn_headers.push(gen_fn_header(&func));
-		fn_bodies.push(gen_fn_body(&func.statements));
+	for node in tree {
+		match node {
+			ast::ASTNode::Function(func) => {
+				fn_headers.push(gen_fn_header(&func));
+				fn_bodies.push(gen_fn_body(&func.statements));
+			},
+			// Extern fn definitions don't generate code, they're only used for parsing!
+			ast::ASTNode::ExternFn(func) => (),
+		}
 	}
 	let mut code_loc = code.len(); // beginning of fn headers
 	for header in &fn_headers { // finding the beginning by adding fn headers
