@@ -5,7 +5,7 @@ use crate::Token;
 // A-Z or 0-9
 fn is_id(c: char) -> bool {
 	match c {
-		'0'..='9' | 'A'..='z' => true,
+		'0'..='9'|'A'..='Z'|'a'..='z' => true,
 		_ => false
 	}
 }
@@ -49,7 +49,7 @@ impl<'src> Lexer<'src> {
 		match self.rchars.pop() {
 			None => EOF,
 			Some(c) => match c {
-				'A'..='z' => SymbolOrId(c),
+				'A'..='Z'|'a'..='z' => SymbolOrId(c),
 				' ' | '\t' => Space(c),
 				'0'..='9' => Digit(c),
 				'/' => CommentOrDivision,
@@ -69,7 +69,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 	use Token::*;
 	let mut lexer = Lexer::new(text);
 	loop {
-		println!("{:?}", lexer);
+		println!("lexerr {:?}", lexer);
 		let token = match lexer.next_symbol_type() {
 			NextTokenType::EOF => {
 				// This is the end of the file, which is OK, as we are not in the middle
