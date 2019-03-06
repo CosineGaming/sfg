@@ -15,6 +15,7 @@ enum NextTokenType {
 	SymbolOrId(char),
 	Space(char),
 	Digit(char),
+	ExternFnOrExternCall,
 	CommentOrDivision,
 	Newline,
 	LParen,
@@ -50,6 +51,7 @@ impl<'src> Lexer<'src> {
 			None => EOF,
 			Some(c) => match c {
 				'A'..='Z'|'a'..='z' => SymbolOrId(c),
+				'@' => ExternFnOrExternCall,
 				' ' | '\t' => Space(c),
 				'0'..='9' => Digit(c),
 				'/' => CommentOrDivision,
@@ -158,6 +160,27 @@ pub fn lex(text: &str) -> Vec<Token> {
 					}
 				}
 			}
+			NextTokenType::ExternFnOrExternCall => {
+				// Don't include the @
+				let mut text = String::new();
+				loop {
+					let x = match lexer.rchars.last() {
+						Some(x) => *x,
+						None => break, // End of ID is fine
+					};
+					if is_id(x) {
+						text.push(x);
+					} else {
+						break;
+					}
+					lexer.rchars.pop();
+				}
+				let symbol_or_id = match text.as_ref() {
+					"fn" => ExternFn,
+					_ => ExternFnCall(text),
+				};
+				symbol_or_id
+			},
 			NextTokenType::Newline => Newline,
 			NextTokenType::LParen => LParen,
 			NextTokenType::RParen => RParen,

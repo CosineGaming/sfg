@@ -12,6 +12,8 @@ pub enum Token {
 	IntLit(i32),
 	Type(Type),
 	Fn,
+	ExternFn,
+	ExternFnCall(String),
 	Comma,
 	Colon,
 	Newline,
