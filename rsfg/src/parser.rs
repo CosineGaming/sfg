@@ -49,7 +49,10 @@ fn parse_expression(mut rtokens: &mut Vec<Token>) -> Result<Expression, &str> {
 		},
 		Some(Token::Identifier(_)) => {
 			if let Token::Identifier(name) = rtokens.pop().unwrap() {
-				return Ok(Expression::Identifier(name));
+				return Ok(Expression::Identifier(TypedId {
+					name: name,
+					id_type: Type::Infer,
+				}));
 			}
 		},
 		_ => return Err("other expressions unimplemented"),
@@ -84,6 +87,7 @@ fn parse_call(mut rtokens: &mut Vec<Token>) -> Result<FnCall, &str> {
 	Ok(FnCall {
 		name,
 		arguments,
+		id: None,
 	})
 }
 
@@ -180,6 +184,76 @@ fn parse_fn(mut rtokens: &mut Vec<Token>) -> Function {
 	}
 }
 
+fn expression_type(expr: &Expression) -> Type {
+	match expr {
+		Expression::Literal(lit) => {
+			match lit {
+				Literal::String(_) => Type::Int, // TODO: Add String type and change to that
+				Literal::Int(_) => Type::Int,
+			}
+		},
+		Expression::Identifier(id) => id.id_type,
+	}
+}
+
+// Some(true) is like (Int, Int) OR (Int, Infer)
+// Some(false) is like (Int, String)
+// None is (Infer, Infer)
+fn types_match(a: Type, b: Type) -> Option<bool> {
+	if a == Type::Infer && b == Type::Infer { None }
+	else if a == b { Some(true) }
+	else { Some(false) }
+}
+
+fn fill_out_ast(ast: &mut AST) {
+	use std::collections::HashMap;
+	// Nothing to do rn, but this will infer types etc
+	let mut fn_map = HashMap::<String, u8>::new();
+	for (i, node) in ast.iter().enumerate() {
+		match node {
+			ASTNode::Function(func) =>
+				fn_map.insert(func.name.clone(), i as u8),
+			ASTNode::ExternFn(func) =>
+				fn_map.insert(func.name.clone(), i as u8),
+		};
+	}
+	for node in ast.iter_mut() {
+		if let ASTNode::Function(func) = node {
+			for statement in func.statements.iter_mut() {
+				if let Statement::FnCall(ref mut call) = statement {
+					let i = fn_map.get(&*call.name);
+					if i == None {
+						panic!("could not find function {}", call.name);
+					}
+					call.id = i.and_then(|x|Some(*x));
+				}
+			}
+		}
+	}
+	for node in ast.iter() {
+		if let ASTNode::Function(func) = node {
+			for statement in func.statements.iter() {
+				if let Statement::FnCall(call) = statement {
+					let call_id = call.id.expect("call ids should be found by now");
+					let calling = &ast[call_id as usize];
+					let params = match calling {
+						ASTNode::Function(f) => &f.signature.parameters,
+						ASTNode::ExternFn(f) => &f.signature.parameters,
+					};
+					for (i, arg) in call.arguments.iter().enumerate() {
+						let param = &params[i];
+						let given_type = expression_type(arg);
+						if types_match(given_type, param.id_type) == Some(false) {
+							panic!("expected type {:?} but got {:?}", param.id_type, given_type);
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+
 pub fn parse_extern_fn(mut rtokens: &mut Vec<Token>) -> ExternFn {
 	match rtokens.pop() {
 		Some(Token::ExternFn) => (),
@@ -230,6 +304,7 @@ pub fn parse(tokens: &mut Vec<Token>) -> AST {
 		};
 		rtokens.pop();
 	}
+	fill_out_ast(&mut ast);
 	ast
 }
 
@@ -261,6 +336,7 @@ mod test {
 					Statement::FnCall(
 						FnCall {
 							name: "log".to_string(),
+							id: None,
 							arguments: vec![Expression::Literal(
 								Literal::String("hi".to_string())
 							)],

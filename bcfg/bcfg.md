@@ -10,9 +10,11 @@ Header
 Begins with magic numbers `bcfg`
 
 ```
-code_loc stack_size [return]type num_params [parameters] type type [etc] name\0
+stack_size [return]type num_params [parameters] type type [etc] name\0 code_loc
 [a second function, until all functions represented]
 ```
+
+Word literals are little endian
 
 Function definition
 -------------------
@@ -38,7 +40,7 @@ Values table
 | sep  | 0      |       | separates many things |
 | type |        |       | a type can be any of the bcfg types |
 | name |        |       | the string name of the function in the source |
-| stack_size |  |       | the number of bytes to reserve for the stack when calling this function |
+| stack_size |  |       | the number of bytes to reserve for the stack when calling this function (word literal) |
 | code_loc |    |       | the index within the compiled program of the function's entry point |
 | call | 99     | c     | call        |
 | local | 108   | l     | the following is a local variable number |

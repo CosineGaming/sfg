@@ -100,6 +100,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 					"fn" => Fn,
 					// These names clash, it sucks
 					"int" => Token::Type(crate::Type::Int),
+					"str" => Token::Type(crate::Type::Str),
 					_ => Identifier(text),
 				};
 				symbol_or_id
@@ -110,10 +111,11 @@ pub fn lex(text: &str) -> Vec<Token> {
 						Tab
 					} else {
 						// Figure out how many spaces we're using
-						let mut count = 0;
+						let mut count = 1;
 						loop {
-							match c {
-								' ' => {
+							match lexer.rchars.last() {
+								Some(' ') => {
+									lexer.rchars.pop();
 									count += 1;
 									if lexer.spaces_count != 0 && count == lexer.spaces_count {
 										break;
@@ -122,7 +124,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 								_ => break, // Ending on whitespace is fine
 							};
 						}
-						if lexer.spaces_count == 0 && count != 0 {
+						if lexer.spaces_count == 0 {
 							lexer.spaces_count = count;
 						}
 						if count == lexer.spaces_count {
@@ -140,7 +142,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 				loop {
 					match lexer.rchars.last() {
 						Some('0'...'9') => string.push(lexer.rchars.pop().unwrap()),
-						Some('.') | Some('f') => panic!("floats not yet implemented"), // TODO
+						Some('.')|Some('f') => panic!("floats not yet implemented"), // TODO
 						_ => break,
 					}
 				}
@@ -150,7 +152,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 				}
 			}
 			NextTokenType::CommentOrDivision => {
-				match lexer.rchars.pop() {
+				match lexer.rchars.last() {
 					Some('/') => {
 						// Comment
 						while lexer.rchars.last() != None && lexer.rchars.last() != Some(&'\n') {
