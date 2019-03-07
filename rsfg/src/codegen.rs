@@ -103,10 +103,14 @@ pub fn gen(tree: ast::AST) -> Vec<u8> {
 		code_loc += header.len();
 		code_loc += 4; // code_loc word
 	}
+	// Add the headers with the proper code locations given body sizes
 	for (mut header, mut body) in fn_headers.iter_mut().zip(fn_bodies.iter_mut()) {
 		header.append(&mut usize_bytes(code_loc as u32).to_vec());
 		code.append(&mut header);
 		code_loc += body.len();
+	}
+	// Actually add the bodies, after *all* the headers
+	for (mut header, mut body) in fn_headers.iter_mut().zip(fn_bodies.iter_mut()) {
 		code.append(&mut body);
 	}
 	code
