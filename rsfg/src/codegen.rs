@@ -41,7 +41,12 @@ fn command(command: Command) -> u8 {
 	serialize(Serializable::Command(command))
 }
 
-// DOESN'T include the code_loc part of the header
+/// fn_header:
+/// `stack size|return type|number of params|type|*|[name]|0
+/// DOESN'T include the code_loc part of the header, which looks like
+/// |code loc|.|.|.
+/// Which isn't included because not until all headers and bodies are
+/// generated can it be computed
 fn gen_fn_header(func: &Fn) -> Vec<u8> {
 	// We require the code location but until generation of all
 	// the code we can't know where that is
@@ -113,6 +118,14 @@ pub fn gen(tree: LLR) -> Vec<u8> {
 		header.append(&mut usize_bytes(code_loc as u32).to_vec());
 		code.append(&mut header);
 		code_loc += body.len();
+	}
+	// Separate fns with strings
+	code.push(command(Command::Sep));
+	code_loc += 1;
+	for string in tree.strings {
+		code_loc += string.len() + 1; // for the sep
+		code.append(&mut string.into_bytes());
+		code.push(command(Command::Sep));
 	}
 	// Actually add the bodies, after *all* the headers
 	for mut body in fn_bodies.iter_mut() {
