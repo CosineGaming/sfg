@@ -17,7 +17,7 @@ pub struct LLR {
 #[derive(PartialEq, Eq, Debug)]
 pub struct Fn {
 	pub name: String, // All fns are public and may need to interact with ABI
-	pub statements: Vec<Statement>,
+	pub instructions: Vec<Instruction>,
 	pub signature: Signature,
 	//pub namespace: Namespace,// my idea is to use the namespace as where variables are placed
 }
@@ -33,8 +33,8 @@ pub struct Signature {
 }
 pub type NameKey = usize;
 //pub type Namespace = Vec<TypedVar>;
-#[derive(PartialEq, Eq, Debug)]
-pub enum Statement {
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum Instruction {
 	//pub Assignment(Assignment),
 	//FnCall(FnCall),
 	ExternFnCall(ExternFnCall),
@@ -46,7 +46,7 @@ pub type TypedVar = Type;
 	//pub index: NameKey,
 	//pub arguments: Vec<Expression>,
 //}
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub struct ExternFnCall {
 	pub index: NameKey,
 	pub arg_count: u8,
