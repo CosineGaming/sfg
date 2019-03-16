@@ -101,20 +101,18 @@ pub fn lower(ast: AST) -> llr::LLR {
 				out.fns.push(out_f);
 			},
 			ASTNode::ExternFn(func) => {
-				// TODO: uncomment below and figure out what to do with externs
-				// For now: let this compile
-				//let mut parameters = vec![];
-				//for param in func.parameters {
-					//parameters.push(param.id_type);
-				//}
-				//let out_f = llr::ExternFn {
-					//name: func.name,
-					//signature: llr::Signature {
-						//parameters,
-						//return_type: func.signature.return_type,
-					//}
-				//};
-				//out.fns.push(out_f);
+				let mut parameters = vec![];
+				for param in func.parameters {
+					parameters.push(param.id_type);
+				}
+				let out_f = llr::ExternFn {
+					name: func.name,
+					signature: llr::Signature {
+						parameters,
+						return_type: func.signature.return_type,
+					}
+				};
+				out.fns.push(out_f);
 			}
 		}
 	}
