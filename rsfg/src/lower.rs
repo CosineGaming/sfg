@@ -28,40 +28,33 @@ pub fn lower(ast: AST) -> llr::LLR {
 	use std::collections::HashMap;
 	use indexmap::IndexMap;
 	let mut out = llr::LLR::new();
-	// Kept separate to enforce order of lookup
-	// and maintain indices of fns because externs aren't stored
-	let mut gen_fn_map = IndexMap::new();
-	let mut fn_map = HashMap::new();
+	// IndexMap maintains indices of fns
+	let mut fn_map = IndexMap::new();
 	// Add all functions to the map
 	for node in ast.iter() {
 		match node {
-			ASTNode::Function(func) => {
-				fn_map.insert(func.name.clone(), func);
+			ASTNode::Fn(func) => {
+				fn_map.insert(func.name.clone(), node);
 			},
 			ASTNode::ExternFn(func) => {
-				extern_map.insert(func.name.clone(), func);
+				fn_map.insert(func.name.clone(), node);
 			},
 		};
 	}
 	// Find all function calls and set their ID to the map's id
 	for node in ast.iter() {
-		if let ASTNode::Function(func) = node {
+		if let ASTNode::Fn(func) = node {
 			let mut out_statements = Vec::<llr::Statement>::new();
 			for statement in func.statements.iter() {
 				out_statements.push(match statement {
 					Statement::FnCall(call) => {
-						let (index, calling) = match fn_map.get_full(&*call.name) {
+						let (index, node) = match fn_map.get_full(&*call.name) {
 							Some((i, _, func)) => (i, func),
-							None => {
-								match extern_map.get(&*call.name) {
-									Some(func) => (-1, func), // Index unimportant
-									None => panic!("could not find function {}", call.name),
-								}
-							}
+							None => panic!("could not find function {}", call.name),
 						};
 						// Typecheck
-						let params = match calling {
-							ASTNode::Function(f) => &f.signature.parameters,
+						let params = match node {
+							ASTNode::Fn(f) => &f.signature.parameters,
 							ASTNode::ExternFn(f) => &f.signature.parameters,
 						};
 						assert_eq!(call.arguments.len(), params.len(),
@@ -75,7 +68,8 @@ pub fn lower(ast: AST) -> llr::LLR {
 							}
 						}
 						// Generate lowered call
-							llr::Statement::FnCall(llr::FnCall {
+						// TODO: FnCall not yet implemented
+						llr::Statement::ExternFnCall(llr::ExternFnCall {
 							index,
 							arguments: vec![],//TODO
 						})
@@ -89,27 +83,26 @@ pub fn lower(ast: AST) -> llr::LLR {
 					parameters: vec![], // TODO
 					return_type: func.signature.return_type,
 				},
-				namespace: llr::Namespace::new(),
 			};
 			out.push(out_f);
 		}
 	}
 	// Typecheck all function calls with their found IDs
-	for node in ast.iter() {
-		if let ASTNode::Function(func) = node {
-			for statement in func.statements.iter() {
-				if let Statement::FnCall(call) = statement {
-					let call_id = call.id.expect("call ids should be found by now");
-					let calling = &ast[call_id as usize];
-					let params = match calling {
-						ASTNode::Function(f) => &f.signature.parameters,
-						ASTNode::ExternFn(f) => &f.signature.parameters,
-					};
-
-				}
-			}
-		}
-	}
+	//for node in ast.iter() {
+		//if let ASTNode::Fn(func) = node {
+			//for statement in func.statements.iter() {
+				//if let Statement::FnCall(call) = statement {
+					//let call_id = call.id.expect("call ids should be found by now");
+					//let calling = &ast[call_id as usize];
+					//let params = match calling {
+						//ASTNode::Fn(f) => &f.signature.parameters,
+						//ASTNode::ExternFn(f) => &f.signature.parameters,
+					//};
+//
+				//}
+			//}
+		//}
+	//}
 	out
 }
 

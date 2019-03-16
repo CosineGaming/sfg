@@ -139,7 +139,7 @@ fn parse_signature(mut rtokens: &mut Vec<Token>) -> Signature {
 	}
 }
 
-fn parse_fn(mut rtokens: &mut Vec<Token>) -> Function {
+fn parse_fn(mut rtokens: &mut Vec<Token>) -> Fn {
 	// Parse signature
 	match rtokens.pop() {
 		Some(Token::Fn) => (),
@@ -155,7 +155,7 @@ fn parse_fn(mut rtokens: &mut Vec<Token>) -> Function {
 	loop {
 		let t = match rtokens.last() {
 			Some(t) => t,
-			None => return Function {
+			None => return Fn {
 				name,
 				signature,
 				statements,
@@ -172,7 +172,7 @@ fn parse_fn(mut rtokens: &mut Vec<Token>) -> Function {
 			Some(t) => panic!("expected newline after statement, got {:?}", t),
 		}
 	}
-	Function {
+	Fn {
 		name,
 		signature,
 		statements,
@@ -188,17 +188,15 @@ pub fn parse_extern_fn(mut rtokens: &mut Vec<Token>) -> ExternFn {
 	// An extern function that serves only as a typecheck might use the
 	// @ in the name. The lexer misinterprets this as ExternFnCall despite
 	// not being a call
-	let allow_at;
 	let name = match pop_no_eof(rtokens, "fn") {
-		Token::ExternFnCall(name) => { allow_at = true; name },
-		Token::Identifier(name) => { allow_at = false; name },
+		Token::ExternFnCall(name) => name,
+		Token::Identifier(name) => name,
 		_ => panic!("expected name of function, with or without leading @"),
 	};
 	let signature = parse_signature(&mut rtokens);
 	ExternFn {
 		name,
 		signature,
-		allow_at,
 	}
 }
 
@@ -217,7 +215,7 @@ pub fn parse(mut tokens: Vec<Token>) -> AST {
 		match t {
 			// Parse a function
 			Token::Fn => {
-				ast.push(ASTNode::Function(parse_fn(&mut rtokens)));
+				ast.push(ASTNode::Fn(parse_fn(&mut rtokens)));
 			},
 			Token::ExternFn => {
 				ast.push(ASTNode::ExternFn(parse_extern_fn(&mut rtokens)));
@@ -252,7 +250,7 @@ mod test {
 			RParen,
 		]);
 		assert_eq!(ast, vec![
-			ASTNode::Function(Function {
+			ASTNode::Fn(crate::ast::Fn {
 				name: "main".to_string(),
 				signature: Signature {
 					parameters: vec![],

@@ -40,7 +40,7 @@ fn gen_fn_header(func: &llr::Fn) -> Vec<u8> {
 	let mut no_code_loc = Vec::new();
 	let mut size = 0;
 	for param in &func.signature.parameters {
-		let p_type = func.namespace[*param];
+		let p_type = *param;
 		size += type_size(p_type);
 	}
 	// stack size
@@ -54,7 +54,7 @@ fn gen_fn_header(func: &llr::Fn) -> Vec<u8> {
 	no_code_loc.push(func.signature.parameters.len() as u8);
 	// the type of each parameter
 	for param in &func.signature.parameters {
-		let p_type = func.namespace[*param];
+		let p_type = *param;
 		no_code_loc.push(serialize(Serializable::Type(p_type)));
 	}
 	// name
@@ -68,7 +68,7 @@ fn gen_fn_body(statements: &Vec<llr::Statement>) -> Vec<u8> {
 	let mut code = Vec::new();
 	for statement in statements {
 		match statement {
-			llr::Statement::FnCall(call) => {
+			llr::Statement::ExternFnCall(call) => {
 				code.push(serialize(Serializable::Command(Command::Call)));
 				code.extend_from_slice(&usize_bytes(call.index as u32));
 			}

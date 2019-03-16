@@ -3,13 +3,20 @@ use super::Type;
 pub type AST = Vec<ASTNode>;
 
 #[derive(PartialEq, Eq, Debug)]
-pub type ASTNode = Function;
+pub enum ASTNode {
+	Fn(Fn),
+	ExternFn(ExternFn),
+}
 #[derive(PartialEq, Eq, Debug)]
-pub struct Function {
+pub struct Fn {
 	pub name: String,
 	pub statements: Vec<Statement>,
 	pub signature: Signature,
-	pub is_extern: bool,
+}
+#[derive(PartialEq, Eq, Debug)]
+pub struct ExternFn {
+	pub name: String,
+	pub signature: Signature,
 }
 #[derive(PartialEq, Eq, Debug)]
 pub struct Signature {
