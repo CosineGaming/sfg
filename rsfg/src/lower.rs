@@ -25,7 +25,6 @@ fn types_match(a: Type, b: Type) -> Option<bool> {
 }
 
 pub fn lower(ast: AST) -> llr::LLR {
-	use std::collections::HashMap;
 	use indexmap::IndexMap;
 	let mut out = llr::LLR::new();
 	// IndexMap maintains indices of fns
@@ -46,7 +45,7 @@ pub fn lower(ast: AST) -> llr::LLR {
 		if let ASTNode::Fn(func) = node {
 			let mut out_statements = Vec::<llr::Statement>::new();
 			for statement in func.statements.iter() {
-				out_statements.push(match statement {
+				match statement {
 					Statement::FnCall(call) => {
 						let (index, node) = match fn_map.get_full(&*call.name) {
 							Some((i, _, func)) => (i, func),
@@ -60,21 +59,33 @@ pub fn lower(ast: AST) -> llr::LLR {
 						assert_eq!(call.arguments.len(), params.len(),
 							"{} expected {} arguments, got {}",
 							call.name, params.len(), call.arguments.len());
+						// Typecheck all arguments calls with their found IDs
 						for (i, arg) in call.arguments.iter().enumerate() {
 							let param = &params[i];
 							let given_type = expression_type(arg);
 							if types_match(given_type, param.id_type) == Some(false) {
 								panic!("expected type {:?} but got {:?}", param.id_type, given_type);
 							}
+							// Otherwise our types are just fine
+							// Now we just have to evaluate it
+							let push = match arg {
+								Expression::Literal(Literal::String(string)) => {
+									out.strings.push(string.to_string());
+									llr::Statement::PushStringLit((out.strings.len()-1) as u8)
+								},
+								_ => panic!("not yet implemented: variables or non-string literals"),
+							};
+							out_statements.push(push);
 						}
 						// Generate lowered call
 						// TODO: FnCall not yet implemented
-						llr::Statement::ExternFnCall(llr::ExternFnCall {
+						let call = llr::Statement::ExternFnCall(llr::ExternFnCall {
 							index,
-							arguments: vec![],//TODO
-						})
+							arg_count: call.arguments.len() as u8,
+						});
+						out_statements.push(call);
 					}
-				});
+				}
 			}
 			let out_f = llr::Fn {
 				name: func.name.clone(),
@@ -84,7 +95,7 @@ pub fn lower(ast: AST) -> llr::LLR {
 					return_type: func.signature.return_type,
 				},
 			};
-			out.push(out_f);
+			out.fns.push(out_f);
 		}
 	}
 	// Typecheck all function calls with their found IDs

@@ -9,7 +9,10 @@
 
 use super::Type;
 
-pub type LLR = Vec<Fn>;
+pub struct LLR {
+	pub fns: Vec<Fn>,
+	pub strings: Vec<String>,
+}
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct Fn {
@@ -35,18 +38,7 @@ pub enum Statement {
 	//pub Assignment(Assignment),
 	//FnCall(FnCall),
 	ExternFnCall(ExternFnCall),
-}
-#[derive(PartialEq, Eq, Debug)]
-pub enum Expression {
-	Literal(Literal),
-	//Identifier(TypedVar),
-	//pub BinaryExpr,
-}
-#[derive(PartialEq, Eq, Debug)]
-pub enum Literal {
-	String(String),
-	//Int(i32),
-	//pub Float(f32),
+	PushStringLit(u8),
 }
 pub type TypedVar = Type;
 //#[derive(PartialEq, Eq, Debug)]
@@ -57,6 +49,15 @@ pub type TypedVar = Type;
 #[derive(PartialEq, Eq, Debug)]
 pub struct ExternFnCall {
 	pub index: NameKey,
-	pub arguments: Vec<Expression>,
+	pub arg_count: u8,
+}
+
+impl LLR {
+	pub fn new() -> Self {
+		Self {
+			fns: vec![],
+			strings: vec![],
+		}
+	}
 }
 

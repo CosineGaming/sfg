@@ -1,8 +1,10 @@
 use crate::{Type, llr};
+// use llr::*; // Enable this when it compiles because it'll make things way easier
 
 enum Command {
 	Sep,
-	Call,
+	PushStringLit,
+	ExternCall,
 }
 
 enum Serializable {
@@ -14,11 +16,14 @@ fn serialize(what: Serializable) -> u8 {
 	use Serializable as S;
 	use Command::*;
 	let typier = match what {
-		S::Type(Int) => 'i' as u8,
-		S::Type(Str) => 'f' as u8,
+		// Types 1x
+		S::Type(Int) => 10,
+		S::Type(Str) => 11,
 		S::Type(Infer) => panic!("type not yet inferred by printing"),
-		S::Command(Sep) => 0,
-		S::Command(Call) => 'c' as u8,
+		// Commands 2x
+		S::Command(Sep) => 20,
+		S::Command(ExternCall) => 21,
+		S::Command(PushStringLit) => 22,
 	};
 	typier as u8
 }
@@ -31,6 +36,10 @@ fn type_size(id_type: Type) -> u8 {
 		Str => 8,
 		Infer => panic!("type not yet inferred by size check"),
 	}
+}
+
+fn command(command: Command) -> u8 {
+	serialize(Serializable::Command(command))
 }
 
 // DOESN'T include the code_loc part of the header
@@ -64,12 +73,16 @@ fn gen_fn_header(func: &llr::Fn) -> Vec<u8> {
 	no_code_loc
 }
 
-fn gen_fn_body(statements: &Vec<llr::Statement>) -> Vec<u8> {
+fn gen_fn_body(function: &llr::Fn) -> Vec<u8> {
 	let mut code = Vec::new();
-	for statement in statements {
+	for statement in &function.statements {
 		match statement {
+			llr::Statement::PushStringLit(string_key) => {
+				code.push(command(Command::PushStringLit));
+				code.push(*string_key);
+			}
 			llr::Statement::ExternFnCall(call) => {
-				code.push(serialize(Serializable::Command(Command::Call)));
+				code.push(command(Command::ExternCall));
 				code.extend_from_slice(&usize_bytes(call.index as u32));
 			}
 		}
@@ -87,9 +100,9 @@ pub fn gen(tree: llr::LLR) -> Vec<u8> {
 	let mut code = b"bcfg".to_vec();
 	let mut fn_headers = Vec::new();
 	let mut fn_bodies = Vec::new();
-	for func in tree {
+	for func in tree.fns {
 		fn_headers.push(gen_fn_header(&func));
-		fn_bodies.push(gen_fn_body(&func.statements));
+		fn_bodies.push(gen_fn_body(&func));
 	}
 	let mut code_loc = code.len(); // beginning of fn headers
 	for header in &fn_headers { // finding the beginning by adding fn headers
@@ -97,13 +110,13 @@ pub fn gen(tree: llr::LLR) -> Vec<u8> {
 		code_loc += 4; // code_loc word
 	}
 	// Add the headers with the proper code locations given body sizes
-	for (mut header, mut body) in fn_headers.iter_mut().zip(fn_bodies.iter_mut()) {
+	for (mut header, body) in fn_headers.iter_mut().zip(fn_bodies.iter_mut()) {
 		header.append(&mut usize_bytes(code_loc as u32).to_vec());
 		code.append(&mut header);
 		code_loc += body.len();
 	}
 	// Actually add the bodies, after *all* the headers
-	for (mut header, mut body) in fn_headers.iter_mut().zip(fn_bodies.iter_mut()) {
+	for mut body in fn_bodies.iter_mut() {
 		code.append(&mut body);
 	}
 	code
