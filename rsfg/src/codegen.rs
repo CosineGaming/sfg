@@ -1,5 +1,4 @@
-use crate::{Type, llr};
-// use llr::*; // Enable this when it compiles because it'll make things way easier
+use crate::{Type, llr::*};
 
 enum Command {
 	Sep,
@@ -43,7 +42,7 @@ fn command(command: Command) -> u8 {
 }
 
 // DOESN'T include the code_loc part of the header
-fn gen_fn_header(func: &llr::Fn) -> Vec<u8> {
+fn gen_fn_header(func: &Fn) -> Vec<u8> {
 	// We require the code location but until generation of all
 	// the code we can't know where that is
 	let mut no_code_loc = Vec::new();
@@ -73,15 +72,15 @@ fn gen_fn_header(func: &llr::Fn) -> Vec<u8> {
 	no_code_loc
 }
 
-fn gen_fn_body(function: &llr::Fn) -> Vec<u8> {
+fn gen_fn_body(function: &Fn) -> Vec<u8> {
 	let mut code = Vec::new();
 	for statement in &function.statements {
 		match statement {
-			llr::Statement::PushStringLit(string_key) => {
+			Statement::PushStringLit(string_key) => {
 				code.push(command(Command::PushStringLit));
 				code.push(*string_key);
 			}
-			llr::Statement::ExternFnCall(call) => {
+			Statement::ExternFnCall(call) => {
 				code.push(command(Command::ExternCall));
 				code.extend_from_slice(&usize_bytes(call.index as u32));
 			}
@@ -95,7 +94,7 @@ fn usize_bytes(word: u32) -> [u8; 4] {
 	unsafe { transmute(word.to_le()) }
 }
 
-pub fn gen(tree: llr::LLR) -> Vec<u8> {
+pub fn gen(tree: LLR) -> Vec<u8> {
 	println!("WARNING: codegen is incomplete!");
 	let mut code = b"bcfg".to_vec();
 	let mut fn_headers = Vec::new();
