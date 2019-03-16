@@ -42,26 +42,26 @@ fn type_size(id_type: Type) -> u8 {
 /// |code loc|.|.|.
 /// Which isn't included because not until all headers and bodies are
 /// generated can it be computed
-fn gen_fn_header(func: &Fn) -> Vec<u8> {
+fn gen_fn_header(func: &Signature) -> Vec<u8> {
 	// We require the code location but until generation of all
 	// the code we can't know where that is
 	let mut no_code_loc = Vec::new();
 	let mut size = 0;
-	for param in &func.signature.parameters {
+	for param in &func.parameters {
 		let p_type = *param;
 		size += type_size(p_type);
 	}
 	// stack size
 	no_code_loc.push(size);
 	// return type
-	no_code_loc.push(match func.signature.return_type {
+	no_code_loc.push(match func.return_type {
 		Some(rt) => serialize(Serializable::Type(rt)),
 		None => serialize(Serializable::Void),
 	});
 	// number of parameters
-	no_code_loc.push(func.signature.parameters.len() as u8);
+	no_code_loc.push(func.parameters.len() as u8);
 	// the type of each parameter
-	for param in &func.signature.parameters {
+	for param in &func.parameters {
 		let p_type = *param;
 		no_code_loc.push(serialize(Serializable::Type(p_type)));
 	}
@@ -101,26 +101,40 @@ pub fn gen(tree: LLR) -> Vec<u8> {
 	let mut fn_headers = Vec::new();
 	let mut fn_bodies = Vec::new();
 	for func in tree.fns {
-		println!("{}", func.name);
-		fn_headers.push(gen_fn_header(&func));
+		println!("{}", func.signature.name.clone());
+		fn_headers.push(gen_fn_header(&func.signature));
 		fn_bodies.push(gen_fn_body(&func));
 	}
-	let mut code_loc = code.len(); // beginning of fn headers
-	for header in &fn_headers { // finding the beginning by adding fn headers
-		code_loc += header.len();
-		code_loc += 4; // code_loc word
+	let mut extern_fn_headers = Vec::new();
+	for signature in tree.extern_fns {
+		println!("{}", signature.name);
+		extern_fn_headers.push(gen_fn_header(&signature));
 	}
+	let mut code_loc = code.len(); // beginning of fn headers
+	// Add the fn headers...
+	code_loc += fn_headers.iter().fold(0, |t,h| t+h.len());
+	// And the externs too....
+	code_loc += extern_fn_headers.iter().fold(0, |t,h| t+h.len());
+	// fn headers have a code_loc (4 bytes) but externs don't
+	code_loc += 4 * fn_headers.len();
+	code_loc += 2; // Two separators: fn|externs|strings
 	// Add the headers with the proper code locations given body sizes
 	for (mut header, body) in fn_headers.iter_mut().zip(fn_bodies.iter_mut()) {
 		header.append(&mut usize_bytes(code_loc as u32).to_vec());
 		code.append(&mut header);
 		code_loc += body.len();
 	}
+	// Separate fns with extern fns
+	code.push(serialize(Serializable::Sep));
+	// Add the extern fn headers with no bodies
+	for mut header in extern_fn_headers.iter_mut() {
+		code.append(&mut header);
+	}
 	// Separate fns with strings
 	code.push(serialize(Serializable::Sep));
 	code_loc += 1;
 	for string in tree.strings {
-		code_loc += string.len() + 1; // for the sep
+		code_loc += string.len() + 1; // for the \0 at end of string
 		code.append(&mut string.into_bytes());
 		code.push(serialize(Serializable::Sep));
 	}

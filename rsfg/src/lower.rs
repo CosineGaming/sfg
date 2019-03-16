@@ -72,9 +72,9 @@ fn lower_fn(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, out_strings: &mut Ve
 		}
 	}
 	llr::Fn {
-		name: func.name.clone(),
 		instructions,
 		signature: llr::Signature {
+			name: func.name.clone(),
 			parameters: vec![], // TODO
 			return_type: func.signature.return_type,
 		},
@@ -102,17 +102,15 @@ pub fn lower(ast: AST) -> llr::LLR {
 			},
 			ASTNode::ExternFn(func) => {
 				let mut parameters = vec![];
-				for param in func.parameters {
+				for param in &func.signature.parameters {
 					parameters.push(param.id_type);
 				}
-				let out_f = llr::ExternFn {
-					name: func.name,
-					signature: llr::Signature {
-						parameters,
-						return_type: func.signature.return_type,
-					}
+				let out_f = llr::Signature {
+					name: func.name.clone(),
+					parameters,
+					return_type: func.signature.return_type,
 				};
-				out.fns.push(out_f);
+				out.extern_fns.push(out_f);
 			}
 		}
 	}

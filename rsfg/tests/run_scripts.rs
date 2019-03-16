@@ -20,7 +20,6 @@ fn hello_world() {
 	assert_eq!(result, vec![
 		// bcfg
 		0x62, 0x63, 0x66, 0x67,
-		// TODO: should start with header for log (?)
 		// header for main:
 		// stack size
 		0,
@@ -32,8 +31,22 @@ fn hello_world() {
 		0x6d, 0x61, 0x69, 0x6e,
 		// "\0"
 		0,
-		// codeloc 0x10 (4b)
-		0x10, 0x00, 0x00, 0x00,
+		// codeloc 0x1A (4b)
+		0x1A, 0x00, 0x00, 0x00,
+		// externs sep
+		0,
+		// header for log:
+		// stack size
+		8,
+		// return type: void
+		0x15,
+		// parameter count
+		1,
+		// parameters:
+		// type: string
+		0xb,
+		// "log\0"
+		0x6c, 0x6f, 0x67, 0,
 		// strings sep
 		0,
 		// "hi\0"
