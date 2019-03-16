@@ -1,7 +1,11 @@
 // all roads lead to lib.rs
 
+mod ast;
+mod llr;
+
 mod lexer;
 mod parser;
+mod lower;
 mod codegen;
 
 #[derive(PartialEq, Clone, Debug)]
@@ -28,74 +32,13 @@ pub enum Type {
 	Infer,
 }
 
-mod ast {
-	use super::Type;
-
-	pub type AST = Vec<ASTNode>;
-
-	#[derive(PartialEq, Eq, Debug)]
-	pub enum ASTNode {
-		Function(Function),
-		ExternFn(ExternFn),
-	}
-	#[derive(PartialEq, Eq, Debug)]
-	pub struct Function {
-		pub name: String,
-		pub statements: Vec<Statement>,
-		pub signature: Signature,
-	}
-	#[derive(PartialEq, Eq, Debug)]
-	pub struct ExternFn {
-		pub name: String,
-		pub signature: Signature,
-		// Allow to be called with @name as well as name
-		pub allow_at: bool,
-	}
-	#[derive(PartialEq, Eq, Debug)]
-	pub struct Signature {
-		pub parameters: Vec<TypedId>,
-		pub return_type: Option<Type>, // Can be void (None)
-	}
-	#[derive(PartialEq, Eq, Debug)]
-	pub struct TypedId {
-		pub name: String,
-		pub id_type: Type,
-	}
-	#[derive(PartialEq, Eq, Debug)]
-	pub enum Statement {
-		//pub Assignment(Assignment),
-		FnCall(FnCall),
-	}
-	#[derive(PartialEq, Eq, Debug)]
-	pub enum Expression {
-		Literal(Literal),
-		Identifier(TypedId),
-		//pub BinaryExpr,
-	}
-	#[derive(PartialEq, Eq, Debug)]
-	pub enum Literal {
-		String(String),
-		Int(i32),
-		//pub Float(f32),
-	}
-	#[derive(PartialEq, Eq, Debug)]
-	pub struct Assignment {
-		pub lvalue: String,
-		pub rvalue: Expression,
-	}
-	#[derive(PartialEq, Eq, Debug)]
-	pub struct FnCall {
-		pub name: String,
-		pub id: Option<u8>,
-		pub arguments: Vec<Expression>,
-	}
-
-}
-
 // TODO: add an actual import system so that we don't use this
 // "#include-but-worse" hack for the stdlib
 pub fn compile(text: &str, stdlib: &str) -> Vec<u8> {
 	let full_text = format!("{}\n{}", text, stdlib);
-	codegen::gen(parser::parse(&mut lexer::lex(&full_text)))
+	codegen::gen(
+		lower::lower(
+			parser::parse(
+				lexer::lex(&full_text))))
 }
 
