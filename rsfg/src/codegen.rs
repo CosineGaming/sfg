@@ -129,6 +129,10 @@ pub fn gen(tree: LLR) -> Vec<u8> {
 	// fn headers have a code_loc (4 bytes) but externs don't
 	code_loc += 4 * fn_headers.len();
 	code_loc += fn_headers.len() + extern_fn_headers.len(); // Instructions
+	// Add strings headers
+	for string in &tree.strings {
+		code_loc += string.len() + 2; // for the instruction and the \0 at end of string
+	}
 	// Add the headers with the proper code locations given body sizes
 	for (mut header, body) in fn_headers.iter_mut().zip(fn_bodies.iter_mut()) {
 		code.push(serialize(Serializable::FnHeader));
@@ -141,9 +145,7 @@ pub fn gen(tree: LLR) -> Vec<u8> {
 		code.push(serialize(Serializable::ExternFnHeader));
 		code.append(&mut header);
 	}
-	code_loc += 1;
 	for string in tree.strings {
-		code_loc += string.len() + 2; // for the instruction and the \0 at end of string
 		code.push(serialize(Serializable::StringLit));
 		code.append(&mut string.into_bytes());
 		code.push(serialize(Serializable::Sep));
