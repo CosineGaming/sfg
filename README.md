@@ -40,8 +40,6 @@ the VM reading it may be simple. Simplicity within `bcfg` itself is not a goal.
 Documentation for the `bcfg` format can be found in the `bcfg/` directory of
 this repository.
 
-Note that this format is **theoretical**, it has not yet been designed.
-
 rsfg reference
 --------------
 
@@ -52,7 +50,8 @@ written in *Rust* (hence the name).
 `rsfg` is included in this repository for now because it is the only known
 implementation of `sfg`. The crate root is the `rsfg/` directory.
 
-Note that this application is **theoretical**, work has not yet begun.
+Note that this application is mostly theoretical, so far supporting not much
+more than "hello world".
 
 rvmfg reference
 ---------------

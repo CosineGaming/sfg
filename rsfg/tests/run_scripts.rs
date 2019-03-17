@@ -21,6 +21,8 @@ fn hello_world() {
 		// bcfg
 		0x62, 0x63, 0x66, 0x67,
 		// header for main:
+		// fn header
+		33,
 		// stack size
 		0,
 		// return type: void
@@ -33,9 +35,9 @@ fn hello_world() {
 		0,
 		// codeloc 0x1A (4b)
 		0x1A, 0x00, 0x00, 0x00,
-		// externs sep
-		0,
 		// header for log:
+		// extern fn header
+		34,
 		// stack size
 		8,
 		// return type: void
@@ -47,18 +49,18 @@ fn hello_world() {
 		0xb,
 		// "log\0"
 		0x6c, 0x6f, 0x67, 0,
-		// strings sep
-		0,
+		// string lit
+		32,
 		// "hi\0"
 		0x68, 0x69, 0,
 		// push string lit
 		0x1e,
 		// string index
 		0,
-		// call extern fn
-		// TODO: should be index 0
+		// call extern log
 		0x1f,
 		// function index (4b)
+		// 1 (0:main, 1:log)
 		0x01, 0x00, 0x00, 0x00,
 	]);
 }

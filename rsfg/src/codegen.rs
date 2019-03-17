@@ -5,6 +5,9 @@ enum Serializable {
 	Instruction(Instruction),
 	Sep,
 	Void,
+	StringLit,
+	FnHeader,
+	ExternFnHeader,
 }
 fn serialize(what: Serializable) -> u8 {
 	use Type::*;
@@ -22,6 +25,9 @@ fn serialize(what: Serializable) -> u8 {
 		// Instructions 3x
 		S::Instruction(I::PushStringLit(_)) => 30,
 		S::Instruction(I::ExternFnCall(_)) => 31,
+		S::StringLit => 32,
+		S::FnHeader => 33,
+		S::ExternFnHeader => 34,
 	};
 	typier as u8
 }
@@ -82,14 +88,14 @@ fn gen_fn_body(function: &Fn) -> Vec<u8> {
 			}
 			Instruction::ExternFnCall(call) => {
 				code.push(serialize(Serializable::Instruction(*instr)));
-				code.extend_from_slice(&usize_bytes(call.index as u32));
+				code.extend_from_slice(&u32_bytes(call.index as u32));
 			}
 		}
 	}
 	code
 }
 
-fn usize_bytes(word: u32) -> [u8; 4] {
+fn u32_bytes(word: u32) -> [u8; 4] {
 	use std::mem::transmute;
 	unsafe { transmute(word.to_le()) }
 }
@@ -110,31 +116,31 @@ pub fn gen(tree: LLR) -> Vec<u8> {
 		println!("{}", signature.name);
 		extern_fn_headers.push(gen_fn_header(&signature));
 	}
-	let mut code_loc = code.len(); // beginning of fn headers
+	// Calculate the beginning of the bodies
+	let mut code_loc = code.len();
 	// Add the fn headers...
 	code_loc += fn_headers.iter().fold(0, |t,h| t+h.len());
 	// And the externs too....
 	code_loc += extern_fn_headers.iter().fold(0, |t,h| t+h.len());
 	// fn headers have a code_loc (4 bytes) but externs don't
 	code_loc += 4 * fn_headers.len();
-	code_loc += 2; // Two separators: fn|externs|strings
+	code_loc += fn_headers.len() + extern_fn_headers.len(); // Instructions
 	// Add the headers with the proper code locations given body sizes
 	for (mut header, body) in fn_headers.iter_mut().zip(fn_bodies.iter_mut()) {
-		header.append(&mut usize_bytes(code_loc as u32).to_vec());
+		code.push(serialize(Serializable::FnHeader));
+		header.append(&mut u32_bytes(code_loc as u32).to_vec());
 		code.append(&mut header);
 		code_loc += body.len();
 	}
-	// Separate fns with extern fns
-	code.push(serialize(Serializable::Sep));
 	// Add the extern fn headers with no bodies
 	for mut header in extern_fn_headers.iter_mut() {
+		code.push(serialize(Serializable::ExternFnHeader));
 		code.append(&mut header);
 	}
-	// Separate fns with strings
-	code.push(serialize(Serializable::Sep));
 	code_loc += 1;
 	for string in tree.strings {
-		code_loc += string.len() + 1; // for the \0 at end of string
+		code_loc += string.len() + 2; // for the instruction and the \0 at end of string
+		code.push(serialize(Serializable::StringLit));
 		code.append(&mut string.into_bytes());
 		code.push(serialize(Serializable::Sep));
 	}
