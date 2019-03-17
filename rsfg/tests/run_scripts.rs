@@ -22,11 +22,11 @@ fn hello_world() {
 		0x62, 0x63, 0x66, 0x67,
 		// header for main:
 		// fn header
-		33,
+		0x33,
 		// stack size
 		0,
 		// return type: void
-		0x15,
+		0x21,
 		// parameter count
 		0,
 		// "main"
@@ -37,28 +37,28 @@ fn hello_world() {
 		0x1A, 0x00, 0x00, 0x00,
 		// header for log:
 		// extern fn header
-		34,
+		0x34,
 		// stack size
 		8,
 		// return type: void
-		0x15,
+		0x21,
 		// parameter count
 		1,
 		// parameters:
 		// type: string
-		0xb,
+		0x11,
 		// "log\0"
 		0x6c, 0x6f, 0x67, 0,
 		// string lit
-		32,
+		0x32,
 		// "hi\0"
 		0x68, 0x69, 0,
 		// push string lit
-		0x1e,
+		0x30,
 		// string index
 		0,
 		// call extern log
-		0x1f,
+		0x31,
 		// function index (4b)
 		// 1 (0:main, 1:log)
 		0x01, 0x00, 0x00, 0x00,

@@ -15,19 +15,19 @@ fn serialize(what: Serializable) -> u8 {
 	use Instruction as I;
 	let typier = match what {
 		// Sep is traditionally 00
-		S::Sep => 00,
+		S::Sep => 0x00,
 		// Types 1x
-		S::Type(Int) => 10,
-		S::Type(Str) => 11,
+		S::Type(Int) => 0x10,
+		S::Type(Str) => 0x11,
 		S::Type(Infer) => panic!("type not yet inferred by printing"),
 		// Other 2x
-		S::Void => 21,
+		S::Void => 0x21,
 		// Instructions 3x
-		S::Instruction(I::PushStringLit(_)) => 30,
-		S::Instruction(I::ExternFnCall(_)) => 31,
-		S::StringLit => 32,
-		S::FnHeader => 33,
-		S::ExternFnHeader => 34,
+		S::Instruction(I::PushStringLit(_)) => 0x30,
+		S::Instruction(I::ExternFnCall(_)) => 0x31,
+		S::StringLit => 0x32,
+		S::FnHeader => 0x33,
+		S::ExternFnHeader => 0x34,
 	};
 	typier as u8
 }
