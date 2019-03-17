@@ -41,6 +41,7 @@ enum Deser {
 	Return,
 	PushStringLit,
 	ExternFnCall,
+	FnCall,
 }
 
 fn deser(what: u8) -> Option<Deser> {
@@ -59,6 +60,7 @@ fn deser(what: u8) -> Option<Deser> {
 		0x33 => Some(D::FnHeader),
 		0x34 => Some(D::ExternFnHeader),
 		0x35 => Some(D::Return),
+		0x36 => Some(D::FnCall),
 		_ => None,
 	}
 }
@@ -205,13 +207,21 @@ impl Thread {
 				let index = read_u32(&self.code, &mut self.cp);
 				let name = match self.fns.get_index(index as usize) {
 					Some((name, _func)) => name,
-					_ => panic!("could not find extern function {}", index),
+					_ => panic!("could not find extern function at {}", index),
 				};
 				// TODO: assert function is cp=0 (extern)
 				match &name[..] {
 					"log" => sfg_std::log(self),
 					_ => panic!("special reflection business not yet supported and stdlib not found"),
 				};
+			},
+			Deser::FnCall => {
+				let index = read_u32(&self.code, &mut self.cp);
+				let func = match self.fns.get_index(index as usize) {
+					Some((_name, func)) => func.clone(),
+					_ => panic!("could not find function at {}", index),
+				};
+				self.call_fn(func);
 			},
 			// This would be the code for a proper function call
 			//Deser::FnCall => {

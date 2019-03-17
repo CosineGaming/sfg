@@ -62,11 +62,14 @@ fn lower_fn(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, out_strings: &mut Ve
 					instructions.push(push);
 				}
 				// Generate lowered call
-				// TODO: FnCall not yet implemented
-				let call = llr::Instruction::ExternFnCall(llr::ExternFnCall {
+				let fn_call = llr::FnCall {
 					index,
 					arg_count: call.arguments.len() as u8,
-				});
+				};
+				let call = match node {
+					ASTNode::Fn(_) => llr::Instruction::FnCall(fn_call),
+					ASTNode::ExternFn(_) => llr::Instruction::ExternFnCall(fn_call),
+				};
 				instructions.push(call);
 			}
 		}
@@ -75,11 +78,15 @@ fn lower_fn(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, out_strings: &mut Ve
 	if func.signature.return_type == None {
 		instructions.push(llr::Instruction::Return);
 	}
+	let mut parameters = vec![];
+	for param in &func.signature.parameters {
+		parameters.push(param.id_type);
+	}
 	llr::Fn {
 		instructions,
 		signature: llr::Signature {
 			name: func.name.clone(),
-			parameters: vec![], // TODO
+			parameters: parameters,
 			return_type: func.signature.return_type,
 		},
 	}

@@ -5,6 +5,12 @@
 fn complex_fn(thing: int, another: int) // Same-line
 	log("hello")
 
+fn strings_only(what: str)
+	log("hi there")
+
+fn main()
+	strings_only("hi howdy")
+
 @fn extern_func(athing: int)
 // Nothing below it
 

@@ -31,19 +31,14 @@ pub type NameKey = usize;
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Instruction {
 	//pub Assignment(Assignment),
-	//FnCall(FnCall),
-	ExternFnCall(ExternFnCall),
+	FnCall(FnCall),
+	ExternFnCall(FnCall),
 	PushStringLit(u8),
 	Return, // TODO: allow return value
 }
 pub type TypedVar = Type;
-//#[derive(PartialEq, Eq, Debug)]
-//pub struct FnCall {
-	//pub index: NameKey,
-	//pub arguments: Vec<Expression>,
-//}
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub struct ExternFnCall {
+pub struct FnCall {
 	pub index: NameKey,
 	pub arg_count: u8,
 }

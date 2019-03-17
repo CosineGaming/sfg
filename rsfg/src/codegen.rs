@@ -29,6 +29,7 @@ fn serialize(what: Serializable) -> u8 {
 		S::FnHeader => 0x33,
 		S::ExternFnHeader => 0x34,
 		S::Instruction(I::Return) => 0x35,
+		S::Instruction(I::FnCall(_)) => 0x36,
 	};
 	typier as u8
 }
@@ -87,7 +88,9 @@ fn gen_fn_body(function: &Fn) -> Vec<u8> {
 				code.push(serialize(Serializable::Instruction(*instr)));
 				code.push(*string_key);
 			}
-			Instruction::ExternFnCall(call) => {
+			// Besides instruction, the procedure for generating
+			// FnCall and ExternFnCall is the same
+			Instruction::FnCall(call) | Instruction::ExternFnCall(call) => {
 				code.push(serialize(Serializable::Instruction(*instr)));
 				code.extend_from_slice(&u32_bytes(call.index as u32));
 			}
