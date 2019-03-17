@@ -9,8 +9,6 @@ const INIT_STACK_SIZE: usize = 50;
 #[derive(PartialEq, Debug)]
 pub struct Thread {
 	stack: Vec<u8>,
-	// Stack pointer
-	sp: usize,
 	code: Vec<u8>,
 	// Code pointer
 	cp: usize,
@@ -186,7 +184,6 @@ impl Thread {
 		}
 		Self {
 			stack: Vec::with_capacity(INIT_STACK_SIZE),
-			sp: 0,
 			code,
 			cp,
 			strings,
@@ -196,9 +193,7 @@ impl Thread {
 	fn exec_next(&mut self) {
 		match deser_strong(next(&self.code, &mut self.cp)) {
 			Deser::PushStringLit => {
-				println!("PushStringLit not implemented");
-				// Next the string location
-				next(&self.code, &mut self.cp);
+				self.stack.push(next(&self.code, &mut self.cp));
 			},
 			Deser::ExternFnCall => {
 				println!("ExternFnCall not yet implemented");
@@ -209,9 +204,9 @@ impl Thread {
 				};
 				// TODO: assert function is cp=0 (extern)
 				match &name[..] {
-					"log" => sfg_std::log("arguments not yet supported TODO"),
-					_ => panic!("special reflection business not yet supported"),
-				}
+					"log" => sfg_std::log(self),
+					_ => panic!("special reflection business not yet supported and stdlib not found"),
+				};
 			},
 			// This would be the code for a proper function call
 			//Deser::FnCall => {
@@ -282,7 +277,6 @@ mod tests {
 			}
 		);
 		assert_eq!(thread.stack, vec![]);
-		assert_eq!(thread.sp, 0);
 		// cp doesn't matter
 		// code is hard but it's immutable so prob fine
 	}
