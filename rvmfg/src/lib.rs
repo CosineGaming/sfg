@@ -28,6 +28,7 @@ struct Fn {
 #[derive(PartialEq, Eq, Clone, Debug)]
 enum Type {
 	Str,
+	Int,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -47,7 +48,7 @@ fn deser(what: u8) -> Option<Deser> {
 	use Type::*;
 	match what {
 		// Types 1x
-		//0x10 => D::Type(Int),
+		0x10 => Some(D::Type(Int)),
 		0x11 => Some(D::Type(Str)),
 		// Other 2x
 		0x21 => Some(D::Void),
@@ -155,8 +156,8 @@ impl Thread {
 		expect(&code, &mut cp, 'g' as u8, "expected bcfg");
 		let mut fns = IndexMap::new();
 		let mut strings = Vec::new();
+		println!("0x{:X}", code[cp]);
 		loop {
-			println!("0x{:X}", code[cp]);
 			match deser(code[cp]) {
 				Some(Deser::FnHeader) => {
 					cp += 1;
@@ -165,6 +166,8 @@ impl Thread {
 				},
 				_ => break,
 			}
+		}
+		loop {
 			match deser(code[cp]) {
 				Some(Deser::ExternFnHeader) => {
 					cp += 1;
@@ -173,6 +176,8 @@ impl Thread {
 				},
 				_ => break,
 			}
+		}
+		loop {
 			match deser(code[cp]) {
 				Some(Deser::StringLit) => {
 					cp += 1;
@@ -182,6 +187,7 @@ impl Thread {
 				_ => break,
 			}
 		}
+		println!("{:?}", fns);
 		Self {
 			stack: Vec::with_capacity(INIT_STACK_SIZE),
 			code,
@@ -196,7 +202,6 @@ impl Thread {
 				self.stack.push(next(&self.code, &mut self.cp));
 			},
 			Deser::ExternFnCall => {
-				println!("ExternFnCall not yet implemented");
 				let index = read_u32(&self.code, &mut self.cp);
 				let name = match self.fns.get_index(index as usize) {
 					Some((name, _func)) => name,
