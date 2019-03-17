@@ -8,8 +8,10 @@ fn load_file(filename: &str) -> Thread {
 }
 
 #[test]
-fn hello_world_no_panic() {
-	let thread = load_file("tests/binaries/hello-world.bcfg");
+fn hello_world_runs_without_error() {
+	let mut thread = load_file("tests/binaries/hello-world.bcfg");
+	thread.call_name("main");
+	// It's really hard to test output so just leave it for now
 }
 
 //#[test]

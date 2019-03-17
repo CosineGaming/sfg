@@ -1,3 +1,5 @@
+mod sfg_std;
+
 use indexmap::IndexMap;
 
 // Should be small enough to make small scripts low-RAM, but high enough
@@ -12,18 +14,20 @@ pub struct Thread {
 	code: Vec<u8>,
 	// Code pointer
 	cp: usize,
+	strings: Vec<String>,
 	fns: IndexMap<String, Fn>,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 struct Fn {
+	// cp will be 0 for externs (TODO: make this safer)
 	cp: u32,
 	stack_size: u8,
 	return_type: Option<Type>,
 	parameters: Vec<Type>,
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 enum Type {
 	Str,
 }
@@ -33,7 +37,11 @@ enum Deser {
 	Type(Type),
 	Void,
 	FnHeader,
+	ExternFnHeader,
+	StringLit,
 	Return,
+	PushStringLit,
+	ExternFnCall,
 }
 
 fn deser(what: u8) -> Option<Deser> {
@@ -46,9 +54,11 @@ fn deser(what: u8) -> Option<Deser> {
 		// Other 2x
 		0x21 => Some(D::Void),
 		// Instructions 3x
-		//0x30 => D::Instruction(I::PushStringLit(_)),
-		//0x31 => D::Instruction(I::ExternFnCall(_)),
+		0x30 => Some(D::PushStringLit),
+		0x31 => Some(D::ExternFnCall),
+		0x32 => Some(D::StringLit),
 		0x33 => Some(D::FnHeader),
+		0x34 => Some(D::ExternFnHeader),
 		0x35 => Some(D::Return),
 		_ => None,
 	}
@@ -78,8 +88,28 @@ fn read_u32(code: &Vec<u8>, cp: &mut usize) -> u32 {
 	rv
 }
 
+fn read_to_zero(code: &Vec<u8>, mut cp: &mut usize) -> Vec<u8> {
+	let mut rv = Vec::new();
+	loop {
+		let b = next(code, &mut cp);
+		if b == 0 {
+			break;
+		}
+		rv.push(b);
+	}
+	rv
+}
+
+fn read_string(code: &Vec<u8>, mut cp: &mut usize) -> String {
+	let bytes = read_to_zero(&code, &mut cp);
+	match String::from_utf8(bytes) {
+		Ok(string) => string,
+		Err(e) => panic!("invalid string {}", e),
+	}
+}
+
 /// Returns (name, function)
-fn read_fn_header(code: &Vec<u8>, mut cp: &mut usize) -> (String, Fn) {
+fn read_fn_header(code: &Vec<u8>, mut cp: &mut usize, is_extern: bool) -> (String, Fn) {
 	let stack_size = next(code, &mut cp);
 	let return_type_u8 = next(code, &mut cp);
 	let return_type = match deser_strong(return_type_u8) {
@@ -97,16 +127,12 @@ fn read_fn_header(code: &Vec<u8>, mut cp: &mut usize) -> (String, Fn) {
 		};
 		parameters.push(param);
 	}
-	let mut name = vec![];
-	loop {
-		let b = next(code, &mut cp);
-		if b == 0 {
-			break;
-		}
-		name.push(b);
-	}
-	let name = String::from_utf8_lossy(&name).to_string();
-	let codeloc = read_u32(code, &mut cp);
+	let name = read_string(&code, &mut cp);
+	let codeloc = if is_extern {
+		0
+	} else {
+		read_u32(code, &mut cp)
+	};
 	let func = Fn {
 		stack_size,
 		return_type,
@@ -114,6 +140,12 @@ fn read_fn_header(code: &Vec<u8>, mut cp: &mut usize) -> (String, Fn) {
 		cp: codeloc,
 	};
 	(name, func)
+}
+
+// This function may be a little redundant, but I wanna keep it for a bit
+// in case StringLit gets more complex
+fn read_string_lit(code: &Vec<u8>, mut cp: &mut usize) -> String {
+	read_string(&code, &mut cp)
 }
 
 impl Thread {
@@ -124,13 +156,30 @@ impl Thread {
 		expect(&code, &mut cp, 'f' as u8, "expected bcfg");
 		expect(&code, &mut cp, 'g' as u8, "expected bcfg");
 		let mut fns = IndexMap::new();
+		let mut strings = Vec::new();
 		loop {
 			println!("0x{:X}", code[cp]);
 			match deser(code[cp]) {
 				Some(Deser::FnHeader) => {
 					cp += 1;
-					let (name, func) = read_fn_header(&code, &mut cp);
+					let (name, func) = read_fn_header(&code, &mut cp, false);
 					fns.insert(name, func);
+				},
+				_ => break,
+			}
+			match deser(code[cp]) {
+				Some(Deser::ExternFnHeader) => {
+					cp += 1;
+					let (name, func) = read_fn_header(&code, &mut cp, true);
+					fns.insert(name, func);
+				},
+				_ => break,
+			}
+			match deser(code[cp]) {
+				Some(Deser::StringLit) => {
+					cp += 1;
+					let string = read_string_lit(&code, &mut cp);
+					strings.push(string);
 				},
 				_ => break,
 			}
@@ -140,34 +189,73 @@ impl Thread {
 			sp: 0,
 			code,
 			cp,
+			strings,
 			fns,
 		}
 	}
 	fn exec_next(&mut self) {
-		println!("pretending to execute instruction");
+		match deser_strong(next(&self.code, &mut self.cp)) {
+			Deser::PushStringLit => {
+				println!("PushStringLit not implemented");
+				// Next the string location
+				next(&self.code, &mut self.cp);
+			},
+			Deser::ExternFnCall => {
+				println!("ExternFnCall not yet implemented");
+				let index = read_u32(&self.code, &mut self.cp);
+				let name = match self.fns.get_index(index as usize) {
+					Some((name, _func)) => name,
+					_ => panic!("could not find extern function {}", index),
+				};
+				// TODO: assert function is cp=0 (extern)
+				match &name[..] {
+					"log" => sfg_std::log("arguments not yet supported TODO"),
+					_ => panic!("special reflection business not yet supported"),
+				}
+			},
+			// This would be the code for a proper function call
+			//Deser::FnCall => {
+				//let index = next(&self.code, &mut self.cp);
+				//self.call_index(index);
+			//},
+			// TODO: Split deser into categories
+			_ => panic!("expected instruction, got unsupported {:x}", self.code[self.cp-1]),
+		}
 	}
-	/// This ONLY calls the function, does NOT push to stack
-	/// use the call! macro to perform a call. It's only public because
-	/// it has to be
-	#[doc(hidden)]
-	pub fn call_codepoint(&mut self, name: String) {
-		let func = match self.fns.get(&name) {
-			Some(func) => func,
-			None => panic!("could not find function {}", name),
-		};
+	fn call_fn(&mut self, func: Fn) {
+		assert_ne!(func.cp, 0, "tried to call extern function");
 		self.cp = func.cp as usize;
 		loop {
 			if deser_strong(self.code[self.cp]) == Deser::Return {
-				// TODO: Push some return value / etc
+				// TODO: Push some return value, decrement stack, etc
 				break;
 			}
+			self.exec_next();
 		}
+	}
+	fn call_index(&mut self, index: u8) {
+		let func = match self.fns.get_index(index as usize) {
+			Some((_name, func)) => func.clone(),
+			_ => panic!("could not find function at {}", index),
+		};
+		self.call_fn(func);
+	}
+	/// This ONLY calls the function, does NOT push to stack
+	/// use the c! macro to perform a call. It's only public because
+	/// it has to be
+	#[doc(hidden)]
+	pub fn call_name(&mut self, name: &str) {
+		let func = match self.fns.get(name) {
+			Some(func) => func.clone(),
+			None => panic!("could not find function {}", name),
+		};
+		self.call_fn(func);
 	}
 }
 
 #[cfg(test)]
 mod tests {
-	use super::{Thread, Fn};
+	use super::{Thread, Fn, Type};
 	use indexmap::indexmap;
 	fn load_file(filename: &str) -> Thread {
 		let code = std::fs::read(filename)
@@ -180,10 +268,16 @@ mod tests {
 		assert_eq!(thread.fns,
 			indexmap!{
 				"main".to_string() => Fn {
-					cp: 26,
+					cp: 30,
 					stack_size: 0,
 					return_type: None,
 					parameters: vec![],
+				},
+				"log".to_string() => Fn {
+					cp: 0,
+					stack_size: 8,
+					return_type: None,
+					parameters: vec![Type::Str],
 				},
 			}
 		);
