@@ -12,7 +12,7 @@ pub struct Thread {
 	code: Vec<u8>,
 	// Code pointer
 	cp: usize,
-	fns: IndexMap<Vec<u8>, Fn>,
+	fns: IndexMap<String, Fn>,
 }
 
 #[derive(PartialEq, Debug)]
@@ -23,15 +23,17 @@ struct Fn {
 	parameters: Vec<Type>,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 enum Type {
 	Str,
 }
 
+#[derive(PartialEq, Eq, Debug)]
 enum Deser {
 	Type(Type),
 	Void,
 	FnHeader,
+	Return,
 }
 
 fn deser(what: u8) -> Option<Deser> {
@@ -47,6 +49,7 @@ fn deser(what: u8) -> Option<Deser> {
 		//0x30 => D::Instruction(I::PushStringLit(_)),
 		//0x31 => D::Instruction(I::ExternFnCall(_)),
 		0x33 => Some(D::FnHeader),
+		0x35 => Some(D::Return),
 		_ => None,
 	}
 }
@@ -76,7 +79,7 @@ fn read_u32(code: &Vec<u8>, cp: &mut usize) -> u32 {
 }
 
 /// Returns (name, function)
-fn read_fn_header(code: &Vec<u8>, mut cp: &mut usize) -> (Vec<u8>, Fn) {
+fn read_fn_header(code: &Vec<u8>, mut cp: &mut usize) -> (String, Fn) {
 	let stack_size = next(code, &mut cp);
 	let return_type_u8 = next(code, &mut cp);
 	let return_type = match deser_strong(return_type_u8) {
@@ -102,6 +105,7 @@ fn read_fn_header(code: &Vec<u8>, mut cp: &mut usize) -> (Vec<u8>, Fn) {
 		}
 		name.push(b);
 	}
+	let name = String::from_utf8_lossy(&name).to_string();
 	let codeloc = read_u32(code, &mut cp);
 	let func = Fn {
 		stack_size,
@@ -139,6 +143,26 @@ impl Thread {
 			fns,
 		}
 	}
+	fn exec_next(&mut self) {
+		println!("pretending to execute instruction");
+	}
+	/// This ONLY calls the function, does NOT push to stack
+	/// use the call! macro to perform a call. It's only public because
+	/// it has to be
+	#[doc(hidden)]
+	pub fn call_codepoint(&mut self, name: String) {
+		let func = match self.fns.get(&name) {
+			Some(func) => func,
+			None => panic!("could not find function {}", name),
+		};
+		self.cp = func.cp as usize;
+		loop {
+			if deser_strong(self.code[self.cp]) == Deser::Return {
+				// TODO: Push some return value / etc
+				break;
+			}
+		}
+	}
 }
 
 #[cfg(test)]
@@ -151,11 +175,11 @@ mod tests {
 		Thread::new(code)
 	}
 	#[test]
-	fn hello_world_fns() {
+	fn hello_world_init() {
 		let thread = load_file("tests/binaries/hello-world.bcfg");
 		assert_eq!(thread.fns,
 			indexmap!{
-				b"main".to_vec() => Fn {
+				"main".to_string() => Fn {
 					cp: 26,
 					stack_size: 0,
 					return_type: None,
@@ -163,6 +187,10 @@ mod tests {
 				},
 			}
 		);
+		assert_eq!(thread.stack, vec![]);
+		assert_eq!(thread.sp, 0);
+		// cp doesn't matter
+		// code is hard but it's immutable so prob fine
 	}
 }
 

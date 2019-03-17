@@ -34,6 +34,7 @@ pub enum Instruction {
 	//FnCall(FnCall),
 	ExternFnCall(ExternFnCall),
 	PushStringLit(u8),
+	Return, // TODO: allow return value
 }
 pub type TypedVar = Type;
 //#[derive(PartialEq, Eq, Debug)]

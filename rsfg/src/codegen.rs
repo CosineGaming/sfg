@@ -28,6 +28,7 @@ fn serialize(what: Serializable) -> u8 {
 		S::StringLit => 0x32,
 		S::FnHeader => 0x33,
 		S::ExternFnHeader => 0x34,
+		S::Instruction(I::Return) => 0x35,
 	};
 	typier as u8
 }
@@ -89,6 +90,9 @@ fn gen_fn_body(function: &Fn) -> Vec<u8> {
 			Instruction::ExternFnCall(call) => {
 				code.push(serialize(Serializable::Instruction(*instr)));
 				code.extend_from_slice(&u32_bytes(call.index as u32));
+			}
+			Instruction::Return => {
+				code.push(serialize(Serializable::Instruction(*instr)));
 			}
 		}
 	}

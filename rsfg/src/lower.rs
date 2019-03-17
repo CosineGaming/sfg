@@ -71,6 +71,10 @@ fn lower_fn(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, out_strings: &mut Ve
 			}
 		}
 	}
+	// TODO: Instead, check if something was returned and if not (and typed) throw error
+	if func.signature.return_type == None {
+		instructions.push(llr::Instruction::Return);
+	}
 	llr::Fn {
 		instructions,
 		signature: llr::Signature {
@@ -114,22 +118,6 @@ pub fn lower(ast: AST) -> llr::LLR {
 			}
 		}
 	}
-	// Typecheck all function calls with their found IDs
-	//for node in ast.iter() {
-		//if let ASTNode::Fn(func) = node {
-			//for statement in func.statements.iter() {
-				//if let Statement::FnCall(call) = statement {
-					//let call_id = call.id.expect("call ids should be found by now");
-					//let calling = &ast[call_id as usize];
-					//let params = match calling {
-						//ASTNode::Fn(f) => &f.signature.parameters,
-						//ASTNode::ExternFn(f) => &f.signature.parameters,
-					//};
-//
-				//}
-			//}
-		//}
-	//}
 	out
 }
 

@@ -14,10 +14,14 @@ fn compile_file(filename: &str) -> Vec<u8> {
 	compile(&script_string, &get_stdlib())
 }
 
+fn assert_hex(a: Vec<u8>, b: Vec<u8>) {
+	assert_eq!(a, b, "result:\n{:X?}\nexpected:\n{:X?}", a, b);
+}
+
 #[test]
 fn hello_world() {
 	let result = compile_file("tests/scripts/hello-world.sfg");
-	assert_eq!(result, vec![
+	assert_hex(result, vec![
 		// bcfg
 		0x62, 0x63, 0x66, 0x67,
 		// header for main:
@@ -62,6 +66,8 @@ fn hello_world() {
 		// function index (4b)
 		// 1 (0:main, 1:log)
 		0x01, 0x00, 0x00, 0x00,
+		// Return
+		0x35,
 	]);
 }
 
