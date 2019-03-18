@@ -3,7 +3,7 @@
 // That which cannot be is supposed to be implemented by the order of
 // one or two parent-app functions, and is here
 
-use crate::Thread;
+use crate::thread::Thread;
 
 pub fn log(thread: &mut Thread) {
 	let string_index = thread.stack.pop().expect("param not provided");

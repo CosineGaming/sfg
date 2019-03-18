@@ -1,5 +1,5 @@
 extern crate rvmfg;
-use rvmfg::Thread;
+use rvmfg::thread::Thread;
 
 fn load_file(filename: &str) -> Thread {
 	let code = std::fs::read(filename)
