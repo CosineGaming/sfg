@@ -89,6 +89,12 @@ fn read_u32(code: &Vec<u8>, cp: &mut usize) -> u32 {
 	rv
 }
 
+fn from_u32(what: u32) -> [u8; 4] {
+	use std::mem::transmute;
+	let le = what.to_le();
+	unsafe { transmute(le) }
+}
+
 fn read_to_zero(code: &Vec<u8>, mut cp: &mut usize) -> Vec<u8> {
 	let mut rv = Vec::new();
 	loop {
@@ -232,6 +238,10 @@ impl Thread {
 			_ => panic!("expected instruction, got unsupported {:x}", self.code[self.cp-1]),
 		}
 	}
+	pub fn push_string(&mut self, string: &String) {
+		let as_number = string as *const String as u32;
+		self.stack.extend_from_slice(&from_u32(as_number));
+	}
 	fn call_fn(&mut self, func: Fn) {
 		assert_ne!(func.cp, 0, "tried to call extern function");
 		self.cp = func.cp as usize;
@@ -263,9 +273,38 @@ impl Thread {
 	}
 }
 
+/// call!thread.main()
+#[macro_export]
+macro_rules! call {
+	( $thread:ident.$function:ident($( $push:expr )*) ) => {
+		{
+			$(
+				$push.push_to(&mut $thread);
+			)*
+			$thread.call_name(stringify!($function));
+		}
+	};
+}
+
+/// This trait serves only to make the macro work easily
+/// relevant push_[type]()s and call_name() are just as effective
+trait Pushable {
+	fn push_to(&self, thread: &mut Thread);
+}
+impl Pushable for String {
+	fn push_to(&self, thread: &mut Thread) {
+		thread.push_string(self);
+	}
+}
+impl Pushable for str {
+	fn push_to(&self, thread: &mut Thread) {
+		thread.push_string(&self.to_string());
+	}
+}
+
 #[cfg(test)]
 mod tests {
-	use super::{Thread, Fn, Type};
+	use super::{Thread, Fn, Type, Pushable};
 	use indexmap::indexmap;
 	fn load_file(filename: &str) -> Thread {
 		let code = std::fs::read(filename)
@@ -294,6 +333,11 @@ mod tests {
 		assert_eq!(thread.stack, vec![]);
 		// cp doesn't matter
 		// code is hard but it's immutable so prob fine
+	}
+	#[test]
+	fn call_macro() {
+		let mut thread = load_file("tests/binaries/without-errors.bcfg");
+		call![thread.strings_only("hello")];
 	}
 }
 
