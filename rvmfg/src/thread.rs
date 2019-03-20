@@ -211,11 +211,11 @@ impl Thread {
 			},
 			Deser::ExternFnCall => {
 				let index = read_u32(&self.code, &mut self.cp);
-				let name = match self.fns.get_index(index as usize) {
-					Some((name, _func)) => name,
+				let (name, func) = match self.fns.get_index(index as usize) {
+					Some(tuple) => tuple,
 					_ => panic!("could not find extern function at {}", index),
 				};
-				// TODO: assert function is cp=0 (extern)
+				assert_eq!(func.cp, 0, "extern fn call calling non-extern function");
 				match &name[..] {
 					"log" => sfg_std::log(self),
 					_ => panic!("special reflection business not yet supported and stdlib not found"),
@@ -229,11 +229,6 @@ impl Thread {
 				};
 				self.call_fn(func);
 			},
-			// This would be the code for a proper function call
-			//Deser::FnCall => {
-				//let index = next(&self.code, &mut self.cp);
-				//self.call_index(index);
-			//},
 			// TODO: Split deser into categories
 			_ => panic!("expected instruction, got unsupported {:x}", self.code[self.cp-1]),
 		}
@@ -247,18 +242,14 @@ impl Thread {
 		self.cp = func.cp as usize;
 		loop {
 			if deser_strong(self.code[self.cp]) == Deser::Return {
-				// TODO: Push some return value, decrement stack, etc
+				for _ in 0..func.stack_size {
+					self.stack.pop();
+				}
+				// TODO: Push some return value, etc
 				break;
 			}
 			self.exec_next();
 		}
-	}
-	fn call_index(&mut self, index: u8) {
-		let func = match self.fns.get_index(index as usize) {
-			Some((_name, func)) => func.clone(),
-			_ => panic!("could not find function at {}", index),
-		};
-		self.call_fn(func);
 	}
 	/// This ONLY calls the function, does NOT push to stack
 	/// use the c! macro to perform a call. It's only public because
@@ -337,7 +328,7 @@ mod tests {
 	#[test]
 	fn call_macro() {
 		let mut thread = load_file("tests/binaries/without-errors.bcfg");
-		call![thread.strings_only("hello")];
+		call![thread.main("hello")];
 	}
 }
 

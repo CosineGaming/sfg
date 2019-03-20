@@ -13,7 +13,6 @@ fn main() {
 	let script_path = Path::new(&script_filename);
 	let script_string = std::fs::read_to_string(script_path)
 		.expect("could not load given file");
-	println!("{}", script_string);
 	let stdlib = get_stdlib();
 	let compiled = compile(&script_string, &stdlib);
 	let out = script_path.with_extension("bcfg");
