@@ -31,11 +31,17 @@ fn pop_no_eof(from: &mut Vec<Token>, parsing_what: &str) -> Result<Token> {
 		None => Err(ParseError::EOF(parsing_what.to_string()))
 	}
 }
-fn expect_token(rtokens: &mut Vec<Token>, what: Token, during: &str) -> Result<()> {
-	let next = pop_no_eof(rtokens, during)?;
-	if next == what {
-		Ok(())
+/// Only pops if the next token is expected, then returns that token (otherwise Err::EOF)
+fn expect_token(rtokens: &mut Vec<Token>, what: Token, during: &str) -> Result<Token> {
+	let next = match rtokens.last() {
+		Some(token) => token,
+		None => return Err(ParseError::EOF(during.to_string())),
+	};
+	if next == &what {
+		println!("popping for {}", during);
+		Ok(rtokens.pop().unwrap())
 	} else {
+		println!("not popping for {}", during);
 		Err(ParseError::Expected(format!("{:?}", what), during.to_string()))
 	}
 }
@@ -93,8 +99,11 @@ fn parse_expression(rtokens: &mut Vec<Token>) -> Result<Expression> {
 }
 
 fn parse_call(rtokens: &mut Vec<Token>) -> Result<FnCall> {
-	let name = match rtokens.pop() {
-		Some(Token::Identifier(name)) => name,
+	let name = match rtokens.last() {
+		Some(Token::Identifier(_)) => match rtokens.pop() {
+			Some(Token::Identifier(name)) => name,
+			_ => unreachable!(),
+		},
 		_ => return Err(ParseError::Expected("identifier".to_string(), "fn call".to_string())),
 	};
 	// Arguments
@@ -133,8 +142,20 @@ fn parse_args(rtokens: &mut Vec<Token>) -> Result<Vec<TypedId>> {
 	Ok(args)
 }
 
+fn parse_return(rtokens: &mut Vec<Token>) -> Result<Expression> {
+	expect_token(rtokens, Token::Return, "return statement")?;
+	parse_expression(rtokens)
+}
+
 fn parse_statement(rtokens: &mut Vec<Token>) -> Result<Statement> {
-	Ok(Statement::FnCall(parse_call(rtokens)?))
+	if let Ok(rv) = parse_call(rtokens) {
+		Ok(Statement::FnCall(rv))
+	}
+	else if let Ok(rv) = parse_return(rtokens) {
+		Ok(Statement::Return(rv))
+	} else {
+		Err(ParseError::Expected("return or function call".to_string(), "statement".to_string()))
+	}
 }
 
 fn parse_signature(rtokens: &mut Vec<Token>) -> Result<Signature> {

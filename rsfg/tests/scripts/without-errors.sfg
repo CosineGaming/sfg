@@ -8,8 +8,9 @@ fn complex_fn(thing: int, another: int) // Same-line
 fn strings_only(what: str)
 	log("hi there")
 
-fn main()
+fn main() str
 	strings_only("hi howdy")
+	return "a literal"
 
 @fn extern_func(athing: int)
 // Nothing below it

@@ -32,6 +32,7 @@ pub struct TypedId {
 pub enum Statement {
 	//pub Assignment(Assignment),
 	FnCall(FnCall),
+	Return(Expression),
 }
 #[derive(PartialEq, Eq, Debug)]
 pub enum Expression {
