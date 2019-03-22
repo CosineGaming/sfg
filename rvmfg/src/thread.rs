@@ -39,7 +39,7 @@ enum Deser {
 	ExternFnHeader,
 	StringLit,
 	Return,
-	PushStringLit,
+	Push8,
 	ExternFnCall,
 	FnCall,
 }
@@ -54,7 +54,7 @@ fn deser(what: u8) -> Option<Deser> {
 		// Other 2x
 		0x21 => Some(D::Void),
 		// Instructions 3x
-		0x30 => Some(D::PushStringLit),
+		0x30 => Some(D::Push8),
 		0x31 => Some(D::ExternFnCall),
 		0x32 => Some(D::StringLit),
 		0x33 => Some(D::FnHeader),
@@ -206,7 +206,7 @@ impl Thread {
 	}
 	fn exec_next(&mut self) {
 		match deser_strong(next(&self.code, &mut self.ip)) {
-			Deser::PushStringLit => {
+			Deser::Push8 => {
 				self.stack.push(next(&self.code, &mut self.ip));
 			},
 			Deser::ExternFnCall => {
