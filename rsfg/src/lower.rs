@@ -16,6 +16,16 @@ fn expression_type(expr: &Expression) -> Type {
 	}
 }
 
+fn type_size(id_type: Type) -> u8 {
+	use Type::*;
+	match id_type {
+		Int => 4,
+		// Location and length?
+		Str => 8,
+		Infer => panic!("type not yet inferred by size check"),
+	}
+}
+
 // Some(true) is like (Int, Int) OR (Int, Infer)
 // Some(false) is like (Int, String)
 // None is (Infer, Infer)
@@ -29,7 +39,7 @@ fn expression_to_push(expr: &Expression, strings: &mut Vec<String>) -> llr::Inst
 	match expr {
 		Expression::Literal(Literal::String(string)) => {
 			strings.push(string.to_string());
-			llr::Instruction::PushStringLit((strings.len()-1) as u8)
+			llr::Instruction::Push8((strings.len()-1) as u8)
 		},
 		_ => panic!("expected string literal"),
 	}
@@ -75,6 +85,15 @@ fn lower_fn_call(call: &FnCall, fn_map: &IndexMap<String, &ASTNode>, strings: &m
 }
 
 fn lower_return(expr: &Expression, expected_return: Option<Type>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
+	// TODO: ERROR: Return is wrong here:
+	//     Push return_value
+	//     Return
+	// gives ("return 4")
+	//     1 2 3
+	//     (push)
+	//     1 2 3 4
+	//     (return)
+	//     1
 	assert_eq!(Some(expression_type(expr)), expected_return);
 	vec![
 		expression_to_push(expr, strings),
@@ -124,6 +143,7 @@ fn lower_signature(signature: &Signature) -> llr::Signature {
 	llr::Signature {
 		name: signature.name.clone(),
 		parameters: parameters,
+		stack_size,
 		return_type: signature.return_type,
 	}
 }
