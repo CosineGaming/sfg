@@ -83,8 +83,9 @@ fn lower_return(expr: &Expression, expected_return: Option<Type>, strings: &mut 
 }
 
 /// requires mutable reference to llr's strings so strings that come up can be added
-fn lower_fn(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<String>) -> llr::Fn {
+fn lower_instructions(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
 	let mut instructions = Vec::<llr::Instruction>::new();
+	// Lower every statement
 	for statement in func.statements.iter() {
 		match statement {
 			Statement::FnCall(call) => {
@@ -105,17 +106,32 @@ fn lower_fn(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<St
 			panic!("function with type may not return");
 		}
 	}
+	instructions
+}
+
+fn lower_signature(signature: &Signature) -> llr::Signature {
+	// Rather than having return handle the stack, we first call pop so we can push the return value
+	let mut stack_size = 0;
+	for param in &signature.parameters {
+		let p_type = param.id_type;
+		stack_size += type_size(p_type);
+	}
+	// Lower parameters
 	let mut parameters = vec![];
-	for param in &func.signature.parameters {
+	for param in &signature.parameters {
 		parameters.push(param.id_type);
 	}
+	llr::Signature {
+		name: signature.name.clone(),
+		parameters: parameters,
+		return_type: signature.return_type,
+	}
+}
+
+fn lower_fn(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<String>) -> llr::Fn {
 	llr::Fn {
-		instructions,
-		signature: llr::Signature {
-			name: func.name.clone(),
-			parameters: parameters,
-			return_type: func.signature.return_type,
-		},
+		instructions: lower_instructions(func, fn_map, strings),
+		signature: lower_signature(&func.signature),
 	}
 }
 
@@ -126,8 +142,8 @@ pub fn lower(ast: AST) -> llr::LLR {
 	// Add all functions to the map
 	for node in ast.iter() {
 		let name = match node {
-			ASTNode::Fn(func) => func.name.clone(),
-			ASTNode::ExternFn(func) => func.name.clone(),
+			ASTNode::Fn(func) => func.signature.name.clone(),
+			ASTNode::ExternFn(func) => func.signature.name.clone(),
 		};
 		fn_map.insert(name, node);
 	}
@@ -139,16 +155,8 @@ pub fn lower(ast: AST) -> llr::LLR {
 				out.fns.push(out_f);
 			},
 			ASTNode::ExternFn(func) => {
-				let mut parameters = vec![];
-				for param in &func.signature.parameters {
-					parameters.push(param.id_type);
-				}
-				let out_f = llr::Signature {
-					name: func.name.clone(),
-					parameters,
-					return_type: func.signature.return_type,
-				};
-				out.extern_fns.push(out_f);
+				let out_s = lower_signature(&func.signature);
+				out.extern_fns.push(out_s);
 			}
 		}
 	}

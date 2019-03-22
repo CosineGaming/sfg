@@ -7,7 +7,6 @@ enum ParseError {
 	Expected(String, String),
 	Unsupported(String),
 	EOF(String),
-	Other(String),
 }
 impl std::fmt::Display for ParseError {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -16,7 +15,6 @@ impl std::fmt::Display for ParseError {
 			Expected(what, after) => write!(f, "expected {} after {}", what, after),
 			Unsupported(what) => write!(f, "unsupported {}", what),
 			EOF(parsing) => write!(f, "unexpected EOF parsing {}", parsing),
-			Other(msg) => write!(f, "{}", msg),
 		}
 	}
 }
@@ -159,6 +157,14 @@ fn parse_statement(rtokens: &mut Vec<Token>) -> Result<Statement> {
 }
 
 fn parse_signature(rtokens: &mut Vec<Token>) -> Result<Signature> {
+	// An extern function that serves only as a typecheck might use the
+	// @ in the name. The lexer misinterprets this as ExternFnCall despite
+	// not being a call
+	let name = match pop_no_eof(rtokens, "fn")? {
+		Token::Identifier(name) => name,
+		Token::ExternFnCall(name) => name,
+		_ => return Err(ParseError::Expected("fn name".to_string(), "fn".to_string())),
+	};
 	let parameters = parse_args(rtokens)?;
 	let return_type = match rtokens.last() {
 		Some(Token::Type(_)) => match rtokens.pop() {
@@ -174,28 +180,21 @@ fn parse_signature(rtokens: &mut Vec<Token>) -> Result<Signature> {
 		_ => return Err(ParseError::Expected("newline".to_string(), "definition".to_string())),
 	}
 	Ok(Signature {
-		parameters: parameters,
-		return_type: return_type,
+		name,
+		parameters,
+		return_type,
 	})
 }
 
 fn parse_fn(rtokens: &mut Vec<Token>) -> Result<Fn> {
+	expect_token(rtokens, Token::Fn, "fn")?;
 	// Parse signature
-	match rtokens.pop() {
-		Some(Token::Fn) => (),
-		_ => panic!("internal: fn didn't start with fn"),
-	}
-	let name = match pop_no_eof(rtokens, "fn")? {
-		Token::Identifier(name) => name,
-		_ => return Err(ParseError::Expected("fn name".to_string(), "fn".to_string())),
-	};
 	let signature = parse_signature(rtokens)?;
 	let mut statements = vec![];
 	loop {
 		let t = match rtokens.last() {
 			Some(t) => t,
 			None => return Ok(Fn {
-				name,
 				signature,
 				statements,
 			})
@@ -212,7 +211,6 @@ fn parse_fn(rtokens: &mut Vec<Token>) -> Result<Fn> {
 		}
 	}
 	Ok(Fn {
-		name,
 		signature,
 		statements,
 	})
@@ -223,17 +221,8 @@ fn parse_extern_fn(rtokens: &mut Vec<Token>) -> Result<ExternFn> {
 		Some(Token::ExternFn) => (),
 		_ => panic!("internal: extern fn didn't start with @fn"),
 	}
-	// An extern function that serves only as a typecheck might use the
-	// @ in the name. The lexer misinterprets this as ExternFnCall despite
-	// not being a call
-	let name = match pop_no_eof(rtokens, "fn")? {
-		Token::ExternFnCall(name) => name,
-		Token::Identifier(name) => name,
-		_ => return Err(ParseError::Other("expected name of function, with or without leading @".to_string())),
-	};
 	let signature = parse_signature(rtokens)?;
 	Ok(ExternFn {
-		name,
 		signature,
 	})
 }
@@ -289,8 +278,8 @@ mod test {
 		]);
 		assert_eq!(ast, vec![
 			ASTNode::Fn(crate::ast::Fn {
-				name: "main".to_string(),
 				signature: Signature {
+					name: "main".to_string(),
 					parameters: vec![],
 					return_type: None,
 				},

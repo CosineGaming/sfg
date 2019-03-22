@@ -9,17 +9,16 @@ pub enum ASTNode {
 }
 #[derive(PartialEq, Eq, Debug)]
 pub struct Fn {
-	pub name: String,
 	pub statements: Vec<Statement>,
 	pub signature: Signature,
 }
 #[derive(PartialEq, Eq, Debug)]
 pub struct ExternFn {
-	pub name: String,
 	pub signature: Signature,
 }
 #[derive(PartialEq, Eq, Debug)]
 pub struct Signature {
+	pub name: String,
 	pub parameters: Vec<TypedId>,
 	pub return_type: Option<Type>, // Can be void (None)
 }
