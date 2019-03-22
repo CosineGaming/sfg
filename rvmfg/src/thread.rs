@@ -11,15 +11,15 @@ pub struct Thread {
 	pub stack: Vec<u8>,
 	code: Vec<u8>,
 	// Code pointer
-	cp: usize,
+	ip: usize,
 	pub strings: Vec<String>,
 	fns: IndexMap<String, Fn>,
 }
 
 #[derive(PartialEq, Clone, Debug)]
 struct Fn {
-	// cp will be 0 for externs (TODO: make this safer)
-	cp: u32,
+	// ip will be 0 for externs (TODO: make this safer)
+	ip: u32,
 	stack_size: u8,
 	return_type: Option<Type>,
 	parameters: Vec<Type>,
@@ -68,24 +68,24 @@ fn deser_strong(what: u8) -> Deser {
 	deser(what).expect(&format!("tried to match invalid u8 0x{:X}", what))
 }
 
-fn expect(code: &Vec<u8>, mut cp: &mut usize, what: u8, message: &str) {
-	if next(&code, &mut cp) != what {
+fn expect(code: &Vec<u8>, mut ip: &mut usize, what: u8, message: &str) {
+	if next(&code, &mut ip) != what {
 		panic!("{}", message);
 	}
 }
 
-fn next(code: &Vec<u8>, cp: &mut usize) -> u8 {
-	let rv = code[*cp];
-	*cp += 1;
+fn next(code: &Vec<u8>, ip: &mut usize) -> u8 {
+	let rv = code[*ip];
+	*ip += 1;
 	rv
 }
 
-fn read_u32(code: &Vec<u8>, cp: &mut usize) -> u32 {
+fn read_u32(code: &Vec<u8>, ip: &mut usize) -> u32 {
 	use std::mem::transmute;
 	let mut four: [u8; 4] = Default::default();
-	four.copy_from_slice(&code[*cp..*cp+4]);
+	four.copy_from_slice(&code[*ip..*ip+4]);
 	let rv = u32::from_le(unsafe { transmute::<[u8; 4], u32>(four) });
-	*cp += 4;
+	*ip += 4;
 	rv
 }
 
@@ -95,10 +95,10 @@ fn from_u32(what: u32) -> [u8; 4] {
 	unsafe { transmute(le) }
 }
 
-fn read_to_zero(code: &Vec<u8>, mut cp: &mut usize) -> Vec<u8> {
+fn read_to_zero(code: &Vec<u8>, mut ip: &mut usize) -> Vec<u8> {
 	let mut rv = Vec::new();
 	loop {
-		let b = next(code, &mut cp);
+		let b = next(code, &mut ip);
 		if b == 0 {
 			break;
 		}
@@ -107,8 +107,8 @@ fn read_to_zero(code: &Vec<u8>, mut cp: &mut usize) -> Vec<u8> {
 	rv
 }
 
-fn read_string(code: &Vec<u8>, mut cp: &mut usize) -> String {
-	let bytes = read_to_zero(&code, &mut cp);
+fn read_string(code: &Vec<u8>, mut ip: &mut usize) -> String {
+	let bytes = read_to_zero(&code, &mut ip);
 	match String::from_utf8(bytes) {
 		Ok(string) => string,
 		Err(e) => panic!("invalid string {}", e),
@@ -116,80 +116,80 @@ fn read_string(code: &Vec<u8>, mut cp: &mut usize) -> String {
 }
 
 /// Returns (name, function)
-fn read_fn_header(code: &Vec<u8>, mut cp: &mut usize, is_extern: bool) -> (String, Fn) {
-	let stack_size = next(code, &mut cp);
-	let return_type_u8 = next(code, &mut cp);
+fn read_fn_header(code: &Vec<u8>, mut ip: &mut usize, is_extern: bool) -> (String, Fn) {
+	let stack_size = next(code, &mut ip);
+	let return_type_u8 = next(code, &mut ip);
 	let return_type = match deser_strong(return_type_u8) {
 		Deser::Type(t) => Some(t),
 		Deser::Void => None,
 		_ => panic!("expected type or void, got {}", return_type_u8),
 	};
-	let param_count = next(code, &mut cp);
+	let param_count = next(code, &mut ip);
 	let mut parameters = vec![];
 	for _ in 0..param_count {
-		let type_u8 = next(code, &mut cp);
+		let type_u8 = next(code, &mut ip);
 		let param = match deser_strong(type_u8) {
 			Deser::Type(t) => t,
 			_ => panic!("expected type, got {}", type_u8),
 		};
 		parameters.push(param);
 	}
-	let name = read_string(&code, &mut cp);
+	let name = read_string(&code, &mut ip);
 	let codeloc = if is_extern {
 		0
 	} else {
-		read_u32(code, &mut cp)
+		read_u32(code, &mut ip)
 	};
 	let func = Fn {
 		stack_size,
 		return_type,
 		parameters,
-		cp: codeloc,
+		ip: codeloc,
 	};
 	(name, func)
 }
 
 // This function may be a little redundant, but I wanna keep it for a bit
 // in case StringLit gets more complex
-fn read_string_lit(code: &Vec<u8>, mut cp: &mut usize) -> String {
-	read_string(&code, &mut cp)
+fn read_string_lit(code: &Vec<u8>, mut ip: &mut usize) -> String {
+	read_string(&code, &mut ip)
 }
 
 impl Thread {
 	pub fn new(code: Vec<u8>) -> Self {
-		let mut cp = 0;
-		expect(&code, &mut cp, 'b' as u8, "expected bcfg");
-		expect(&code, &mut cp, 'c' as u8, "expected bcfg");
-		expect(&code, &mut cp, 'f' as u8, "expected bcfg");
-		expect(&code, &mut cp, 'g' as u8, "expected bcfg");
+		let mut ip = 0;
+		expect(&code, &mut ip, 'b' as u8, "expected bcfg");
+		expect(&code, &mut ip, 'c' as u8, "expected bcfg");
+		expect(&code, &mut ip, 'f' as u8, "expected bcfg");
+		expect(&code, &mut ip, 'g' as u8, "expected bcfg");
 		let mut fns = IndexMap::new();
 		let mut strings = Vec::new();
-		println!("0x{:X}", code[cp]);
+		println!("0x{:X}", code[ip]);
 		loop {
-			match deser(code[cp]) {
+			match deser(code[ip]) {
 				Some(Deser::FnHeader) => {
-					cp += 1;
-					let (name, func) = read_fn_header(&code, &mut cp, false);
+					ip += 1;
+					let (name, func) = read_fn_header(&code, &mut ip, false);
 					fns.insert(name, func);
 				},
 				_ => break,
 			}
 		}
 		loop {
-			match deser(code[cp]) {
+			match deser(code[ip]) {
 				Some(Deser::ExternFnHeader) => {
-					cp += 1;
-					let (name, func) = read_fn_header(&code, &mut cp, true);
+					ip += 1;
+					let (name, func) = read_fn_header(&code, &mut ip, true);
 					fns.insert(name, func);
 				},
 				_ => break,
 			}
 		}
 		loop {
-			match deser(code[cp]) {
+			match deser(code[ip]) {
 				Some(Deser::StringLit) => {
-					cp += 1;
-					let string = read_string_lit(&code, &mut cp);
+					ip += 1;
+					let string = read_string_lit(&code, &mut ip);
 					strings.push(string);
 				},
 				_ => break,
@@ -199,30 +199,30 @@ impl Thread {
 		Self {
 			stack: Vec::with_capacity(INIT_STACK_SIZE),
 			code,
-			cp,
+			ip,
 			strings,
 			fns,
 		}
 	}
 	fn exec_next(&mut self) {
-		match deser_strong(next(&self.code, &mut self.cp)) {
+		match deser_strong(next(&self.code, &mut self.ip)) {
 			Deser::PushStringLit => {
-				self.stack.push(next(&self.code, &mut self.cp));
+				self.stack.push(next(&self.code, &mut self.ip));
 			},
 			Deser::ExternFnCall => {
-				let index = read_u32(&self.code, &mut self.cp);
+				let index = read_u32(&self.code, &mut self.ip);
 				let (name, func) = match self.fns.get_index(index as usize) {
 					Some(tuple) => tuple,
 					_ => panic!("could not find extern function at {}", index),
 				};
-				assert_eq!(func.cp, 0, "extern fn call calling non-extern function");
+				assert_eq!(func.ip, 0, "extern fn call calling non-extern function");
 				match &name[..] {
 					"log" => sfg_std::log(self),
 					_ => panic!("special reflection business not yet supported and stdlib not found"),
 				};
 			},
 			Deser::FnCall => {
-				let index = read_u32(&self.code, &mut self.cp);
+				let index = read_u32(&self.code, &mut self.ip);
 				let func = match self.fns.get_index(index as usize) {
 					Some((_name, func)) => func.clone(),
 					_ => panic!("could not find function at {}", index),
@@ -230,7 +230,7 @@ impl Thread {
 				self.call_fn(func);
 			},
 			// TODO: Split deser into categories
-			_ => panic!("expected instruction, got unsupported {:x}", self.code[self.cp-1]),
+			_ => panic!("expected instruction, got unsupported {:x}", self.code[self.ip-1]),
 		}
 	}
 	pub fn push_string(&mut self, string: &String) {
@@ -238,10 +238,10 @@ impl Thread {
 		self.stack.extend_from_slice(&from_u32(as_number));
 	}
 	fn call_fn(&mut self, func: Fn) {
-		assert_ne!(func.cp, 0, "tried to call extern function");
-		self.cp = func.cp as usize;
+		assert_ne!(func.ip, 0, "tried to call extern function");
+		self.ip = func.ip as usize;
 		loop {
-			if deser_strong(self.code[self.cp]) == Deser::Return {
+			if deser_strong(self.code[self.ip]) == Deser::Return {
 				for _ in 0..func.stack_size {
 					self.stack.pop();
 				}
@@ -308,13 +308,13 @@ mod tests {
 		assert_eq!(thread.fns,
 			indexmap!{
 				"main".to_string() => Fn {
-					cp: 30,
+					ip: 30,
 					stack_size: 0,
 					return_type: None,
 					parameters: vec![],
 				},
 				"log".to_string() => Fn {
-					cp: 0,
+					ip: 0,
 					stack_size: 8,
 					return_type: None,
 					parameters: vec![Type::Str],
@@ -322,7 +322,7 @@ mod tests {
 			}
 		);
 		assert_eq!(thread.stack, vec![]);
-		// cp doesn't matter
+		// ip doesn't matter
 		// code is hard but it's immutable so prob fine
 	}
 	#[test]
