@@ -23,6 +23,7 @@ pub struct Fn {
 #[derive(PartialEq, Eq, Debug)]
 pub struct Signature {
 	pub parameters: Vec<TypedVar>, // When namespace is added, this should be Vec<NameKey> and point to the namespace
+	pub stack_size: u8,
 	pub return_type: Option<Type>, // Can be void (None)
 	pub name: String, // All fns are public and may need to interact with ABI
 }
@@ -35,8 +36,7 @@ pub enum Instruction {
 	ExternFnCall(FnCall),
 	Push8(u8),
 	Pop8,
-	// Params size
-	Return(u8),
+	Return,
 }
 pub type TypedVar = Type;
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]

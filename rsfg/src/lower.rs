@@ -123,7 +123,13 @@ fn lower_return(expr: &Option<Expression>, expected_return: Option<Type>, params
 /// requires mutable reference to llr's strings so strings that come up can be added
 fn lower_statements(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
 	let mut instructions = Vec::<llr::Instruction>::new();
-	let params_size = params_size(&func.signature.parameters);
+	// TODO: YOU HAVE TO REMOVE THIS BLOCK after you add identifiers
+	// This pops every parameter. Once we can use identifiers (params are IDs)
+	// we'll ONLY want to pop "unused identifiers"
+	for _param in &func.signature.parameters {
+		// TODO: Don't assume params are 8s
+		instructions.push(llr::Instruction::Pop8);
+	}
 	// Lower every statement
 	for statement in func.statements.iter() {
 		match statement {
@@ -131,14 +137,14 @@ fn lower_statements(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mu
 				instructions.append(&mut lower_fn_call(call, fn_map, strings, true));
 			}
 			Statement::Return(expr) => {
-				instructions.append(&mut lower_return(expr, func.signature.return_type, params_size, strings));
+				instructions.append(&mut lower_return(expr, func.signature.return_type, strings));
 			}
 		}
 	}
 	// Add implied returns
 	match instructions.last() {
 		// If the final command was a proper return, no need to clean it up
-		Some(&llr::Instruction::Return(_)) => (),
+		Some(&llr::Instruction::Return) => (),
 		// If the function is empty or didn't end in return we need to add one
 		_ => if func.signature.return_type == None {
 			// We can add the implicit void return
@@ -151,17 +157,13 @@ fn lower_statements(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mu
 	instructions
 }
 
-fn params_size(parameters: &Vec<TypedId>) -> u8 {
-	// Used in the return call
-	let mut params_size = 0;
-	for param in parameters {
-		let p_type = param.id_type;
-		params_size += type_size(p_type);
-	}
-	params_size
-}
-
 fn lower_signature(signature: &Signature) -> llr::Signature {
+	// Rather than having return handle the stack, we first call pop so we can push the return value
+	let mut stack_size = 0;
+	for param in &signature.parameters {
+		let p_type = param.id_type;
+		stack_size += type_size(p_type);
+	}
 	// Lower parameters
 	let mut parameters = vec![];
 	for param in &signature.parameters {
@@ -170,6 +172,7 @@ fn lower_signature(signature: &Signature) -> llr::Signature {
 	llr::Signature {
 		name: signature.name.clone(),
 		parameters: parameters,
+		stack_size,
 		return_type: signature.return_type,
 	}
 }
@@ -232,7 +235,6 @@ mod test {
 				match inst {
 					Instruction::Push8(_) => balance += 8,
 					Instruction::Pop8 => balance -= 8,
-					Instruction::Return(size) => balance -= size as isize,
 					_ => (),
 				}
 			}
