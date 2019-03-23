@@ -6,8 +6,6 @@ extern crate rvmfg;
 use rsfg::compile;
 use rvmfg::{Thread, call};
 
-// TODO: eventually when we have an import system, lib is going to depend
-// on file operations so might as well bite the bullet
 fn get_stdlib() -> String {
 	let std_filename = "src/sfg/std.sfg";
 	std::fs::read_to_string(std_filename).expect("couldn't find std library")
@@ -32,24 +30,17 @@ fn call_main(filename: &str) {
 	assert_eq!(thread.call_stack.len(), 0);
 }
 
-// TODO: just list all scripts and run main on them all!
 #[test]
-fn hello_world() {
-	call_main("tests/scripts/hello-world.sfg");
+fn test_scripts() -> std::io::Result<()> {
+	for entry in std::fs::read_dir("tests/scripts")? {
+		let entry = entry?;
+		let path = entry.path();
+		if path.is_file() {
+			let pathstr = path.to_string_lossy();
+			println!("{}", pathstr);
+			call_main(&pathstr);
+		}
+	}
+	Ok(())
 }
-#[test]
-fn without_errors() {
-	// Basically, i just put everything i implement in this file, so it
-	// can check if it compiles without errors without having to design a
-	// rigorous test
-	call_main("tests/scripts/without-errors.sfg");
-}
-#[test]
-fn no_branching() {
-	// Basically, i just put everything i implement in this file, so it
-	// can check if it compiles without errors without having to design a
-	// rigorous test
-	call_main("tests/scripts/non-branching.sfg");
-}
-
 

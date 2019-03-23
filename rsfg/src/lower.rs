@@ -121,21 +121,6 @@ fn lower_return(expr: &Option<Expression>, fn_map: &IndexMap<String, &ASTNode>, 
 	// Typecheck return value
 	// None == None -> return == void
 	assert_eq!(expr.as_ref().map(|x| expression_type(x, fn_map)), expected_return);
-	// Return is implemented as:
-	//     Swap
-	//     Pop [Instruction pointer]
-	// So:
-	// return 4 is executed by VM as:
-	//     (push)
-	//     ip 4
-	//     (return:)
-	//     (swap)
-	//     4 ip
-	//     (pop)
-	//     4 (and ip is in proper location)
-	//     (so stack now holds return value as expected)
-	// TODO: I need to decide whether I should move that complex VM
-	// instruction into the compiler
 	let mut insts = vec![];
 	if let Some(expr) = expr {
 		insts.append(&mut expression_to_push(&expr, fn_map, strings));
@@ -151,7 +136,7 @@ fn lower_statements(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mu
 	// This pops every parameter. Once we can use identifiers (params are IDs)
 	// we'll ONLY want to pop "unused identifiers"
 	for _param in &func.signature.parameters {
-		// TODO: Don't assume params are 8s
+		// TODO: Don't assume params are 32s
 		instructions.push(llr::Instruction::Pop32);
 	}
 	// Lower every statement
