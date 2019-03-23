@@ -6,13 +6,15 @@ use indexmap::IndexMap;
 
 fn expression_type(expr: &Expression) -> Type {
 	match expr {
-		Expression::Literal(lit) => {
-			match lit {
-				Literal::String(_) => Type::Str,
-				Literal::Int(_) => Type::Int,
-			}
+		Expression::Literal(lit) => match lit {
+			Literal::String(_) => Type::Str,
+			Literal::Int(_) => Type::Int,
 		},
 		Expression::Identifier(id) => id.id_type,
+		Expression::FnCall(func) => match func.signature.return_type {
+			Some(what) => what,
+			None => panic!("ERROR: function used as expression is void"),
+		}
 	}
 }
 

@@ -37,6 +37,9 @@ pub enum Statement {
 pub enum Expression {
 	Literal(Literal),
 	Identifier(TypedId),
+	// A FnCall can be an expression as well as a statement
+	// A statement FnCall is lowered differently than an expression FnCall
+	FnCall(FnCall),
 	//pub BinaryExpr,
 }
 #[derive(PartialEq, Eq, Debug)]
