@@ -20,7 +20,6 @@ pub struct Thread {
 struct Fn {
 	// ip will be 0 for externs (TODO: make this safer)
 	ip: u32,
-	stack_size: u8,
 	return_type: Option<Type>,
 	parameters: Vec<Type>,
 }
@@ -117,7 +116,6 @@ fn read_string(code: &Vec<u8>, mut ip: &mut usize) -> String {
 
 /// Returns (name, function)
 fn read_fn_header(code: &Vec<u8>, mut ip: &mut usize, is_extern: bool) -> (String, Fn) {
-	let stack_size = next(code, &mut ip);
 	let return_type_u8 = next(code, &mut ip);
 	let return_type = match deser_strong(return_type_u8) {
 		Deser::Type(t) => Some(t),
@@ -141,7 +139,6 @@ fn read_fn_header(code: &Vec<u8>, mut ip: &mut usize, is_extern: bool) -> (Strin
 		read_u32(code, &mut ip)
 	};
 	let func = Fn {
-		stack_size,
 		return_type,
 		parameters,
 		ip: codeloc,
@@ -240,12 +237,19 @@ impl Thread {
 	fn call_fn(&mut self, func: Fn) {
 		assert_ne!(func.ip, 0, "tried to call extern function");
 		self.ip = func.ip as usize;
+		self.stack.extend_from_slice(&from_u32(self.ip as u32));
 		loop {
+			println!("---");
+			println!("stack: {:x?}", self.stack);
+			println!("next: {:x?} | ip: {}", deser_strong(self.code[self.ip]), self.ip);
 			if deser_strong(self.code[self.ip]) == Deser::Return {
-				for _ in 0..func.stack_size {
-					self.stack.pop();
-				}
-				// TODO: Push some return value, etc
+				// TODO: Make Swap an instruction and compile return verbosely?
+				// Also: make this swap not require len like this?
+				let return_val = self.stack.pop();
+				let ip = self.stack.pop();
+				self.stack.swap(last, last-1);
+				// The last u8 placed should be the stack ip
+				self.ip = read_u32(&self.code, &mut self.ip) as usize;
 				break;
 			}
 			self.exec_next();
@@ -308,14 +312,12 @@ mod tests {
 		assert_eq!(thread.fns,
 			indexmap!{
 				"main".to_string() => Fn {
-					ip: 30,
-					stack_size: 0,
+					ip: 28,
 					return_type: None,
 					parameters: vec![],
 				},
 				"log".to_string() => Fn {
 					ip: 0,
-					stack_size: 8,
 					return_type: None,
 					parameters: vec![Type::Str],
 				},
