@@ -2,13 +2,20 @@ use crate::sfg_std;
 
 use indexmap::IndexMap;
 
-// Should be small enough to make small scripts low-RAM, but high enough
-// that startup doesn't take forever with 1000s of incremental allocs
+/// Should be small enough to make small scripts low-RAM, but high enough
+/// that startup doesn't take forever with 1000s of incremental allocs
 const INIT_STACK_SIZE: usize = 50;
+/// Similarly chosen for the expected call stack size
+const INIT_CALL_STACK_SIZE: usize = 6;
 
 #[derive(PartialEq, Debug)]
 pub struct Thread {
 	pub stack: Vec<u8>,
+	/// The call stack is managed by the VM, containing calls only
+	/// It's kept separate as opposed to machine architectures because
+	/// the use of the data stack is made harder by combining them.
+	/// Each usize is a ip
+	pub call_stack: Vec<usize>,
 	code: Vec<u8>,
 	// Code pointer
 	ip: usize,
@@ -199,6 +206,7 @@ impl Thread {
 		println!("{:?}", fns);
 		Self {
 			stack: Vec::with_capacity(INIT_STACK_SIZE),
+			call_stack: Vec::with_capacity(INIT_CALL_STACK_SIZE),
 			code,
 			ip,
 			strings,
@@ -244,12 +252,13 @@ impl Thread {
 	fn call_fn(&mut self, func: Fn) {
 		assert_ne!(func.ip, 0, "tried to call extern function");
 		self.ip = func.ip as usize;
+		self.call_stack.push(self.ip);
 		loop {
 			if deser_strong(self.code[self.ip]) == Deser::Return {
-				for _ in 0..func.stack_size {
-					self.stack.pop();
-				}
-				// TODO: Push some return value, etc
+				self.ip = match self.call_stack.pop() {
+					Some(ip) => ip,
+					None => break,
+				};
 				break;
 			}
 			self.exec_next();
