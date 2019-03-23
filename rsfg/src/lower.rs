@@ -93,7 +93,7 @@ fn lower_fn_call(call: &FnCall, fn_map: &IndexMap<String, &ASTNode>, strings: &m
 	instructions
 }
 
-fn lower_return(expr: &Option<Expression>, expected_return: Option<Type>, params_size: u8, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
+fn lower_return(expr: &Option<Expression>, expected_return: Option<Type>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
 	// Typecheck return value
 	// None == None -> return == void
 	assert_eq!(expr.as_ref().map(|x| expression_type(x)), expected_return);
@@ -116,7 +116,7 @@ fn lower_return(expr: &Option<Expression>, expected_return: Option<Type>, params
 	if let Some(expr) = expr {
 		insts.push(expression_to_push(&expr, strings));
 	}
-	insts.push(llr::Instruction::Return(params_size));
+	insts.push(llr::Instruction::Return);
 	insts
 }
 
@@ -148,7 +148,7 @@ fn lower_statements(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mu
 		// If the function is empty or didn't end in return we need to add one
 		_ => if func.signature.return_type == None {
 			// We can add the implicit void return
-			instructions.append(&mut lower_return(&None, None, params_size, strings));
+			instructions.append(&mut lower_return(&None, None, strings));
 		} else {
 			// We can't add an implicit return because () != the function type
 			panic!("function with type may not return");
