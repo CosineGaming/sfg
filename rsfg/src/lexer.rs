@@ -19,6 +19,7 @@ enum NextTokenType {
 	Digit(char),
 	ExternFnOrExternCall,
 	CommentOrDivision,
+	AssignmentOrEquals,
 	Newline,
 	LParen,
 	RParen,
@@ -54,6 +55,7 @@ impl<'src> Lexer<'src> {
 			Some(c) => match c {
 				'A'..='Z'|'a'..='z' => SymbolOrId(c),
 				'@' => ExternFnOrExternCall,
+				'=' => AssignmentOrEquals,
 				' ' | '\t' => Space(c),
 				'0'..='9' => Digit(c),
 				'/' => CommentOrDivision,
@@ -187,6 +189,12 @@ pub fn lex(text: &str) -> Vec<Token> {
 					_ => ExternFnCall(text),
 				};
 				symbol_or_id
+			},
+			NextTokenType::AssignmentOrEquals => {
+				match lexer.rchars.last() {
+					Some('=') => { lexer.rchars.pop(); Equals },
+					_ => unimplemented!(),//Assignment,
+				}
 			},
 			NextTokenType::Newline => Newline,
 			NextTokenType::LParen => LParen,

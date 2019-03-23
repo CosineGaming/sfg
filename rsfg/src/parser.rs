@@ -69,35 +69,55 @@ fn parse_id(rtokens: &mut Vec<Token>, type_required: bool) -> Result<TypedId> {
 	})
 }
 
+macro_rules! return_or {
+	($e: expr) => {
+		match $e {
+			Ok(value) => return Ok(value),
+			Err(error) => error,
+		}
+	}
+}
+
+fn parse_binary(out_rtokens: &mut Vec<Token>) -> Result<BinaryExpr> {
+	let rtokens = &mut out_rtokens.clone();
+	let left = parse_expression(rtokens)?;
+	let op = match rtokens.pop() {
+		Some(Token::Equals) => BinaryOp::Equals,
+		// TODO: Make Expected accept a token or vec of token
+		_ => return Err(ParseError::Expected("binary operator".to_string(), "expression".to_string())),
+	};
+	let right = parse_expression(rtokens)?;
+	out_rtokens.resize(rtokens.len(), Token::Newline);
+	Ok(BinaryExpr {
+		left,
+		op,
+		right,
+	})
+}
+
 fn parse_expression(rtokens: &mut Vec<Token>) -> Result<Expression> {
-	match rtokens.last() {
-		Some(Token::StringLit(_)) => {
-			if let Some(Token::StringLit(string)) = rtokens.pop() {
-				return Ok(Expression::Literal(Literal::String(string)));
-			}
+	match rtokens.pop() {
+		Some(Token::StringLit(string)) => {
+			Expression::Literal(Literal::String(string.clone()));
 		},
-		Some(Token::IntLit(_)) => {
-			if let Token::IntLit(number) = rtokens.pop().unwrap() {
-				return Ok(Expression::Literal(Literal::Int(number)));
-			}
+		Some(Token::IntLit(number)) => {
+			Expression::Literal(Literal::Int(number));
 		},
-		Some(Token::Identifier(_)) => {
+		Some(Token::Identifier(name)) => {
 			// An identifier can start a call or just an identifier
-			// If it can be a call...
-			return Ok(match parse_call(rtokens) {
-				// Let it be a call
-				Ok(call) => Expression::FnCall(call),
-				// Otherwise just reference the identifier
-				Err(_) => if let Token::Identifier(name) = rtokens.pop().unwrap() {
-					Expression::Identifier(TypedId {
-						name: name,
-						id_type: Type::Infer,
-					})
-				} else { unreachable!() },
-			})
+			// It can be a call...
+			return_or!(parse_call(rtokens).and_then(|x| Ok(Expression::FnCall(x))));
+			// Otherwise just reference the identifier
+			if let Token::Identifier(name) = rtokens.pop().unwrap() {
+				return Ok(Expression::Identifier(TypedId {
+					name: name,
+					id_type: Type::Infer,
+				}))
+			}
 		},
 		_ => return Err(ParseError::Unsupported("expression".to_string())),
 	}
+	return_or!(parse_binary(rtokens).and_then(|x| Ok(Expression::Binary(Box::new(x)))));
 	unreachable!();
 }
 

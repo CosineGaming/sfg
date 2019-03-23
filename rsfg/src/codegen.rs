@@ -31,6 +31,7 @@ fn serialize(what: Serializable) -> u8 {
 		S::Instruction(I::Return) => 0x35,
 		S::Instruction(I::FnCall(_)) => 0x36,
 		S::Instruction(I::Pop32) => 0x37,
+		S::Instruction(I::Equals) => 0x38,
 	};
 	typier as u8
 }
@@ -68,17 +69,21 @@ fn gen_fn_body(function: &Fn) -> Vec<u8> {
 	let mut code = Vec::new();
 	for instr in &function.instructions {
 		code.push(serialize(Serializable::Instruction(*instr)));
+		use Instruction::*;
 		match instr {
-			Instruction::Push32(what) => {
+			Push32(what) => {
 				code.extend_from_slice(&u32_bytes(*what as u32));
-			}
+			},
 			// Besides instruction, the procedure for generating
 			// FnCall and ExternFnCall is the same
-			Instruction::FnCall(call) | Instruction::ExternFnCall(call) => {
+			FnCall(call) | ExternFnCall(call) => {
 				code.extend_from_slice(&u32_bytes(call.index as u32));
-			}
+			},
 			// As simple as serializing the instruction
-			Instruction::Return | Instruction::Pop32 => {}
+			| Return
+			| Pop32
+			| Equals
+			=> {},
 		}
 	}
 	code

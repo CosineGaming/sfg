@@ -40,7 +40,7 @@ pub enum Expression {
 	// A FnCall can be an expression as well as a statement
 	// A statement FnCall is lowered differently than an expression FnCall
 	FnCall(FnCall),
-	//pub BinaryExpr,
+	Binary(Box<BinaryExpr>),
 }
 #[derive(PartialEq, Eq, Debug)]
 pub enum Literal {
@@ -57,5 +57,15 @@ pub struct Assignment {
 pub struct FnCall {
 	pub name: String,
 	pub arguments: Vec<Expression>,
+}
+#[derive(PartialEq, Eq, Debug)]
+pub struct BinaryExpr {
+	pub left: Expression,
+	pub op: BinaryOp,
+	pub right: Expression,
+}
+#[derive(PartialEq, Eq, Debug)]
+pub enum BinaryOp {
+	Equals,
 }
 

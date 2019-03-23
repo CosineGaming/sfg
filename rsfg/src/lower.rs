@@ -25,7 +25,13 @@ fn expression_type(expr: &Expression, fn_map: &IndexMap<String, &ASTNode>) -> Ty
 				Some(what) => *what,
 				None => panic!("ERROR: function used as expression is void"),
 			}
-		}
+		},
+		Expression::Binary(expr) => {
+			match expr.op {
+				// TODO: Use Bool type when present
+				BinaryOp::Equals => Type::Int,
+			}
+		},
 	}
 }
 
@@ -62,6 +68,17 @@ fn expression_to_push(expr: &Expression, fn_map: &IndexMap<String, &ASTNode>, st
 		// fn call leaves result on the stack which is exactly what we need
 		Expression::FnCall(call) => lower_fn_call(call, fn_map, strings, false),
 		Expression::Identifier(_) => unimplemented!(),
+		Expression::Binary(expr) => {
+			match expr.op {
+				BinaryOp::Equals => {
+					let mut insts = vec![];
+					insts.append(&mut expression_to_push(&expr.left, fn_map, strings));
+					insts.append(&mut expression_to_push(&expr.right, fn_map, strings));
+					insts.push(llr::Instruction::Equals);
+					insts
+				},
+			}
+		},
 	}
 }
 

@@ -36,6 +36,7 @@ pub enum Instruction {
 	Push32(u32),
 	Pop32,
 	Return,
+	Equals,
 }
 pub type TypedVar = Type;
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]

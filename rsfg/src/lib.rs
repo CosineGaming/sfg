@@ -20,6 +20,7 @@ pub enum Token {
 	ExternFnCall(String),
 	Return,
 	Comma,
+	Equals,
 	Colon,
 	Newline,
 	LParen,
