@@ -49,6 +49,7 @@ enum Deser {
 	ExternFnCall,
 	FnCall,
 	Pop32,
+	Equals,
 }
 
 fn deser(what: u8) -> Option<Deser> {
@@ -69,6 +70,7 @@ fn deser(what: u8) -> Option<Deser> {
 		0x35 => Some(D::Return),
 		0x36 => Some(D::FnCall),
 		0x37 => Some(D::Pop32),
+		0x38 => Some(D::Equals),
 		_ => None,
 	}
 }
@@ -241,6 +243,11 @@ impl Thread {
 				// push to stack, it should allow exit
 				self.call_stack.push(self.ip);
 				self.call_fn(func);
+			},
+			Deser::Equals => {
+				let a = self.stack.pop();
+				let b = self.stack.pop();
+				self.stack.push((a == b) as u32);
 			},
 			// TODO: Split deser into categories
 			_ => panic!("expected instruction, got unsupported {:x}", self.code[self.ip-1]),
