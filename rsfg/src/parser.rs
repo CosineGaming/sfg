@@ -23,27 +23,56 @@ impl std::error::Error for ParseError {}
 
 type Result<T> = std::result::Result<T, ParseError>;
 
-fn pop_no_eof(from: &mut Vec<Token>, parsing_what: &str) -> Result<Token> {
+/// There is a different calling convention for a parse result because of token handling
+macro_rules! tokens_try {
+	( $tokens:ident, $res:expr ) => {
+		{
+			// Allow rollback on error
+			let saved_tokens = $tokens.clone();
+			println!("len {} @ {}", $tokens.sp, line!());
+			match $res {
+				Ok(what) => {
+					what
+				},
+				Err(err) => {
+					*$tokens = saved_tokens;
+					return Err(err);
+				}
+			}
+		}
+	}
+}
+macro_rules! ok_or {
+	( $x:expr ) => {
+		match $x {
+			Ok(what) => {
+				return Ok(what);
+			},
+			Err(err) => {}
+		}
+	}
+}
+
+fn pop_no_eof(from: &mut Tokens, parsing_what: &str) -> Result<Token> {
 	match from.pop() {
 		Some(token) => Ok(token),
 		None => Err(ParseError::EOF(parsing_what.to_string()))
 	}
 }
 /// Only pops if the next token is expected, then returns that token (otherwise Err::EOF)
-fn expect_token(rtokens: &mut Vec<Token>, what: Token, during: &str) -> Result<Token> {
-	let next = match rtokens.last() {
-		Some(token) => token,
+fn expect_token(rtokens: &mut Tokens, what: Token, during: &str) -> Result<Token> {
+	match rtokens.pop() {
+		Some(token) => if token == what {
+			Ok(token)
+		} else {
+			Err(ParseError::Expected(format!("{:?}", what), during.to_string()))
+		},
 		None => return Err(ParseError::EOF(during.to_string())),
-	};
-	if next == &what {
-		Ok(rtokens.pop().unwrap())
-	} else {
-		Err(ParseError::Expected(format!("{:?}", what), during.to_string()))
 	}
 }
 
-fn parse_id(rtokens: &mut Vec<Token>, type_required: bool) -> Result<TypedId> {
-	let name = match pop_no_eof(rtokens, "identifier")? {
+fn parse_id(rtokens: &mut Tokens, type_required: bool) -> Result<TypedId> {
+	let name = match tokens_try!(rtokens, pop_no_eof(rtokens, "identifier")) {
 		Token::Identifier(name) => name,
 		_ => panic!("identifier wasn't identifier (compiler bug)"),
 	};
@@ -69,7 +98,7 @@ fn parse_id(rtokens: &mut Vec<Token>, type_required: bool) -> Result<TypedId> {
 	})
 }
 
-fn parse_expression(rtokens: &mut Vec<Token>) -> Result<Expression> {
+fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
 	match rtokens.last() {
 		Some(Token::StringLit(_)) => {
 			if let Some(Token::StringLit(string)) = rtokens.pop() {
@@ -90,7 +119,7 @@ fn parse_expression(rtokens: &mut Vec<Token>) -> Result<Expression> {
 				// Otherwise just reference the identifier
 				Err(_) => if let Token::Identifier(name) = rtokens.pop().unwrap() {
 					Expression::Identifier(TypedId {
-						name: name,
+						name,
 						id_type: Type::Infer,
 					})
 				} else { unreachable!() },
@@ -101,7 +130,7 @@ fn parse_expression(rtokens: &mut Vec<Token>) -> Result<Expression> {
 	unreachable!();
 }
 
-fn parse_call(rtokens: &mut Vec<Token>) -> Result<FnCall> {
+fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
 	let name = match rtokens.last() {
 		Some(Token::Identifier(_)) => match rtokens.pop() {
 			Some(Token::Identifier(name)) => name,
@@ -110,15 +139,15 @@ fn parse_call(rtokens: &mut Vec<Token>) -> Result<FnCall> {
 		_ => return Err(ParseError::Expected("identifier".to_string(), "fn call".to_string())),
 	};
 	// Arguments
-	expect_token(rtokens, Token::LParen, "fn call")?;
+	tokens_try!(rtokens, expect_token(rtokens, Token::LParen, "fn call"));
 	let mut arguments = vec![];
 	loop {
-		// TODO: is allowing commas at the beginning the worst idea ive had?
+		// TODO: is allowing commas at the beginning the worst idea ive tokens_try!(rtokens, had)
 		arguments.push(match rtokens.last() {
 			Some(Token::RParen) => { rtokens.pop(); break },
 			Some(Token::Comma) => { rtokens.pop(); continue },
-			_ => parse_expression(rtokens),
-		}?);
+			_ => tokens_try!(rtokens, parse_expression(rtokens)),
+		});
 	}
 	Ok(FnCall {
 		name,
@@ -126,12 +155,12 @@ fn parse_call(rtokens: &mut Vec<Token>) -> Result<FnCall> {
 	})
 }
 
-fn parse_args(rtokens: &mut Vec<Token>) -> Result<Vec<TypedId>> {
+fn parse_args(rtokens: &mut Tokens) -> Result<Vec<TypedId>> {
 	let mut args = vec![];
-	expect_token(rtokens, Token::LParen, "fn parameters")?;
+	tokens_try!(rtokens, expect_token(rtokens, Token::LParen, "fn parameters"));
 	loop {
 		args.push(match rtokens.last() {
-			Some(Token::Identifier(_)) => parse_id(rtokens, true)?,
+			Some(Token::Identifier(_)) => tokens_try!(rtokens, parse_id(rtokens, true)),
 			Some(Token::RParen) => { rtokens.pop(); break },
 			Some(_) => return Err(ParseError::Expected("Identifier or RParen".to_string(), "LParen".to_string())),
 			None => return Err(ParseError::EOF("parameters".to_string())),
@@ -145,15 +174,15 @@ fn parse_args(rtokens: &mut Vec<Token>) -> Result<Vec<TypedId>> {
 	Ok(args)
 }
 
-fn parse_return(rtokens: &mut Vec<Token>) -> Result<Option<Expression>> {
-	expect_token(rtokens, Token::Return, "return statement")?;
+fn parse_return(rtokens: &mut Tokens) -> Result<Option<Expression>> {
+	tokens_try!(rtokens, expect_token(rtokens, Token::Return, "return statement"));
 	Ok(match parse_expression(rtokens) {
 		Ok(expr) => Some(expr),
 		Err(_) => None,
 	})
 }
 
-fn parse_statement(rtokens: &mut Vec<Token>) -> Result<Statement> {
+fn parse_statement(rtokens: &mut Tokens) -> Result<Statement> {
 	if let Ok(rv) = parse_call(rtokens) {
 		Ok(Statement::FnCall(rv))
 	}
@@ -164,16 +193,16 @@ fn parse_statement(rtokens: &mut Vec<Token>) -> Result<Statement> {
 	}
 }
 
-fn parse_signature(rtokens: &mut Vec<Token>) -> Result<Signature> {
+fn parse_signature(rtokens: &mut Tokens) -> Result<Signature> {
 	// An extern function that serves only as a typecheck might use the
 	// @ in the name. The lexer misinterprets this as ExternFnCall despite
 	// not being a call
-	let name = match pop_no_eof(rtokens, "fn")? {
+	let name = match tokens_try!(rtokens, pop_no_eof(rtokens, "fn")) {
 		Token::Identifier(name) => name,
 		Token::ExternFnCall(name) => name,
 		_ => return Err(ParseError::Expected("fn name".to_string(), "fn".to_string())),
 	};
-	let parameters = parse_args(rtokens)?;
+	let parameters = tokens_try!(rtokens, parse_args(rtokens));
 	let return_type = match rtokens.last() {
 		Some(Token::Type(_)) => match rtokens.pop() {
 			Some(Token::Type(r_type)) => Some(r_type),
@@ -194,10 +223,10 @@ fn parse_signature(rtokens: &mut Vec<Token>) -> Result<Signature> {
 	})
 }
 
-fn parse_fn(rtokens: &mut Vec<Token>) -> Result<Fn> {
-	expect_token(rtokens, Token::Fn, "fn")?;
+fn parse_fn(rtokens: &mut Tokens) -> Result<Fn> {
+	tokens_try!(rtokens, expect_token(rtokens, Token::Fn, "fn"));
 	// Parse signature
-	let signature = parse_signature(rtokens)?;
+	let signature = tokens_try!(rtokens, parse_signature(rtokens));
 	let mut statements = vec![];
 	loop {
 		let t = match rtokens.last() {
@@ -211,7 +240,7 @@ fn parse_fn(rtokens: &mut Vec<Token>) -> Result<Fn> {
 			Token::Tab => { rtokens.pop(); },
 			_ => break,
 		}
-		statements.push(parse_statement(rtokens)?);
+		statements.push(tokens_try!(rtokens, parse_statement(rtokens)));
 		match rtokens.pop() {
 			Some(Token::Newline) => (),
 			None => (),
@@ -224,12 +253,12 @@ fn parse_fn(rtokens: &mut Vec<Token>) -> Result<Fn> {
 	})
 }
 
-fn parse_extern_fn(rtokens: &mut Vec<Token>) -> Result<ExternFn> {
+fn parse_extern_fn(rtokens: &mut Tokens) -> Result<ExternFn> {
 	match rtokens.pop() {
 		Some(Token::ExternFn) => (),
 		_ => panic!("internal: extern fn didn't start with @fn"),
 	}
-	let signature = parse_signature(rtokens)?;
+	let signature = tokens_try!(rtokens, parse_signature(rtokens));
 	Ok(ExternFn {
 		signature,
 	})
@@ -238,7 +267,7 @@ fn parse_extern_fn(rtokens: &mut Vec<Token>) -> Result<ExternFn> {
 pub fn parse(mut tokens: Vec<Token>) -> AST {
 	tokens.reverse();
 	// This is just for clarity
-	let mut rtokens = tokens;
+	let mut rtokens = NoPop::new(&tokens);
 	let mut t;
 	let mut ast = vec![];
 	// Every token
@@ -264,6 +293,32 @@ pub fn parse(mut tokens: Vec<Token>) -> AST {
 	}
 	ast
 }
+
+#[derive(Clone, Copy)]
+struct NoPop<'a, T:Clone> {
+	vec: &'a Vec<T>,
+	sp: usize,
+}
+impl<'a, T:Clone> NoPop<'a, T> {
+	fn new(vec: &'a Vec<T>) -> Self {
+		Self {
+			vec,
+			sp: vec.len(),
+		}
+	}
+	fn pop(&mut self) -> Option<T> {
+		if self.sp > 0 {
+			self.sp -= 1;
+			Some(self.vec[self.sp].clone())
+		} else {
+			None
+		}
+	}
+	fn last(&mut self) -> Option<&'a T> {
+		self.vec.last()
+	}
+}
+type Tokens<'a> = NoPop<'a, Token>;
 
 #[cfg(test)]
 mod test {
