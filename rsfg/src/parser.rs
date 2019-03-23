@@ -4,7 +4,8 @@ use crate::{Token, Type, ast::*};
 
 #[derive(Debug)]
 enum ParseError {
-	Expected(String, String),
+	// Expected, got
+	Expected(Vec<Token>, Token),
 	Unsupported(String),
 	EOF(String),
 }
@@ -12,7 +13,11 @@ impl std::fmt::Display for ParseError {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		use ParseError::*;
 		match self {
-			Expected(what, after) => write!(f, "expected {} after {}", what, after),
+			Expected(expected, got) => {
+				let expected_strings: Vec<String> = expected.iter().map(|e| format!("{:?}", e)).collect();
+				let expected_str = expected_strings.join(" or ");
+				write!(f, "expected {}, got {:?}", expected_str, got)
+			}
 			Unsupported(what) => write!(f, "unsupported {}", what),
 			EOF(parsing) => write!(f, "unexpected EOF parsing {}", parsing),
 		}
@@ -38,7 +43,7 @@ fn expect_token(rtokens: &mut Vec<Token>, what: Token, during: &str) -> Result<T
 	if next == &what {
 		Ok(rtokens.pop().unwrap())
 	} else {
-		Err(ParseError::Expected(format!("{:?}", what), during.to_string()))
+		Err(ParseError::Expected(vec![what], next.clone()))
 	}
 }
 
@@ -52,7 +57,8 @@ fn parse_id(rtokens: &mut Vec<Token>, type_required: bool) -> Result<TypedId> {
 			rtokens.pop();
 			let id_type = match rtokens.pop() {
 				Some(Token::Type(id_type)) => id_type,
-				_ => return Err(ParseError::Expected(String::from("type"), String::from("colon"))),
+				Some(what) => return Err(ParseError::Expected(vec![Token::Type(Type::Str), Token::Type(Type::Int)], what)),
+				None => return Err(ParseError::EOF("identifier".to_string())),
 			};
 			return Ok(TypedId {
 				name,
@@ -60,7 +66,7 @@ fn parse_id(rtokens: &mut Vec<Token>, type_required: bool) -> Result<TypedId> {
 			});
 		}
 		_ => if type_required {
-			return Err(ParseError::Expected(String::from("type"), name));
+			return Err(ParseError::Expected(vec![Token::Type(Type::Str), Token::Type(Type::Int)], Token::Comma)); // TODO: not Token::Comma, None!
 		},
 	}
 	Ok(TypedId {
@@ -107,7 +113,8 @@ fn parse_call(rtokens: &mut Vec<Token>) -> Result<FnCall> {
 			Some(Token::Identifier(name)) => name,
 			_ => unreachable!(),
 		},
-		_ => return Err(ParseError::Expected("identifier".to_string(), "fn call".to_string())),
+		Some(what) => return Err(ParseError::Expected(vec![Token::Identifier("".to_string())], what.clone())),
+		None => return Err(ParseError::EOF("call".to_string())),
 	};
 	// Arguments
 	expect_token(rtokens, Token::LParen, "fn call")?;
@@ -133,13 +140,13 @@ fn parse_args(rtokens: &mut Vec<Token>) -> Result<Vec<TypedId>> {
 		args.push(match rtokens.last() {
 			Some(Token::Identifier(_)) => parse_id(rtokens, true)?,
 			Some(Token::RParen) => { rtokens.pop(); break },
-			Some(_) => return Err(ParseError::Expected("Identifier or RParen".to_string(), "LParen".to_string())),
+			Some(got) => return Err(ParseError::Expected(vec![Token::Identifier(String::new()), Token::RParen], got.clone())),
 			None => return Err(ParseError::EOF("parameters".to_string())),
 		});
-		match rtokens.pop() {
-			Some(Token::Comma) => (),
-			Some(Token::RParen) => break,
-			_ => return Err(ParseError::Expected("comma or RParen".to_string(), "argument".to_string())),
+		match pop_no_eof(rtokens, "fn params")? {
+			Token::Comma => (),
+			Token::RParen => break,
+			got => return Err(ParseError::Expected(vec![Token::Comma, Token::RParen], got)),
 		}
 	}
 	Ok(args)
@@ -160,7 +167,7 @@ fn parse_statement(rtokens: &mut Vec<Token>) -> Result<Statement> {
 	else if let Ok(rv) = parse_return(rtokens) {
 		Ok(Statement::Return(rv))
 	} else {
-		Err(ParseError::Expected("return or function call".to_string(), "statement".to_string()))
+		Err(ParseError::Expected(vec![Token::Return, Token::Identifier(String::new())], Token::Comma)) // TODO: not comma, something to refer to "couldn't construct"
 	}
 }
 
@@ -171,7 +178,7 @@ fn parse_signature(rtokens: &mut Vec<Token>) -> Result<Signature> {
 	let name = match pop_no_eof(rtokens, "fn")? {
 		Token::Identifier(name) => name,
 		Token::ExternFnCall(name) => name,
-		_ => return Err(ParseError::Expected("fn name".to_string(), "fn".to_string())),
+		got => return Err(ParseError::Expected(vec![Token::Identifier(String::new()), Token::ExternFnCall(String::new())], got)),
 	};
 	let parameters = parse_args(rtokens)?;
 	let return_type = match rtokens.last() {
@@ -180,12 +187,13 @@ fn parse_signature(rtokens: &mut Vec<Token>) -> Result<Signature> {
 			_ => unreachable!(),
 		},
 		Some(Token::Newline) => None,
-		Some(_) => return Err(ParseError::Expected("newline or return type".to_string(), "signature".to_string())),
+		Some(got) => return Err(ParseError::Expected(vec![Token::Newline, Token::Type(Type::Str)], got.clone())),
 		None => return Err(ParseError::EOF("signature".to_string())),
 	};
 	match rtokens.pop() {
 		Some(Token::Newline) => (),
-		_ => return Err(ParseError::Expected("newline".to_string(), "definition".to_string())),
+		Some(got) => return Err(ParseError::Expected(vec![Token::Newline], got)),
+		None => return Err(ParseError::EOF("signature".to_string())),
 	}
 	Ok(Signature {
 		name,
@@ -215,7 +223,7 @@ fn parse_fn(rtokens: &mut Vec<Token>) -> Result<Fn> {
 		match rtokens.pop() {
 			Some(Token::Newline) => (),
 			None => (),
-			Some(_) => return Err(ParseError::Expected("newline".to_string(), "statement".to_string())),
+			Some(got) => return Err(ParseError::Expected(vec![Token::Newline], got)),
 		}
 	}
 	Ok(Fn {
