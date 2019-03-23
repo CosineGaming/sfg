@@ -27,8 +27,6 @@ fn hello_world() {
 		// header for main:
 		// fn header
 		0x33,
-		// stack size
-		0,
 		// return type: void
 		0x21,
 		// parameter count
@@ -37,13 +35,11 @@ fn hello_world() {
 		0x6d, 0x61, 0x69, 0x6e,
 		// "\0"
 		0,
-		// codeloc 0x1A (4b)
-		0x1E, 0x00, 0x00, 0x00,
+		// codeloc (4b)
+		0x1C, 0x00, 0x00, 0x00,
 		// header for log:
 		// extern fn header
 		0x34,
-		// stack size
-		8,
 		// return type: void
 		0x21,
 		// parameter count
@@ -68,6 +64,8 @@ fn hello_world() {
 		0x01, 0x00, 0x00, 0x00,
 		// Return
 		0x35,
+		// Params size
+		0x00,
 	]);
 }
 

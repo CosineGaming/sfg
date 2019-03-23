@@ -28,7 +28,7 @@ fn serialize(what: Serializable) -> u8 {
 		S::StringLit => 0x32,
 		S::FnHeader => 0x33,
 		S::ExternFnHeader => 0x34,
-		S::Instruction(I::Return) => 0x35,
+		S::Instruction(I::Return(_)) => 0x35,
 		S::Instruction(I::FnCall(_)) => 0x36,
 		S::Instruction(I::Pop8) => 0x37,
 	};
@@ -45,8 +45,6 @@ fn gen_fn_header(func: &Signature) -> Vec<u8> {
 	// We require the code location but until generation of all
 	// the code we can't know where that is
 	let mut no_code_loc = Vec::new();
-	// Stack size
-	no_code_loc.push(func.stack_size);
 	// return type
 	no_code_loc.push(match func.return_type {
 		Some(rt) => serialize(Serializable::Type(rt)),
@@ -70,7 +68,8 @@ fn gen_fn_body(function: &Fn) -> Vec<u8> {
 	let mut code = Vec::new();
 	for instr in &function.instructions {
 		match instr {
-			Instruction::Push8(what) => {
+			// Serialize instr and a u8
+			Instruction::Push8(what) | Instruction::Return(what) => {
 				code.push(serialize(Serializable::Instruction(*instr)));
 				code.push(*what);
 			}
@@ -81,7 +80,7 @@ fn gen_fn_body(function: &Fn) -> Vec<u8> {
 				code.extend_from_slice(&u32_bytes(call.index as u32));
 			}
 			// As simple as serializing the instruction
-			Instruction::Return | Instruction::Pop8 => {
+			Instruction::Pop8 => {
 				code.push(serialize(Serializable::Instruction(*instr)));
 			}
 		}
