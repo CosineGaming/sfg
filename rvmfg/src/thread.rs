@@ -41,6 +41,7 @@ enum Deser {
 	Push8,
 	ExternFnCall,
 	FnCall,
+	Pop8,
 }
 
 fn deser(what: u8) -> Option<Deser> {
@@ -60,6 +61,7 @@ fn deser(what: u8) -> Option<Deser> {
 		0x34 => Some(D::ExternFnHeader),
 		0x35 => Some(D::Return),
 		0x36 => Some(D::FnCall),
+		0x37 => Some(D::Pop8),
 		_ => None,
 	}
 }
@@ -161,7 +163,6 @@ impl Thread {
 		expect(&code, &mut ip, 'g' as u8, "expected bcfg");
 		let mut fns = IndexMap::new();
 		let mut strings = Vec::new();
-		println!("0x{:X}", code[ip]);
 		loop {
 			match deser(code[ip]) {
 				Some(Deser::FnHeader) => {
@@ -205,6 +206,9 @@ impl Thread {
 		match deser_strong(next(&self.code, &mut self.ip)) {
 			Deser::Push8 => {
 				self.stack.push(next(&self.code, &mut self.ip));
+			},
+			Deser::Pop8 => {
+				self.stack.pop();
 			},
 			Deser::ExternFnCall => {
 				let index = read_u32(&self.code, &mut self.ip);
