@@ -23,7 +23,6 @@ pub struct Fn {
 #[derive(PartialEq, Eq, Debug)]
 pub struct Signature {
 	pub parameters: Vec<TypedVar>, // When namespace is added, this should be Vec<NameKey> and point to the namespace
-	pub stack_size: u8,
 	pub return_type: Option<Type>, // Can be void (None)
 	pub name: String, // All fns are public and may need to interact with ABI
 }

@@ -27,7 +27,6 @@ pub struct Thread {
 struct Fn {
 	// ip will be 0 for externs (TODO: make this safer)
 	ip: u32,
-	stack_size: u8,
 	return_type: Option<Type>,
 	parameters: Vec<Type>,
 }
@@ -126,7 +125,6 @@ fn read_string(code: &Vec<u8>, mut ip: &mut usize) -> String {
 
 /// Returns (name, function)
 fn read_fn_header(code: &Vec<u8>, mut ip: &mut usize, is_extern: bool) -> (String, Fn) {
-	let stack_size = next(code, &mut ip);
 	let return_type_u8 = next(code, &mut ip);
 	let return_type = match deser_strong(return_type_u8) {
 		Deser::Type(t) => Some(t),
@@ -150,7 +148,6 @@ fn read_fn_header(code: &Vec<u8>, mut ip: &mut usize, is_extern: bool) -> (Strin
 		read_u32(code, &mut ip)
 	};
 	let func = Fn {
-		stack_size,
 		return_type,
 		parameters,
 		ip: codeloc,

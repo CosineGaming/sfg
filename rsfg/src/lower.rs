@@ -32,9 +32,7 @@ fn expression_type(expr: &Expression, fn_map: &IndexMap<String, &ASTNode>) -> Ty
 fn type_size(id_type: Type) -> u8 {
 	use Type::*;
 	match id_type {
-		Int => 4,
-		// Location and length?
-		Str => 8,
+		Int | Str => 32,
 		Infer => panic!("type not yet inferred by size check"),
 	}
 }
@@ -107,9 +105,13 @@ fn lower_fn_call(call: &FnCall, fn_map: &IndexMap<String, &ASTNode>, strings: &m
 	instructions.push(call);
 	if is_statement {
 		// Return value is unused if so it needs to be popped for balance
-		// TODO: Support non u8 return types
-		if signature.return_type != None {
-			instructions.push(llr::Instruction::Pop32);
+		// TODO: Support non u32 return types
+		match signature.return_type {
+			Some(rt) => match type_size(rt) {
+				32 => instructions.push(llr::Instruction::Pop32),
+				_ => panic!("non-u32 return types unsupported"),
+			},
+			None => (),
 		}
 	}
 	instructions
@@ -180,12 +182,6 @@ fn lower_statements(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mu
 }
 
 fn lower_signature(signature: &Signature) -> llr::Signature {
-	// Rather than having return handle the stack, we first call pop so we can push the return value
-	let mut stack_size = 0;
-	for param in &signature.parameters {
-		let p_type = param.id_type;
-		stack_size += type_size(p_type);
-	}
 	// Lower parameters
 	let mut parameters = vec![];
 	for param in &signature.parameters {
@@ -194,7 +190,6 @@ fn lower_signature(signature: &Signature) -> llr::Signature {
 	llr::Signature {
 		name: signature.name.clone(),
 		parameters: parameters,
-		stack_size,
 		return_type: signature.return_type,
 	}
 }

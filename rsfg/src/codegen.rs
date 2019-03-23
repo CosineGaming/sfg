@@ -45,8 +45,6 @@ fn gen_fn_header(func: &Signature) -> Vec<u8> {
 	// We require the code location but until generation of all
 	// the code we can't know where that is
 	let mut no_code_loc = Vec::new();
-	// Stack size
-	no_code_loc.push(func.stack_size);
 	// return type
 	no_code_loc.push(match func.return_type {
 		Some(rt) => serialize(Serializable::Type(rt)),
