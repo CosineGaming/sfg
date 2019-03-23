@@ -239,6 +239,10 @@ impl Thread {
 					Some((_name, func)) => func.clone(),
 					_ => panic!("could not find function at {}", index),
 				};
+				// We do we push ip here and not in
+				// call_fn? because call_fn by user should not
+				// push to stack, it should allow exit
+				self.call_stack.push(self.ip);
 				self.call_fn(func);
 			},
 			// TODO: Split deser into categories
@@ -252,8 +256,8 @@ impl Thread {
 	fn call_fn(&mut self, func: Fn) {
 		assert_ne!(func.ip, 0, "tried to call extern function");
 		self.ip = func.ip as usize;
-		self.call_stack.push(self.ip);
 		loop {
+			println!("stack {:x?}| next {:x?}", self.stack, deser_strong(self.code[self.ip]));
 			if deser_strong(self.code[self.ip]) == Deser::Return {
 				self.ip = match self.call_stack.pop() {
 					Some(ip) => ip,
@@ -277,7 +281,7 @@ impl Thread {
 	}
 }
 
-/// call!thread.main()
+/// call![thread.main()]
 #[macro_export]
 macro_rules! call {
 	( $thread:ident.$function:ident($( $push:expr )*) ) => {
@@ -292,7 +296,7 @@ macro_rules! call {
 
 /// This trait serves only to make the macro work easily
 /// relevant push_[type]()s and call_name() are just as effective
-trait Pushable {
+pub trait Pushable {
 	fn push_to(&self, thread: &mut Thread);
 }
 impl Pushable for String {
