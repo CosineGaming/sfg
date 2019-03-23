@@ -22,7 +22,7 @@ pub struct Signature {
 	pub parameters: Vec<TypedId>,
 	pub return_type: Option<Type>, // Can be void (None)
 }
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct TypedId {
 	pub name: String,
 	pub id_type: Type,
@@ -33,7 +33,7 @@ pub enum Statement {
 	FnCall(FnCall),
 	Return(Option<Expression>),
 }
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Expression {
 	Literal(Literal),
 	Identifier(TypedId),
@@ -42,29 +42,29 @@ pub enum Expression {
 	FnCall(FnCall),
 	Binary(Box<BinaryExpr>),
 }
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Literal {
 	String(String),
 	Int(i32),
 	//pub Float(f32),
 }
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Assignment {
 	pub lvalue: String,
 	pub rvalue: Expression,
 }
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct FnCall {
 	pub name: String,
 	pub arguments: Vec<Expression>,
 }
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct BinaryExpr {
 	pub left: Expression,
 	pub op: BinaryOp,
 	pub right: Expression,
 }
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum BinaryOp {
 	Equals,
 }
