@@ -4,16 +4,27 @@
 use crate::{Type, ast::*, llr};
 use indexmap::IndexMap;
 
-fn expression_type(expr: &Expression) -> Type {
+// As much as it pains me to require fn_map, we need it to determine type of FnCall
+fn expression_type(expr: &Expression, fn_map: &IndexMap<String, &ASTNode>) -> Type {
 	match expr {
 		Expression::Literal(lit) => match lit {
 			Literal::String(_) => Type::Str,
 			Literal::Int(_) => Type::Int,
 		},
 		Expression::Identifier(id) => id.id_type,
-		Expression::FnCall(func) => match func.signature.return_type {
-			Some(what) => what,
-			None => panic!("ERROR: function used as expression is void"),
+		Expression::FnCall(func) => {
+			let node = match fn_map.get(&*func.name) {
+				Some(func) => func,
+				None => panic!("could not find function {}", func.name),
+			};
+			let return_type = match node {
+				ASTNode::Fn(f) => &f.signature.return_type,
+				ASTNode::ExternFn(f) => &f.signature.return_type,
+			};
+			match return_type {
+				Some(what) => *what,
+				None => panic!("ERROR: function used as expression is void"),
+			}
 		}
 	}
 }
@@ -37,13 +48,16 @@ fn types_match(a: Type, b: Type) -> Option<bool> {
 	else { Some(false) }
 }
 
-fn expression_to_push(expr: &Expression, strings: &mut Vec<String>) -> llr::Instruction {
+fn expression_to_push(expr: &Expression, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
 	match expr {
 		Expression::Literal(Literal::String(string)) => {
 			strings.push(string.to_string());
-			llr::Instruction::Push8((strings.len()-1) as u8)
+			vec![llr::Instruction::Push8((strings.len()-1) as u8)]
 		},
-		_ => panic!("expected string literal"),
+		Expression::Literal(Literal::Int(_)) => unimplemented!(),
+		// fn call leaves result on the stack which is exactly what we need
+		Expression::FnCall(call) => lower_fn_call(call, fn_map, strings, false),
+		Expression::Identifier(_) => unimplemented!(),
 	}
 }
 
@@ -66,14 +80,14 @@ fn lower_fn_call(call: &FnCall, fn_map: &IndexMap<String, &ASTNode>, strings: &m
 	// Typecheck all arguments calls with their found IDs
 	for (i, arg) in call.arguments.iter().enumerate() {
 		let param = &params[i];
-		let given_type = expression_type(arg);
+		let given_type = expression_type(arg, fn_map);
 		if types_match(given_type, param.id_type) == Some(false) {
 			panic!("expected type {:?} but got {:?}", param.id_type, given_type);
 		}
 		// Otherwise our types are just fine
 		// Now we just have to evaluate it
-		let push = expression_to_push(arg, strings);
-		instructions.push(push);
+		let mut push = expression_to_push(arg, fn_map, strings);
+		instructions.append(&mut push);
 	}
 	// Generate lowered call
 	let fn_call = llr::FnCall {
@@ -95,10 +109,10 @@ fn lower_fn_call(call: &FnCall, fn_map: &IndexMap<String, &ASTNode>, strings: &m
 	instructions
 }
 
-fn lower_return(expr: &Option<Expression>, expected_return: Option<Type>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
+fn lower_return(expr: &Option<Expression>, fn_map: &IndexMap<String, &ASTNode>, expected_return: Option<Type>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
 	// Typecheck return value
 	// None == None -> return == void
-	assert_eq!(expr.as_ref().map(|x| expression_type(x)), expected_return);
+	assert_eq!(expr.as_ref().map(|x| expression_type(x, fn_map)), expected_return);
 	// Return is implemented as:
 	//     Swap
 	//     Pop [Instruction pointer]
@@ -116,7 +130,7 @@ fn lower_return(expr: &Option<Expression>, expected_return: Option<Type>, string
 	// instruction into the compiler
 	let mut insts = vec![];
 	if let Some(expr) = expr {
-		insts.push(expression_to_push(&expr, strings));
+		insts.append(&mut expression_to_push(&expr, fn_map, strings));
 	}
 	insts.push(llr::Instruction::Return);
 	insts
@@ -139,7 +153,7 @@ fn lower_statements(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mu
 				instructions.append(&mut lower_fn_call(call, fn_map, strings, true));
 			}
 			Statement::Return(expr) => {
-				instructions.append(&mut lower_return(expr, func.signature.return_type, strings));
+				instructions.append(&mut lower_return(expr, fn_map, func.signature.return_type, strings));
 			}
 		}
 	}
@@ -150,7 +164,7 @@ fn lower_statements(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mu
 		// If the function is empty or didn't end in return we need to add one
 		_ => if func.signature.return_type == None {
 			// We can add the implicit void return
-			instructions.append(&mut lower_return(&None, None, strings));
+			instructions.append(&mut lower_return(&None, fn_map, None, strings));
 		} else {
 			// We can't add an implicit return because () != the function type
 			panic!("function with type may not return");

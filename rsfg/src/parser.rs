@@ -82,12 +82,19 @@ fn parse_expression(rtokens: &mut Vec<Token>) -> Result<Expression> {
 			}
 		},
 		Some(Token::Identifier(_)) => {
-			if let Token::Identifier(name) = rtokens.pop().unwrap() {
-				return Ok(Expression::Identifier(TypedId {
-					name: name,
-					id_type: Type::Infer,
-				}));
-			}
+			// An identifier can start a call or just an identifier
+			// If it can be a call...
+			return Ok(match parse_call(rtokens) {
+				// Let it be a call
+				Ok(call) => Expression::FnCall(call),
+				// Otherwise just reference the identifier
+				Err(_) => if let Token::Identifier(name) = rtokens.pop().unwrap() {
+					Expression::Identifier(TypedId {
+						name: name,
+						id_type: Type::Infer,
+					})
+				} else { unreachable!() },
+			})
 		},
 		_ => return Err(ParseError::Unsupported("expression".to_string())),
 	}

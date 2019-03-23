@@ -9,8 +9,11 @@ fn strings_only(what: str) str
 	log("hi there")
 	return "a literal"
 
+fn returns_string() str
+	return "what to print"
+
 fn main()
-	strings_only("hi howdy")
+	strings_only(returns_string())
 
 @fn extern_func(athing: int)
 // Nothing below it
