@@ -5,15 +5,16 @@
 // No std
 // This is useful for stack counting
 
-fn three(thing: str, another: str) str
-	return "hello there"
+fn main()
+	one()
+
+fn one()
+	two("h-hey wiiirld~ ... *falls over*")
 
 fn two(what: str) str
 	three("hi", "howdy")
 	return "hell all worlds"
 
-// We need the first call in chain to have no return value
-// Otherwise the return would make push > pop
-fn one()
-	two("h-hey wiiirld~ ... *falls over*")
+fn three(thing: str, another: str) str
+	return "hello there"
 

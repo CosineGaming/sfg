@@ -1,3 +1,7 @@
 mod sfg_std;
-pub mod thread;
+#[macro_use]
+mod thread;
+
+pub use thread::Thread;
+pub use thread::Pushable;
 
