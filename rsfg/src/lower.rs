@@ -52,7 +52,7 @@ fn expression_to_push(expr: &Expression, fn_map: &IndexMap<String, &ASTNode>, st
 	match expr {
 		Expression::Literal(Literal::String(string)) => {
 			strings.push(string.to_string());
-			vec![llr::Instruction::Push8((strings.len()-1) as u8)]
+			vec![llr::Instruction::Push32((strings.len()-1) as u32)]
 		},
 		Expression::Literal(Literal::Int(_)) => unimplemented!(),
 		// fn call leaves result on the stack which is exactly what we need
@@ -103,7 +103,7 @@ fn lower_fn_call(call: &FnCall, fn_map: &IndexMap<String, &ASTNode>, strings: &m
 		// Return value is unused if so it needs to be popped for balance
 		// TODO: Support non u8 return types
 		if signature.return_type != None {
-			instructions.push(llr::Instruction::Pop8);
+			instructions.push(llr::Instruction::Pop32);
 		}
 	}
 	instructions
@@ -144,7 +144,7 @@ fn lower_statements(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mu
 	// we'll ONLY want to pop "unused identifiers"
 	for _param in &func.signature.parameters {
 		// TODO: Don't assume params are 8s
-		instructions.push(llr::Instruction::Pop8);
+		instructions.push(llr::Instruction::Pop32);
 	}
 	// Lower every statement
 	for statement in func.statements.iter() {
@@ -249,8 +249,8 @@ mod test {
 			println!("{:x?}", func.instructions);
 			for inst in func.instructions {
 				match inst {
-					Instruction::Push8(_) => balance += 8,
-					Instruction::Pop8 => balance -= 8,
+					Instruction::Push32(_) => balance += 8,
+					Instruction::Pop32 => balance -= 8,
 					_ => (),
 				}
 			}

@@ -34,8 +34,8 @@ pub enum Instruction {
 	//pub Assignment(Assignment),
 	FnCall(FnCall),
 	ExternFnCall(FnCall),
-	Push8(u8),
-	Pop8,
+	Push32(u32),
+	Pop32,
 	Return,
 }
 pub type TypedVar = Type;

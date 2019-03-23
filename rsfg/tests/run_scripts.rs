@@ -58,7 +58,7 @@ fn hello_world() {
 		// "hi\0"
 		0x68, 0x69, 0,
 		// push string lit
-		0x30,
+		0x30, 0x00, 0x00, 0x00,
 		// string index
 		0,
 		// call extern log

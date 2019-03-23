@@ -10,7 +10,7 @@ const INIT_CALL_STACK_SIZE: usize = 6;
 
 #[derive(PartialEq, Debug)]
 pub struct Thread {
-	pub stack: Vec<u8>,
+	pub stack: Vec<u32>,
 	/// The call stack is managed by the VM, containing calls only
 	/// It's kept separate as opposed to machine architectures because
 	/// the use of the data stack is made harder by combining them.
@@ -46,10 +46,10 @@ enum Deser {
 	ExternFnHeader,
 	StringLit,
 	Return,
-	Push8,
+	Push32,
 	ExternFnCall,
 	FnCall,
-	Pop8,
+	Pop32,
 }
 
 fn deser(what: u8) -> Option<Deser> {
@@ -62,14 +62,14 @@ fn deser(what: u8) -> Option<Deser> {
 		// Other 2x
 		0x21 => Some(D::Void),
 		// Instructions 3x
-		0x30 => Some(D::Push8),
+		0x30 => Some(D::Push32),
 		0x31 => Some(D::ExternFnCall),
 		0x32 => Some(D::StringLit),
 		0x33 => Some(D::FnHeader),
 		0x34 => Some(D::ExternFnHeader),
 		0x35 => Some(D::Return),
 		0x36 => Some(D::FnCall),
-		0x37 => Some(D::Pop8),
+		0x37 => Some(D::Pop32),
 		_ => None,
 	}
 }
@@ -215,10 +215,10 @@ impl Thread {
 	}
 	fn exec_next(&mut self) {
 		match deser_strong(next(&self.code, &mut self.ip)) {
-			Deser::Push8 => {
-				self.stack.push(next(&self.code, &mut self.ip));
+			Deser::Push32 => {
+				self.stack.push(read_u32(&self.code, &mut self.ip));
 			},
-			Deser::Pop8 => {
+			Deser::Pop32 => {
 				self.stack.pop();
 			},
 			Deser::ExternFnCall => {
@@ -251,7 +251,7 @@ impl Thread {
 	}
 	pub fn push_string(&mut self, string: &String) {
 		let as_number = string as *const String as u32;
-		self.stack.extend_from_slice(&from_u32(as_number));
+		self.stack.push(as_number);
 	}
 	fn call_fn(&mut self, func: Fn) {
 		assert_ne!(func.ip, 0, "tried to call extern function");
