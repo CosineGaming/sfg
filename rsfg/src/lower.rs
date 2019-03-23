@@ -45,16 +45,18 @@ fn expression_to_push(expr: &Expression, strings: &mut Vec<String>) -> llr::Inst
 	}
 }
 
-fn lower_fn_call(call: &FnCall, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
+fn lower_fn_call(call: &FnCall, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<String>, is_statement: bool) -> Vec<llr::Instruction> {
 	let (index, node) = match fn_map.get_full(&*call.name) {
 		Some((i, _, func)) => (i, func),
 		None => panic!("could not find function {}", call.name),
 	};
 	// Typecheck
-	let params = match node {
-		ASTNode::Fn(f) => &f.signature.parameters,
-		ASTNode::ExternFn(f) => &f.signature.parameters,
+	// Sig needed for later op
+	let signature = match node {
+		ASTNode::Fn(f) => &f.signature,
+		ASTNode::ExternFn(f) => &f.signature,
 	};
+	let params = &signature.parameters;
 	assert_eq!(call.arguments.len(), params.len(),
 		"{} expected {} arguments, got {}",
 		call.name, params.len(), call.arguments.len());
@@ -81,20 +83,34 @@ fn lower_fn_call(call: &FnCall, fn_map: &IndexMap<String, &ASTNode>, strings: &m
 		ASTNode::ExternFn(_) => llr::Instruction::ExternFnCall(fn_call),
 	};
 	instructions.push(call);
+	if is_statement {
+		// Return value is unused if so it needs to be popped for balance
+		// TODO: Support non u8 return types
+		if signature.return_type != None {
+			instructions.push(llr::Instruction::Pop8);
+		}
+	}
 	instructions
 }
 
 fn lower_return(expr: &Expression, expected_return: Option<Type>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
-	// TODO: ERROR: Return is wrong here:
-	//     Push return_value
-	//     Return
-	// gives ("return 4")
-	//     1 2 3
-	//     (push)
-	//     1 2 3 4
-	//     (return)
-	//     1
+	// Typecheck return value
 	assert_eq!(Some(expression_type(expr)), expected_return);
+	// Return is implemented as:
+	//     Swap
+	//     Pop [Instruction pointer]
+	// So:
+	// return 4 is executed by VM as:
+	//     (push)
+	//     ip 4
+	//     (return:)
+	//     (swap)
+	//     4 ip
+	//     (pop)
+	//     4 (and ip is in proper location)
+	//     (so stack now holds return value as expected)
+	// TODO: I need to decide whether I should move that complex VM
+	// instruction into the compiler
 	vec![
 		expression_to_push(expr, strings),
 		llr::Instruction::Return,
@@ -102,22 +118,32 @@ fn lower_return(expr: &Expression, expected_return: Option<Type>, strings: &mut 
 }
 
 /// requires mutable reference to llr's strings so strings that come up can be added
-fn lower_instructions(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
+fn lower_statements(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
 	let mut instructions = Vec::<llr::Instruction>::new();
+	// TODO: YOU HAVE TO REMOVE THIS BLOCK after you add identifiers
+	// This pops every parameter. Once we can use identifiers (params are IDs)
+	// we'll ONLY want to pop "unused identifiers"
+	for _param in &func.signature.parameters {
+		// TODO: Don't assume params are 8s
+		instructions.push(llr::Instruction::Pop8);
+	}
 	// Lower every statement
 	for statement in func.statements.iter() {
 		match statement {
 			Statement::FnCall(call) => {
-				instructions.append(&mut lower_fn_call(call, fn_map, strings));
+				instructions.append(&mut lower_fn_call(call, fn_map, strings, true));
 			}
 			Statement::Return(expr) => {
 				instructions.append(&mut lower_return(expr, func.signature.return_type, strings));
 			}
 		}
 	}
-	// If the final command was a proper return, no need to clean it up
-	if Some(&llr::Instruction::Return) != instructions.last() {
-		if func.signature.return_type == None {
+	// Add implied returns
+	match instructions.last() {
+		// If the final command was a proper return, no need to clean it up
+		Some(&llr::Instruction::Return) => (),
+		// If the function is empty or didn't end in return we need to add one
+		_ => if func.signature.return_type == None {
 			// We can add the implicit void return
 			instructions.push(llr::Instruction::Return);
 		} else {
@@ -150,7 +176,7 @@ fn lower_signature(signature: &Signature) -> llr::Signature {
 
 fn lower_fn(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<String>) -> llr::Fn {
 	llr::Fn {
-		instructions: lower_instructions(func, fn_map, strings),
+		instructions: lower_statements(func, fn_map, strings),
 		signature: lower_signature(&func.signature),
 	}
 }
@@ -181,5 +207,36 @@ pub fn lower(ast: AST) -> llr::LLR {
 		}
 	}
 	out
+}
+
+mod test {
+	#[test]
+	fn non_branching_stack_balance() {
+		use super::lower;
+		use crate::{llr::Instruction};
+		use crate::{parser::parse, lexer::lex};
+		let script_string = std::fs::read_to_string("tests/scripts/non-branching.sfg")
+			.expect("could not load given file");
+		let lexed = lex(&script_string);
+		let parsed = parse(lexed);
+		let lowered = lower(parsed);
+		let fns = lowered.fns;
+		// TODO: This should be a usize so it'll panic if pop EVER exceeds push
+		// However, this requires STARTING at a no-parameter function
+		// because the function calls do pushing that should be popped
+		// by the callee
+		let mut balance: isize = 0;
+		for func in fns {
+			println!("{:x?}", func.instructions);
+			for inst in func.instructions {
+				match inst {
+					Instruction::Push8(_) => balance += 8,
+					Instruction::Pop8 => balance -= 8,
+					_ => (),
+				}
+			}
+		}
+		assert_eq!(balance, 0);
+	}
 }
 

@@ -36,10 +36,8 @@ fn expect_token(rtokens: &mut Vec<Token>, what: Token, during: &str) -> Result<T
 		None => return Err(ParseError::EOF(during.to_string())),
 	};
 	if next == &what {
-		println!("popping for {}", during);
 		Ok(rtokens.pop().unwrap())
 	} else {
-		println!("not popping for {}", during);
 		Err(ParseError::Expected(format!("{:?}", what), during.to_string()))
 	}
 }
