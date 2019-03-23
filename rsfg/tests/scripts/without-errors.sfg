@@ -10,6 +10,7 @@ fn strings_only(what: str) str
 	return "a literal"
 
 fn returns_string() str
+	complex_fn(7, 9)
 	return "what to print"
 
 fn main()

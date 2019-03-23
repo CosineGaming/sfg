@@ -48,13 +48,19 @@ fn types_match(a: Type, b: Type) -> Option<bool> {
 	else { Some(false) }
 }
 
+fn i_as_u(what: i32) -> u32 {
+	unsafe { std::mem::transmute::<i32, u32>(what) }
+}
+
 fn expression_to_push(expr: &Expression, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
 	match expr {
 		Expression::Literal(Literal::String(string)) => {
 			strings.push(string.to_string());
 			vec![llr::Instruction::Push32((strings.len()-1) as u32)]
 		},
-		Expression::Literal(Literal::Int(_)) => unimplemented!(),
+		Expression::Literal(Literal::Int(int)) => {
+			vec![llr::Instruction::Push32(i_as_u(*int))]
+		},
 		// fn call leaves result on the stack which is exactly what we need
 		Expression::FnCall(call) => lower_fn_call(call, fn_map, strings, false),
 		Expression::Identifier(_) => unimplemented!(),
