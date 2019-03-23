@@ -1,8 +1,8 @@
 // Hello, welcome to my lexer. Please like and subscribe
 
-use crate::Token;
+use crate::{TokenType, Token};
 
-static DEBUG_LEXER: bool = false;
+static DEBUG_LEXER: bool = true;
 
 // A-Z or 0-9
 fn is_id(c: char) -> bool {
@@ -35,6 +35,9 @@ struct Lexer<'src> {
 	tokens: Vec<Token>,
 	spaces_count: usize,
 	rchars: Vec<char>,
+	line: usize,
+	col: usize,
+	col_begin: usize,
 }
 
 impl<'src> Lexer<'src> {
@@ -44,6 +47,9 @@ impl<'src> Lexer<'src> {
 			tokens: Vec::new(),
 			spaces_count: 0,
 			rchars: source.chars().rev().collect(),
+			line: 0,
+			col: 0,
+			col_begin: source.len(),
 		}
 	}
 
@@ -72,12 +78,16 @@ impl<'src> Lexer<'src> {
 }
 
 pub fn lex(text: &str) -> Vec<Token> {
-	use Token::*;
+	use TokenType::*;
 	let mut lexer = Lexer::new(text);
 	loop {
 		if DEBUG_LEXER {
 			println!("lexer status is {:?}", lexer);
 		}
+		// The number of characters removed is the number that were parsed
+		lexer.col += lexer.col_begin - lexer.rchars.len();
+		// Yes, this happens *after*. The *start* of a token (col) is the *end* of all previous
+		lexer.col_begin = lexer.rchars.len();
 		let token = match lexer.next_symbol_type() {
 			NextTokenType::EOF => {
 				// This is the end of the file, which is OK, as we are not in the middle
@@ -101,43 +111,44 @@ pub fn lex(text: &str) -> Vec<Token> {
 				let symbol_or_id = match text.as_ref() {
 					"fn" => Fn,
 					// These names clash, it sucks
-					"int" => Token::Type(crate::Type::Int),
-					"str" => Token::Type(crate::Type::Str),
+					"int" => TokenType::Type(crate::Type::Int),
+					"str" => TokenType::Type(crate::Type::Str),
 					"return" => Return,
 					_ => Identifier(text),
 				};
 				symbol_or_id
 			}
 			NextTokenType::Space(c) => {
-				if lexer.tokens.last() == Some(&Newline) {
-					if c == '\t' {
-						Tab
-					} else {
-						// Figure out how many spaces we're using
-						let mut count = 1;
-						loop {
-							match lexer.rchars.last() {
-								Some(' ') => {
-									lexer.rchars.pop();
-									count += 1;
-									if lexer.spaces_count != 0 && count == lexer.spaces_count {
-										break;
-									}
-								}
-								_ => break, // Ending on whitespace is fine
-							};
-						}
-						if lexer.spaces_count == 0 {
-							lexer.spaces_count = count;
-						}
-						if count == lexer.spaces_count {
+				match lexer.tokens.last() {
+					Some(&Token { kind: Newline, .. }) => {
+						if c == '\t' {
 							Tab
 						} else {
-							panic!("expected {} spaces, got {}", lexer.spaces_count, count);
+							// Figure out how many spaces we're using
+							let mut count = 1;
+							loop {
+								match lexer.rchars.last() {
+									Some(' ') => {
+										lexer.rchars.pop();
+										count += 1;
+										if lexer.spaces_count != 0 && count == lexer.spaces_count {
+											break;
+										}
+									}
+									_ => break, // Ending on whitespace is fine
+								};
+							}
+							if lexer.spaces_count == 0 {
+								lexer.spaces_count = count;
+							}
+							if count == lexer.spaces_count {
+								Tab
+							} else {
+								panic!("expected {} spaces, got {}", lexer.spaces_count, count);
+							}
 						}
 					}
-				} else {
-					continue;
+					_ => continue,
 				}
 			}
 			NextTokenType::Digit(c) => {
@@ -196,7 +207,11 @@ pub fn lex(text: &str) -> Vec<Token> {
 					_ => unimplemented!(),//Assignment,
 				}
 			},
-			NextTokenType::Newline => Newline,
+			NextTokenType::Newline => {
+				lexer.line += 1;
+				lexer.col = 0;
+				Newline
+			},
 			NextTokenType::LParen => LParen,
 			NextTokenType::RParen => RParen,
 			NextTokenType::Colon => Colon,
@@ -218,7 +233,11 @@ pub fn lex(text: &str) -> Vec<Token> {
 				panic!("lexer doesn't know what to do with character {}", c);
 			}
 		};
-		lexer.tokens.push(token);
+		lexer.tokens.push(Token {
+			             kind: token.clone(),
+			             line: lexer.line,
+			             col: lexer.col as usize,
+			             });
 	}
 	lexer.tokens
 }
@@ -228,11 +247,13 @@ mod test {
 	#[test]
 	fn hello_world() {
 		use super::lex;
-		use super::Token::*;
+		use super::TokenType::*;
+		use super::TokenType;
 		let lexed = lex(r#"fn main() // hello world
 	log("hi")"#);
+		let kinds: Vec<TokenType> = lexed.iter().map(|x| x.kind.clone()).collect();
 		assert_eq!(
-			lexed,
+			kinds,
 			vec![
 				Fn,
 				Identifier("main".to_string()),
@@ -250,8 +271,19 @@ mod test {
 	#[test]
 	fn digit() {
 		use super::lex;
-		use super::Token::*;
-		let lexed = lex(r#"578 9"#);
-		assert_eq!(lexed, vec![IntLit(578), IntLit(9),]);
+		use super::TokenType::*;
+		use super::Token;
+		let lexed = lex(r#"578 980"#);
+		assert_eq!(lexed, vec![
+			Token {
+				kind: IntLit(578),
+				line: 0,
+				col: 0,
+			},
+			Token {
+				kind: IntLit(980),
+				line: 0,
+				col: 4,
+			}]);
 	}
 }

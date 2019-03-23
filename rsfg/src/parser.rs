@@ -1,13 +1,13 @@
 // This is the parser. yay.
 
-use crate::{Token, Type, ast::*};
+use crate::{Token, TokenType, Type, ast::*};
 
 #[derive(Debug)]
 enum ParseError {
 	// Expected, got
-	Expected(Vec<Token>, Token),
+	Expected(Vec<TokenType>, Token),
 	CouldNotConstruct(Vec<ParseError>),
-	Unsupported(String),
+	Unsupported(String, usize, usize),
 	EOF(String),
 }
 impl std::fmt::Display for ParseError {
@@ -24,7 +24,7 @@ impl std::fmt::Display for ParseError {
 				let error_str = error_strs.join("\n\n");
 				write!(f, "could not construct any possible variant expected here. the following errors were returned:\n\n{}", error_str)
 			}
-			Unsupported(what) => write!(f, "unsupported {}", what),
+			Unsupported(what, line, col) => write!(f, "unsupported {} at {}:{}", what, line, col),
 			EOF(parsing) => write!(f, "unexpected EOF parsing {}", parsing),
 		}
 	}
@@ -74,9 +74,9 @@ fn pop_no_eof(from: &mut Tokens, parsing_what: &str) -> Result<Token> {
 	}
 }
 /// Only pops if the next token is expected, then returns that token (otherwise Err::EOF)
-fn expect_token(rtokens: &mut Tokens, what: Token, during: &str) -> Result<Token> {
+fn expect_token(rtokens: &mut Tokens, what: TokenType, during: &str) -> Result<Token> {
 	match rtokens.pop() {
-		Some(token) => if token == what {
+		Some(token) => if token.kind == what {
 			Ok(token)
 		} else {
 			Err(ParseError::Expected(vec![what], token))
@@ -86,16 +86,16 @@ fn expect_token(rtokens: &mut Tokens, what: Token, during: &str) -> Result<Token
 }
 
 fn parse_id(rtokens: &mut Tokens, type_required: bool) -> Result<TypedId> {
-	let name = match rb_try!(rtokens, pop_no_eof(rtokens, "identifier")) {
-		Token::Identifier(name) => name,
+	let name = match rb_try!(rtokens, pop_no_eof(rtokens, "identifier")).kind {
+		TokenType::Identifier(name) => name,
 		_ => panic!("identifier wasn't identifier (compiler bug)"),
 	};
 	match rtokens.last() {
-		Some(Token::Colon) => {
+		Some(Token { kind: TokenType::Colon, .. }) => {
 			rtokens.pop();
 			let id_type = match rtokens.pop() {
-				Some(Token::Type(id_type)) => id_type,
-				Some(what) => return Err(ParseError::Expected(vec![Token::Type(Type::Str), Token::Type(Type::Int)], what)),
+				Some(Token { kind: TokenType::Type(id_type), .. }) => id_type,
+				Some(what) => return Err(ParseError::Expected(vec![TokenType::Type(Type::Str), TokenType::Type(Type::Int)], what)),
 				None => return Err(ParseError::EOF("identifier".to_string())),
 			};
 			return Ok(TypedId {
@@ -103,9 +103,10 @@ fn parse_id(rtokens: &mut Tokens, type_required: bool) -> Result<TypedId> {
 				id_type,
 			});
 		}
-		_ => if type_required {
-			return Err(ParseError::Expected(vec![Token::Type(Type::Str), Token::Type(Type::Int)], Token::Comma)); // TODO: not Token::Comma, None!
+		Some(got) => if type_required {
+			return Err(ParseError::Expected(vec![TokenType::Type(Type::Str), TokenType::Type(Type::Int)], got.clone()));
 		},
+		None => return Err(ParseError::EOF("identifier".to_string())),
 	}
 	Ok(TypedId {
 		name,
@@ -115,9 +116,9 @@ fn parse_id(rtokens: &mut Tokens, type_required: bool) -> Result<TypedId> {
 
 fn parse_binary(rtokens: &mut Tokens, left: Expression) -> Result<BinaryExpr> {
 	let op = match rb_try!(rtokens, pop_no_eof(rtokens, "binary expr")) {
-		Token::Equals => BinaryOp::Equals,
+		Token { kind: TokenType::Equals, .. } => BinaryOp::Equals,
 		// TODO: Make Expected accept a token or vec of token
-		got => return Err(ParseError::Expected(vec![Token::Equals], got)),
+		got => return Err(ParseError::Expected(vec![TokenType::Equals], got)),
 	};
 	let right = rb_try!(rtokens, parse_expression(rtokens));
 	Ok(BinaryExpr {
@@ -131,15 +132,15 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
 	// First we parse the left side of a binary expression which COULD be the whole expression
 	println!("{:?}", rtokens.last());
 	let left = match rtokens.last() {
-		Some(Token::StringLit(string)) => {
+		Some(Token { kind: TokenType::StringLit(string), .. }) => {
 			rtokens.pop();
 			Ok(Expression::Literal(Literal::String(string.clone())))
 		},
-		Some(Token::IntLit(number)) => {
+		Some(Token { kind: TokenType::IntLit(number), .. }) => {
 			rtokens.pop();
 			Ok(Expression::Literal(Literal::Int(*number)))
 		},
-		Some(Token::Identifier(name)) => {
+		Some(Token { kind: TokenType::Identifier(name), .. }) => {
 			// An identifier can start a call or just an identifier
 			// It can be a call...
 			let call_res = rb!(rtokens, parse_call(rtokens).and_then(|x| Ok(Expression::FnCall(x))));
@@ -155,7 +156,8 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
 				call_res
 			}
 		},
-		_ => Err(ParseError::Unsupported("expression".to_string())),
+		Some(token) => Err(ParseError::Unsupported("expression".to_string(), token.line, token.col)),
+		None => Err(ParseError::EOF("expression".to_string())),
 	}?;
 	// Then we try to parse a binary expression with it
 	rb_ok_or!(rtokens, parse_binary(rtokens, left.clone()).and_then(|x| Ok(Expression::Binary(Box::new(x)))));
@@ -165,21 +167,21 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
 
 fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
 	let name = match rtokens.last() {
-		Some(Token::Identifier(_)) => match rtokens.pop() {
-			Some(Token::Identifier(name)) => name,
+		Some(Token { kind: TokenType::Identifier(_), .. }) => match rtokens.pop() {
+			Some(Token { kind: TokenType::Identifier(name), .. }) => name,
 			_ => unreachable!(),
 		},
-		Some(what) => return Err(ParseError::Expected(vec![Token::Identifier("".to_string())], what.clone())),
+		Some(what) => return Err(ParseError::Expected(vec![TokenType::Identifier("".to_string())], what.clone())),
 		None => return Err(ParseError::EOF("call".to_string())),
 	};
 	// Arguments
-	rb_try!(rtokens, expect_token(rtokens, Token::LParen, "fn call"));
+	rb_try!(rtokens, expect_token(rtokens, TokenType::LParen, "fn call"));
 	let mut arguments = vec![];
 	loop {
 		// TODO: is allowing commas at the beginning the worst idea ive rb_try!(rtokens, had)
 		arguments.push(match rtokens.last() {
-			Some(Token::RParen) => { rtokens.pop(); break },
-			Some(Token::Comma) => { rtokens.pop(); continue },
+			Some(Token { kind: TokenType::RParen, .. }) => { rtokens.pop(); break },
+			Some(Token { kind: TokenType::Comma, .. }) => { rtokens.pop(); continue },
 			_ => rb_try!(rtokens, parse_expression(rtokens)),
 		});
 	}
@@ -191,25 +193,25 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
 
 fn parse_args(rtokens: &mut Tokens) -> Result<Vec<TypedId>> {
 	let mut args = vec![];
-	rb_try!(rtokens, expect_token(rtokens, Token::LParen, "fn parameters"));
+	rb_try!(rtokens, expect_token(rtokens, TokenType::LParen, "fn parameters"));
 	loop {
 		args.push(match rtokens.last() {
-			Some(Token::Identifier(_)) => rb_try!(rtokens, parse_id(rtokens, true)),
-			Some(Token::RParen) => { rtokens.pop(); break },
-			Some(got) => return Err(ParseError::Expected(vec![Token::Identifier(String::new()), Token::RParen], got.clone())),
+			Some(Token { kind: TokenType::Identifier(_), .. }) => rb_try!(rtokens, parse_id(rtokens, true)),
+			Some(Token { kind: TokenType::RParen, .. }) => { rtokens.pop(); break },
+			Some(got) => return Err(ParseError::Expected(vec![TokenType::Identifier(String::new()), TokenType::RParen], got.clone())),
 			None => return Err(ParseError::EOF("parameters".to_string())),
 		});
 		match pop_no_eof(rtokens, "fn params")? {
-			Token::Comma => (),
-			Token::RParen => break,
-			got => return Err(ParseError::Expected(vec![Token::Comma, Token::RParen], got)),
+			Token { kind: TokenType::Comma, .. } => (),
+			Token { kind: TokenType::RParen, .. } => break,
+			got => return Err(ParseError::Expected(vec![TokenType::Comma, TokenType::RParen], got)),
 		}
 	}
 	Ok(args)
 }
 
 fn parse_return(rtokens: &mut Tokens) -> Result<Option<Expression>> {
-	rb_try!(rtokens, expect_token(rtokens, Token::Return, "return statement"));
+	rb_try!(rtokens, expect_token(rtokens, TokenType::Return, "return statement"));
 	Ok(match parse_expression(rtokens) {
 		Ok(expr) => Some(expr),
 		Err(_) => None,
@@ -230,23 +232,23 @@ fn parse_signature(rtokens: &mut Tokens) -> Result<Signature> {
 	// @ in the name. The lexer misinterprets this as ExternFnCall despite
 	// not being a call
 	let name = match rb_try!(rtokens, pop_no_eof(rtokens, "fn")) {
-		Token::Identifier(name) => name,
-		Token::ExternFnCall(name) => name,
-		got => return Err(ParseError::Expected(vec![Token::Identifier(String::new()), Token::ExternFnCall(String::new())], got)),
+		Token { kind: TokenType::Identifier(name), .. } => name,
+		Token { kind: TokenType::ExternFnCall(name), .. } => name,
+		got => return Err(ParseError::Expected(vec![TokenType::Identifier(String::new()), TokenType::ExternFnCall(String::new())], got)),
 	};
 	let parameters = rb_try!(rtokens, parse_args(rtokens));
 	let return_type = match rtokens.last() {
-		Some(Token::Type(_)) => match rtokens.pop() {
-			Some(Token::Type(r_type)) => Some(r_type),
+		Some(Token { kind: TokenType::Type(_), .. }) => match rtokens.pop() {
+			Some(Token { kind: TokenType::Type(r_type), .. }) => Some(r_type),
 			_ => unreachable!(),
 		},
-		Some(Token::Newline) => None,
-		Some(got) => return Err(ParseError::Expected(vec![Token::Newline, Token::Type(Type::Str)], got.clone())),
+		Some(Token { kind: TokenType::Newline, .. }) => None,
+		Some(got) => return Err(ParseError::Expected(vec![TokenType::Newline, TokenType::Type(Type::Str)], got.clone())),
 		None => return Err(ParseError::EOF("signature".to_string())),
 	};
 	match rtokens.pop() {
-		Some(Token::Newline) => (),
-		Some(got) => return Err(ParseError::Expected(vec![Token::Newline], got)),
+		Some(Token { kind: TokenType::Newline, .. }) => (),
+		Some(got) => return Err(ParseError::Expected(vec![TokenType::Newline], got)),
 		None => return Err(ParseError::EOF("signature".to_string())),
 	}
 	Ok(Signature {
@@ -257,7 +259,7 @@ fn parse_signature(rtokens: &mut Tokens) -> Result<Signature> {
 }
 
 fn parse_fn(rtokens: &mut Tokens) -> Result<Fn> {
-	rb_try!(rtokens, expect_token(rtokens, Token::Fn, "fn"));
+	rb_try!(rtokens, expect_token(rtokens, TokenType::Fn, "fn"));
 	// Parse signature
 	let signature = rb_try!(rtokens, parse_signature(rtokens));
 	let mut statements = vec![];
@@ -270,14 +272,14 @@ fn parse_fn(rtokens: &mut Tokens) -> Result<Fn> {
 			})
 		};
 		match t {
-			Token::Tab => { rtokens.pop(); },
+			Token { kind: TokenType::Tab, .. } => { rtokens.pop(); },
 			_ => break,
 		}
 		statements.push(rb_try!(rtokens, parse_statement(rtokens)));
 		match rtokens.pop() {
-			Some(Token::Newline) => (),
+			Some(Token { kind: TokenType::Newline, .. }) => (),
 			None => (),
-			Some(got) => return Err(ParseError::Expected(vec![Token::Newline], got)),
+			Some(got) => return Err(ParseError::Expected(vec![TokenType::Newline], got)),
 		}
 	}
 	Ok(Fn {
@@ -288,7 +290,7 @@ fn parse_fn(rtokens: &mut Tokens) -> Result<Fn> {
 
 fn parse_extern_fn(rtokens: &mut Tokens) -> Result<ExternFn> {
 	match rtokens.pop() {
-		Some(Token::ExternFn) => (),
+		Some(Token { kind: TokenType::ExternFn, .. }) => (),
 		_ => panic!("internal: extern fn didn't start with @fn"),
 	}
 	let signature = rb_try!(rtokens, parse_signature(rtokens));
@@ -311,13 +313,13 @@ pub fn parse(mut tokens: Vec<Token>) -> AST {
 		};
 		match t {
 			// Parse a function
-			Token::Fn => {
+			Token { kind: TokenType::Fn, .. } => {
 				ast.push(ASTNode::Fn(parse_fn(&mut rtokens).unwrap()));
 			},
-			Token::ExternFn => {
+			Token { kind: TokenType::ExternFn, .. } => {
 				ast.push(ASTNode::ExternFn(parse_extern_fn(&mut rtokens).unwrap()));
 			},
-			Token::Newline => {},
+			Token { kind: TokenType::Newline, .. } => {},
 			_ => {
 				panic!("expected Fn in global space, got {:?}", t);
 			},
@@ -365,7 +367,7 @@ mod test {
 	// that only uses function definition and calling, which means we have
 	// no one to call but ourselves
 	fn recurse() {
-		use super::Token::*;
+		use super::TokenType::*;
 		let ast = parse(vec![
 			Fn,
 			Identifier("main".to_string()),
@@ -375,7 +377,7 @@ mod test {
 			Identifier("main".to_string()),
 			LParen,
 			RParen,
-		]);
+		].iter().map(|t| Token { kind: t.clone(), line: 0, col: 0 }).collect());
 		assert_eq!(ast, vec![
 			ASTNode::Fn(crate::ast::Fn {
 				signature: Signature {
@@ -398,7 +400,7 @@ mod test {
 	fn parse_expression_rollback() {
 		// The code is listed in order FnCall, then return
 		// We need to test to make sure it can roll back properly
-		use super::Token::*;
+		use super::TokenType::*;
 		let ast = parse(vec![
 			Fn,
 			Identifier("main".to_string()),
@@ -406,7 +408,7 @@ mod test {
 			Newline,
 			Tab,
 			Return,
-		]);
+		].iter().map(|t| Token { kind: t.clone(), line: 0, col: 0 }).collect());
 		if let ASTNode::Fn(func) = &ast[0] {
 			assert_eq!(func.statements, vec![
 				Statement::Return(None),

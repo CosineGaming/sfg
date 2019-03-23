@@ -9,7 +9,7 @@ mod lower;
 mod codegen;
 
 #[derive(PartialEq, Clone, Debug)]
-pub enum Token {
+pub enum TokenType {
 	Identifier(String),
 	Tab,
 	StringLit(String),
@@ -25,6 +25,13 @@ pub enum Token {
 	Newline,
 	LParen,
 	RParen,
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct Token {
+	kind: TokenType,
+	line: usize,
+	col: usize,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
