@@ -138,9 +138,12 @@ fn parse_args(rtokens: &mut Vec<Token>) -> Result<Vec<TypedId>> {
 	Ok(args)
 }
 
-fn parse_return(rtokens: &mut Vec<Token>) -> Result<Expression> {
+fn parse_return(rtokens: &mut Vec<Token>) -> Result<Option<Expression>> {
 	expect_token(rtokens, Token::Return, "return statement")?;
-	parse_expression(rtokens)
+	Ok(match parse_expression(rtokens) {
+		Ok(expr) => Some(expr),
+		Err(_) => None,
+	})
 }
 
 fn parse_statement(rtokens: &mut Vec<Token>) -> Result<Statement> {
