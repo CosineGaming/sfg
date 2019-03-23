@@ -39,17 +39,17 @@ enum Type {
 
 #[derive(PartialEq, Eq, Debug)]
 enum Deser {
+	Equals,
+	ExternFnCall,
+	ExternFnHeader,
+	FnCall,
+	FnHeader,
+	Pop32,
+	Push32,
+	Return,
+	StringLit,
 	Type(Type),
 	Void,
-	FnHeader,
-	ExternFnHeader,
-	StringLit,
-	Return,
-	Push32,
-	ExternFnCall,
-	FnCall,
-	Pop32,
-	Equals,
 }
 
 fn deser(what: u8) -> Option<Deser> {
