@@ -15,7 +15,7 @@ fn compile_file(filename: &str) -> Vec<u8> {
 }
 
 fn assert_hex(a: Vec<u8>, b: Vec<u8>) {
-	assert_eq!(a, b, "result:\n{:X?}\nexpected:\n{:X?}", a, b);
+	assert_eq!(a, b, "result:\n{:x?}\nexpected:\n{:x?}", a, b);
 }
 
 #[test]

@@ -36,10 +36,8 @@ fn expect_token(rtokens: &mut Vec<Token>, what: Token, during: &str) -> Result<T
 		None => return Err(ParseError::EOF(during.to_string())),
 	};
 	if next == &what {
-		println!("popping for {}", during);
 		Ok(rtokens.pop().unwrap())
 	} else {
-		println!("not popping for {}", during);
 		Err(ParseError::Expected(format!("{:?}", what), during.to_string()))
 	}
 }
@@ -140,9 +138,12 @@ fn parse_args(rtokens: &mut Vec<Token>) -> Result<Vec<TypedId>> {
 	Ok(args)
 }
 
-fn parse_return(rtokens: &mut Vec<Token>) -> Result<Expression> {
+fn parse_return(rtokens: &mut Vec<Token>) -> Result<Option<Expression>> {
 	expect_token(rtokens, Token::Return, "return statement")?;
-	parse_expression(rtokens)
+	Ok(match parse_expression(rtokens) {
+		Ok(expr) => Some(expr),
+		Err(_) => None,
+	})
 }
 
 fn parse_statement(rtokens: &mut Vec<Token>) -> Result<Statement> {

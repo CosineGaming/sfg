@@ -2,13 +2,20 @@ use crate::sfg_std;
 
 use indexmap::IndexMap;
 
-// Should be small enough to make small scripts low-RAM, but high enough
-// that startup doesn't take forever with 1000s of incremental allocs
+/// Should be small enough to make small scripts low-RAM, but high enough
+/// that startup doesn't take forever with 1000s of incremental allocs
 const INIT_STACK_SIZE: usize = 50;
+/// Similarly chosen for the expected call stack size
+const INIT_CALL_STACK_SIZE: usize = 6;
 
 #[derive(PartialEq, Debug)]
 pub struct Thread {
 	pub stack: Vec<u8>,
+	/// The call stack is managed by the VM, containing calls only
+	/// It's kept separate as opposed to machine architectures because
+	/// the use of the data stack is made harder by combining them.
+	/// Each usize is a ip
+	pub call_stack: Vec<usize>,
 	code: Vec<u8>,
 	// Code pointer
 	ip: usize,
@@ -42,6 +49,7 @@ enum Deser {
 	Push8,
 	ExternFnCall,
 	FnCall,
+	Pop8,
 }
 
 fn deser(what: u8) -> Option<Deser> {
@@ -61,6 +69,7 @@ fn deser(what: u8) -> Option<Deser> {
 		0x34 => Some(D::ExternFnHeader),
 		0x35 => Some(D::Return),
 		0x36 => Some(D::FnCall),
+		0x37 => Some(D::Pop8),
 		_ => None,
 	}
 }
@@ -164,7 +173,6 @@ impl Thread {
 		expect(&code, &mut ip, 'g' as u8, "expected bcfg");
 		let mut fns = IndexMap::new();
 		let mut strings = Vec::new();
-		println!("0x{:X}", code[ip]);
 		loop {
 			match deser(code[ip]) {
 				Some(Deser::FnHeader) => {
@@ -198,6 +206,7 @@ impl Thread {
 		println!("{:?}", fns);
 		Self {
 			stack: Vec::with_capacity(INIT_STACK_SIZE),
+			call_stack: Vec::with_capacity(INIT_CALL_STACK_SIZE),
 			code,
 			ip,
 			strings,
@@ -208,6 +217,9 @@ impl Thread {
 		match deser_strong(next(&self.code, &mut self.ip)) {
 			Deser::Push8 => {
 				self.stack.push(next(&self.code, &mut self.ip));
+			},
+			Deser::Pop8 => {
+				self.stack.pop();
 			},
 			Deser::ExternFnCall => {
 				let index = read_u32(&self.code, &mut self.ip);
@@ -227,6 +239,10 @@ impl Thread {
 					Some((_name, func)) => func.clone(),
 					_ => panic!("could not find function at {}", index),
 				};
+				// We do we push ip here and not in
+				// call_fn? because call_fn by user should not
+				// push to stack, it should allow exit
+				self.call_stack.push(self.ip);
 				self.call_fn(func);
 			},
 			// TODO: Split deser into categories
@@ -241,11 +257,12 @@ impl Thread {
 		assert_ne!(func.ip, 0, "tried to call extern function");
 		self.ip = func.ip as usize;
 		loop {
+			println!("stack {:x?}| next {:x?}", self.stack, deser_strong(self.code[self.ip]));
 			if deser_strong(self.code[self.ip]) == Deser::Return {
-				for _ in 0..func.stack_size {
-					self.stack.pop();
-				}
-				// TODO: Push some return value, etc
+				self.ip = match self.call_stack.pop() {
+					Some(ip) => ip,
+					None => break,
+				};
 				break;
 			}
 			self.exec_next();
@@ -264,7 +281,7 @@ impl Thread {
 	}
 }
 
-/// call!thread.main()
+/// call![thread.main()]
 #[macro_export]
 macro_rules! call {
 	( $thread:ident.$function:ident($( $push:expr )*) ) => {
@@ -279,7 +296,7 @@ macro_rules! call {
 
 /// This trait serves only to make the macro work easily
 /// relevant push_[type]()s and call_name() are just as effective
-trait Pushable {
+pub trait Pushable {
 	fn push_to(&self, thread: &mut Thread);
 }
 impl Pushable for String {
@@ -290,45 +307,6 @@ impl Pushable for String {
 impl Pushable for str {
 	fn push_to(&self, thread: &mut Thread) {
 		thread.push_string(&self.to_string());
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	use super::{Thread, Fn, Type, Pushable};
-	use indexmap::indexmap;
-	fn load_file(filename: &str) -> Thread {
-		let code = std::fs::read(filename)
-			.expect("could not load given file");
-		Thread::new(code)
-	}
-	#[test]
-	fn hello_world_init() {
-		let thread = load_file("tests/binaries/hello-world.bcfg");
-		assert_eq!(thread.fns,
-			indexmap!{
-				"main".to_string() => Fn {
-					ip: 30,
-					stack_size: 0,
-					return_type: None,
-					parameters: vec![],
-				},
-				"log".to_string() => Fn {
-					ip: 0,
-					stack_size: 8,
-					return_type: None,
-					parameters: vec![Type::Str],
-				},
-			}
-		);
-		assert_eq!(thread.stack, vec![]);
-		// ip doesn't matter
-		// code is hard but it's immutable so prob fine
-	}
-	#[test]
-	fn call_macro() {
-		let mut thread = load_file("tests/binaries/without-errors.bcfg");
-		call![thread.main("hello")];
 	}
 }
 
