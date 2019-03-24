@@ -38,6 +38,7 @@ pub enum Instruction {
 	Return,
 	Equals,
 	JumpZero(u8),
+	Dup(u8),
 }
 pub type TypedVar = Type;
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]

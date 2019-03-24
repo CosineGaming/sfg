@@ -5,15 +5,20 @@ use crate::{Type, ast::*, llr};
 use indexmap::IndexMap;
 
 // As much as it pains me to require fn_map, we need it to determine type of FnCall
-fn expression_type(expr: &Expression, fn_map: &IndexMap<String, &ASTNode>) -> Type {
+fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
 	match expr {
 		Expression::Literal(lit) => match lit {
 			Literal::String(_) => Type::Str,
 			Literal::Int(_) => Type::Int,
 		},
-		Expression::Identifier(id) => id.id_type,
+		Expression::Identifier(id) => {
+			match state.locals.get(&id.name) {
+				Some(id_type) => *id_type,
+				None => panic!("unknown local variable {}", id.name),
+			}
+		}
 		Expression::FnCall(func) => {
-			let node = match fn_map.get(&*func.name) {
+			let node = match state.fn_map.get(&*func.name) {
 				Some(func) => func,
 				None => panic!("could not find function {}", func.name),
 			};
@@ -56,7 +61,41 @@ fn i_as_u(what: i32) -> u32 {
 	unsafe { std::mem::transmute::<i32, u32>(what) }
 }
 
-fn expression_to_push(expr: &Expression, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
+struct LowerState<'a> {
+	fn_map: IndexMap<String, &'a ASTNode>,
+	locals: IndexMap<String, Type>, // String / Index / Type
+	strings: &'a mut Vec<String>,
+}
+impl<'a> LowerState<'a> {
+	fn new(ast: &'a AST, strings: &'a mut Vec<String>) -> Self {
+		// IndexMap maintains indices of fns
+		let mut fn_map = IndexMap::new();
+		// Add all functions to the map
+		for node in ast.iter() {
+			let name = match node {
+				ASTNode::Fn(func) => func.signature.name.clone(),
+				ASTNode::ExternFn(_) => continue,
+			};
+			fn_map.insert(name, node);
+		}
+		// In order to keep numbers consistent, we keep externs after interns at all times
+		for node in ast.iter() {
+			let name = match node {
+				ASTNode::Fn(_) => continue,
+				ASTNode::ExternFn(func) => func.signature.name.clone(),
+			};
+			fn_map.insert(name, node);
+		}
+		Self {
+			fn_map,
+			locals: IndexMap::new(),
+			strings: strings,
+		}
+	}
+}
+
+fn expression_to_push(state: &mut LowerState, expr: &Expression) -> Vec<llr::Instruction> {
+	let LowerState { strings, .. } = state;
 	match expr {
 		Expression::Literal(Literal::String(string)) => {
 			strings.push(string.to_string());
@@ -66,14 +105,21 @@ fn expression_to_push(expr: &Expression, fn_map: &IndexMap<String, &ASTNode>, st
 			vec![llr::Instruction::Push32(i_as_u(*int))]
 		},
 		// fn call leaves result on the stack which is exactly what we need
-		Expression::FnCall(call) => lower_fn_call(call, fn_map, strings, false),
-		Expression::Identifier(_) => unimplemented!(),
+		Expression::FnCall(call) => lower_fn_call(state, call, false),
+		Expression::Identifier(var) => {
+			let mut insts = vec![];
+			match state.locals.get_full(&var.name) {
+				Some((i,_,_)) => insts.push(llr::Instruction::Dup(i as u8)),
+				None => panic!("unknown local variable {}", var.name),
+			}
+			insts
+		},
 		Expression::Binary(expr) => {
 			match expr.op {
 				BinaryOp::Equals => {
 					let mut insts = vec![];
-					insts.append(&mut expression_to_push(&expr.left, fn_map, strings));
-					insts.append(&mut expression_to_push(&expr.right, fn_map, strings));
+					insts.append(&mut expression_to_push(state, &expr.left));
+					insts.append(&mut expression_to_push(state, &expr.right));
 					insts.push(llr::Instruction::Equals);
 					insts
 				},
@@ -82,16 +128,17 @@ fn expression_to_push(expr: &Expression, fn_map: &IndexMap<String, &ASTNode>, st
 	}
 }
 
-fn lower_fn_call(call: &FnCall, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<String>, is_statement: bool) -> Vec<llr::Instruction> {
-	let (index, node) = match fn_map.get_full(&*call.name) {
+fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> Vec<llr::Instruction> {
+	let (index, node) = match state.fn_map.get_full(&*call.name) {
 		Some((i, _, func)) => (i, func),
 		None => panic!("could not find function {}", call.name),
 	};
 	// Typecheck
 	// Sig needed for later op
+	let is_extern;
 	let signature = match node {
-		ASTNode::Fn(f) => &f.signature,
-		ASTNode::ExternFn(f) => &f.signature,
+		ASTNode::Fn(f) => { is_extern = false; &f.signature },
+		ASTNode::ExternFn(f) => { is_extern = true; &f.signature },
 	};
 	let params = &signature.parameters;
 	assert_eq!(call.arguments.len(), params.len(),
@@ -101,13 +148,13 @@ fn lower_fn_call(call: &FnCall, fn_map: &IndexMap<String, &ASTNode>, strings: &m
 	// Typecheck all arguments calls with their found IDs
 	for (i, arg) in call.arguments.iter().enumerate() {
 		let param = &params[i];
-		let given_type = expression_type(arg, fn_map);
+		let given_type = expression_type(state, arg);
 		if types_match(given_type, param.id_type) == Some(false) {
 			panic!("expected type {:?} but got {:?}", param.id_type, given_type);
 		}
 		// Otherwise our types are just fine
 		// Now we just have to evaluate it
-		let mut push = expression_to_push(arg, fn_map, strings);
+		let mut push = expression_to_push(state, arg);
 		instructions.append(&mut push);
 	}
 	// Generate lowered call
@@ -115,9 +162,9 @@ fn lower_fn_call(call: &FnCall, fn_map: &IndexMap<String, &ASTNode>, strings: &m
 		index,
 		arg_count: call.arguments.len() as u8,
 	};
-	let call = match node {
-		ASTNode::Fn(_) => llr::Instruction::FnCall(fn_call),
-		ASTNode::ExternFn(_) => llr::Instruction::ExternFnCall(fn_call),
+	let call = match is_extern {
+		false => llr::Instruction::FnCall(fn_call),
+		true => llr::Instruction::ExternFnCall(fn_call),
 	};
 	instructions.push(call);
 	if is_statement {
@@ -134,31 +181,41 @@ fn lower_fn_call(call: &FnCall, fn_map: &IndexMap<String, &ASTNode>, strings: &m
 	instructions
 }
 
-fn lower_return(expr: &Option<Expression>, fn_map: &IndexMap<String, &ASTNode>, expected_return: Option<Type>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
+fn lower_return(state: &mut LowerState, expr: &Option<Expression>, signature: &Signature) -> Vec<llr::Instruction> {
 	// Typecheck return value
 	// None == None -> return == void
-	assert_eq!(expr.as_ref().map(|x| expression_type(x, fn_map)), expected_return);
+	assert_eq!(expr.as_ref().map(|x| expression_type(state, x)), signature.return_type);
 	let mut insts = vec![];
+	// TODO: YOU HAVE TO REMOVE THIS BLOCK after you add identifiers
+	// This pops every parameter. Once we can use identifiers (params are IDs)
+	// we'll ONLY want to pop "unused identifiers"
+	// Correction: actually we're cheating and using Dup to make locals
+	// without rearranging a DAG
+	// So the real TODO is to optimize locals/the stack together
+	for _param in &signature.parameters {
+		// TODO: Don't assume params are 32s
+		insts.push(llr::Instruction::Pop32);
+	}
 	if let Some(expr) = expr {
-		insts.append(&mut expression_to_push(&expr, fn_map, strings));
+		insts.append(&mut expression_to_push(state, &expr));
 	}
 	insts.push(llr::Instruction::Return);
 	insts
 }
 
-fn lower_statement(statement: &Statement, fn_map: &IndexMap<String, &ASTNode>, func_return_type: Option<Type>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
+fn lower_statement(state: &mut LowerState, statement: &Statement, signature: &Signature) -> Vec<llr::Instruction> {
 	match statement {
 		Statement::FnCall(call) => {
-			lower_fn_call(call, fn_map, strings, true)
+			lower_fn_call(state, call, true)
 		}
 		Statement::Return(expr) => {
-			lower_return(expr, fn_map, func_return_type, strings)
+			lower_return(state, expr, signature)
 		}
 		Statement::If(if_stmt) => {
-			let mut push_condition = expression_to_push(&if_stmt.condition, fn_map, strings);
+			let mut push_condition = expression_to_push(state, &if_stmt.condition);
 			let mut block = vec![];
 			for statement in &if_stmt.statements {
-				block.append(&mut lower_statement(statement, fn_map, func_return_type, strings))
+				block.append(&mut lower_statement(state, statement, signature))
 			}
 			let mut lowered = vec![];
 			lowered.append(&mut push_condition);
@@ -170,31 +227,23 @@ fn lower_statement(statement: &Statement, fn_map: &IndexMap<String, &ASTNode>, f
 }
 
 /// requires mutable reference to llr's strings so strings that come up can be added
-fn lower_statements(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
+fn lower_statements(state: &mut LowerState, func: &Fn) -> Vec<llr::Instruction> {
+	// We can't keep track of the stack perfectly, but we can assume
+	// the stack is clean and then look at what we expect to be there
+	//let mut locals = IndexMap::new();
 	let mut instructions = Vec::<llr::Instruction>::new();
-	// TODO: YOU HAVE TO REMOVE THIS BLOCK after you add identifiers
-	// This pops every parameter. Once we can use identifiers (params are IDs)
-	// we'll ONLY want to pop "unused identifiers"
-	for _param in &func.signature.parameters {
-		// TODO: Don't assume params are 32s
-		instructions.push(llr::Instruction::Pop32);
-	}
 	// Lower every statement
 	for statement in func.statements.iter() {
-		instructions.append(&mut lower_statement(statement, fn_map, func.signature.return_type, strings));
+		instructions.append(&mut lower_statement(state, statement, &func.signature));
 	}
+	let last_statement_return = instructions.last() == Some(&llr::Instruction::Return);
 	// Add implied returns
-	match instructions.last() {
-		// If the final command was a proper return, no need to clean it up
-		Some(&llr::Instruction::Return) => (),
+	// If the final command was a proper return, no need to clean it up
+	if !last_statement_return {
 		// If the function is empty or didn't end in return we need to add one
-		_ => if func.signature.return_type == None {
-			// We can add the implicit void return
-			instructions.append(&mut lower_return(&None, fn_map, None, strings));
-		} else {
-			// We can't add an implicit return because () != the function type
-			panic!("function with type may not return");
-		}
+		// We can add the implicit void return but not implicit typed return
+		// However the error will be handlede properly by lower_return by passing the signature
+		instructions.append(&mut lower_return(state, &None, &func.signature));
 	}
 	instructions
 }
@@ -212,38 +261,26 @@ fn lower_signature(signature: &Signature) -> llr::Signature {
 	}
 }
 
-fn lower_fn(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<String>) -> llr::Fn {
+fn lower_fn(state: &mut LowerState, func: &Fn) -> llr::Fn {
+	for param in &func.signature.parameters {
+		state.locals.insert(param.name.clone(), param.id_type);
+	}
 	llr::Fn {
-		instructions: lower_statements(func, fn_map, strings),
+		instructions: lower_statements(state, func),
 		signature: lower_signature(&func.signature),
 	}
 }
 
 pub fn lower(ast: AST) -> llr::LLR {
 	let mut out = llr::LLR::new();
-	// IndexMap maintains indices of fns
-	let mut fn_map = IndexMap::new();
-	// Add all functions to the map
-	for node in ast.iter() {
-		let name = match node {
-			ASTNode::Fn(func) => func.signature.name.clone(),
-			ASTNode::ExternFn(_) => continue,
-		};
-		fn_map.insert(name, node);
-	}
-	// In order to keep numbers consistent, we keep externs after interns at all times
-	for node in ast.iter() {
-		let name = match node {
-			ASTNode::Fn(_) => continue,
-			ASTNode::ExternFn(func) => func.signature.name.clone(),
-		};
-		fn_map.insert(name, node);
-	}
 	// Find all function calls and set their ID to the map's id
 	for node in ast.iter() {
 		match node {
 			ASTNode::Fn(func) => {
-				let out_f = lower_fn(&func, &fn_map, &mut out.strings);
+				// We generate state for each function to keep locals scoped
+				// This might be cleaner if we used a real scoping system
+				let mut state = LowerState::new(&ast, &mut out.strings);
+				let out_f = lower_fn(&mut state, &func);
 				out.fns.push(out_f);
 			},
 			ASTNode::ExternFn(func) => {
@@ -273,7 +310,6 @@ mod test {
 		// by the callee
 		let mut balance: isize = 0;
 		for func in fns {
-			println!("{:x?}", func.instructions);
 			for inst in func.instructions {
 				match inst {
 					Instruction::Push32(_) => balance += 8,

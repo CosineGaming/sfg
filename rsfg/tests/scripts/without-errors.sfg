@@ -6,7 +6,7 @@ fn complex_fn(thing: int, another: int) // Same-line
 	log("hello")
 
 fn strings_only(what: str) str
-	log("hi there")
+	log(what)
 	return "a literal"
 
 fn returns_string() str
