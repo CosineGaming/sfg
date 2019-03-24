@@ -67,6 +67,7 @@ pub struct BinaryExpr {
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct If {
+	pub condition: Expression,
 	pub statements: Vec<Statement>,
 }
 #[derive(PartialEq, Eq, Clone, Debug)]

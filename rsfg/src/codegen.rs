@@ -32,6 +32,7 @@ fn serialize(what: Serializable) -> u8 {
 		S::Instruction(I::FnCall(_)) => 0x36,
 		S::Instruction(I::Pop32) => 0x37,
 		S::Instruction(I::Equals) => 0x38,
+		S::Instruction(I::JumpZero(_)) => 0x39,
 	};
 	typier as u8
 }
@@ -79,6 +80,10 @@ fn gen_fn_body(function: &Fn) -> Vec<u8> {
 			FnCall(call) | ExternFnCall(call) => {
 				code.extend_from_slice(&u32_bytes(call.index as u32));
 			},
+			// u8 argument
+			JumpZero(what) => {
+				code.push(*what);
+			}
 			// As simple as serializing the instruction
 			| Return
 			| Pop32

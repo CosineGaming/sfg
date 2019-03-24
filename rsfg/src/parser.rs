@@ -219,8 +219,9 @@ fn parse_return(rtokens: &mut Tokens) -> Result<Option<Expression>> {
 
 fn parse_if(rtokens: &mut Tokens, tabs: usize) -> Result<If> {
 	rb_try!(rtokens, expect_token(rtokens, TokenType::If, "if statement"));
+	let condition = rb_try!(rtokens, parse_expression(rtokens));
 	let statements = rb_try!(rtokens, parse_indented_block(rtokens, tabs+1));
-	Ok(If { statements })
+	Ok(If { condition, statements })
 }
 
 fn parse_statement(rtokens: &mut Tokens, tabs: usize) -> Result<Statement> {
@@ -268,15 +269,19 @@ fn parse_signature(rtokens: &mut Tokens) -> Result<Signature> {
 fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Result<Vec<Statement>> {
 	let mut statements = vec![];
 	loop {
-		println!("{:?}", rtokens.last().clone());
+		println!("{:?} | {}", rtokens.last().clone(), expect_tabs);
 		// Allow empty lines amongst function an indented statement
 		if let Some(Token{kind:TokenType::Newline,..}) = rtokens.last() {
 			rtokens.pop();
 			continue;
 		}
+		// This looks safe to me.... it's rb! macro but expanded out a bit
+		let saved_tokens = rtokens.clone();
 		for _ in 0..expect_tabs {
-			if let Err(_) = rb!(rtokens, expect_token(rtokens, TokenType::Tab, "indented block")) {
-				println!("returning at {:?}", rtokens.last().clone());
+			println!("expect tab");
+			if let Err(err) = expect_token(rtokens, TokenType::Tab, "indented block") {
+				println!("returning at {:?}: {}", rtokens.last().clone(), err);
+				*rtokens = saved_tokens;
 				return Ok(statements);
 			}
 		}

@@ -88,6 +88,9 @@ pub fn lex(text: &str) -> Vec<Token> {
 		lexer.col += lexer.col_begin - lexer.rchars.len();
 		// Yes, this happens *after*. The *start* of a token (col) is the *end* of all previous
 		lexer.col_begin = lexer.rchars.len();
+		// Set these now so Newline is on the right line
+		let line = lexer.line;
+		let col = lexer.col;
 		let token = match lexer.next_symbol_type() {
 			NextTokenType::EOF => {
 				// This is the end of the file, which is OK, as we are not in the middle
@@ -121,7 +124,9 @@ pub fn lex(text: &str) -> Vec<Token> {
 			}
 			NextTokenType::Space(c) => {
 				match lexer.tokens.last() {
-					Some(&Token { kind: Newline, .. }) => {
+					// Only count if we don't come after something
+					| Some(&Token { kind: Newline, .. })
+					| Some(&Token { kind: Tab, .. }) => {
 						if c == '\t' {
 							Tab
 						} else {
@@ -211,6 +216,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 			NextTokenType::Newline => {
 				lexer.line += 1;
 				lexer.col = 0;
+				lexer.col_begin = lexer.rchars.len();
 				Newline
 			},
 			NextTokenType::LParen => LParen,
@@ -236,8 +242,8 @@ pub fn lex(text: &str) -> Vec<Token> {
 		};
 		lexer.tokens.push(Token {
 			             kind: token.clone(),
-			             line: lexer.line,
-			             col: lexer.col as usize,
+			             line: line,
+			             col: col,
 			             });
 	}
 	lexer.tokens
@@ -245,10 +251,11 @@ pub fn lex(text: &str) -> Vec<Token> {
 
 #[cfg(test)]
 mod test {
+	use super::lex;
+	use super::TokenType::*;
+	use super::Token;
 	#[test]
 	fn hello_world() {
-		use super::lex;
-		use super::TokenType::*;
 		use super::TokenType;
 		let lexed = lex(r#"fn main() // hello world
 	log("hi")"#);
@@ -271,9 +278,6 @@ mod test {
 	}
 	#[test]
 	fn digit() {
-		use super::lex;
-		use super::TokenType::*;
-		use super::Token;
 		let lexed = lex(r#"578 980"#);
 		assert_eq!(lexed, vec![
 			Token {
@@ -286,5 +290,27 @@ mod test {
 				line: 0,
 				col: 4,
 			}]);
+	}
+	#[test]
+	fn multitabs() {
+		let lexed = lex("\n\t\t5");
+		assert_eq!(lexed, vec![
+	         Token {
+		         kind: Newline,
+		         line: 0, col: 0,
+	         },
+	         Token {
+		         kind: Tab,
+		         line: 1, col: 0,
+	         },
+	         Token {
+		         kind: Tab,
+		         line: 1, col: 1,
+	         },
+	         Token {
+		         kind: IntLit(5),
+		         line: 1, col: 2,
+	         },
+        ]);
 	}
 }

@@ -155,10 +155,15 @@ fn lower_statement(statement: &Statement, fn_map: &IndexMap<String, &ASTNode>, f
 			lower_return(expr, fn_map, func_return_type, strings)
 		}
 		Statement::If(if_stmt) => {
-			let mut lowered = vec![];
+			let mut push_condition = expression_to_push(&if_stmt.condition, fn_map, strings);
+			let mut block = vec![];
 			for statement in &if_stmt.statements {
-				lowered.append(&mut lower_statement(statement, fn_map, func_return_type, strings))
+				block.append(&mut lower_statement(statement, fn_map, func_return_type, strings))
 			}
+			let mut lowered = vec![];
+			lowered.append(&mut push_condition);
+			lowered.push(llr::Instruction::JumpZero(block.len() as u8));
+			lowered.append(&mut block);
 			lowered
 		}
 	}
