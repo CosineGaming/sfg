@@ -3,6 +3,7 @@
 
 use crate::{Type, ast::*, llr};
 use indexmap::IndexMap;
+use std::collections::HashMap;
 
 // As much as it pains me to require fn_map, we need it to determine type of FnCall
 fn expression_type(expr: &Expression, fn_map: &IndexMap<String, &ASTNode>) -> Type {
@@ -58,6 +59,7 @@ fn i_as_u(what: i32) -> u32 {
 
 struct LowerState<'a> {
 	fn_map: IndexMap<String, &'a ASTNode>,
+	//locals: HashMap<String, u8>,
 	strings: &'a mut Vec<String>,
 }
 impl<'a> LowerState<'a> {
@@ -82,6 +84,7 @@ impl<'a> LowerState<'a> {
 		}
 		Self {
 			fn_map,
+			//locals: HashMap::new(),
 			strings: strings,
 		}
 	}
@@ -98,8 +101,16 @@ fn expression_to_push(state: &mut LowerState, expr: &Expression) -> Vec<llr::Ins
 			vec![llr::Instruction::Push32(i_as_u(*int))]
 		},
 		// fn call leaves result on the stack which is exactly what we need
-		Expression::Identifier(_) => unimplemented!(),
 		Expression::FnCall(call) => lower_fn_call(state, call, false),
+		Expression::Identifier(var) => {
+			//let mut insts = vec![];
+			//match locals.get(&var.name) {
+				//Some(i) => insts.push(llr::Instruction::Dup(*i)),
+				//None => panic!("unknown local variable {}", var.name),
+			//}
+			//insts
+			unimplemented!();
+		},
 		Expression::Binary(expr) => {
 			match expr.op {
 				BinaryOp::Equals => {
@@ -205,6 +216,9 @@ fn lower_statement(state: &mut LowerState, statement: &Statement, func_return_ty
 
 /// requires mutable reference to llr's strings so strings that come up can be added
 fn lower_statements(state: &mut LowerState, func: &Fn) -> Vec<llr::Instruction> {
+	// We can't keep track of the stack perfectly, but we can assume
+	// the stack is clean and then look at what we expect to be there
+	//let mut locals = IndexMap::new();
 	let mut instructions = Vec::<llr::Instruction>::new();
 	// Lower every statement
 	for statement in func.statements.iter() {
@@ -213,6 +227,9 @@ fn lower_statements(state: &mut LowerState, func: &Fn) -> Vec<llr::Instruction> 
 	// TODO: YOU HAVE TO REMOVE THIS BLOCK after you add identifiers
 	// This pops every parameter. Once we can use identifiers (params are IDs)
 	// we'll ONLY want to pop "unused identifiers"
+	// Correction: actually we're cheating and using Dup to make locals
+	// without rearranging a DAG
+	// So the real TODO is to optimize locals/the stack together
 	for _param in &func.signature.parameters {
 		// TODO: Don't assume params are 32s
 		instructions.push(llr::Instruction::Pop32);
