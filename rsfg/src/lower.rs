@@ -178,12 +178,21 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> V
 	instructions
 }
 
-fn lower_return(state: &mut LowerState, expr: &Option<Expression>, expected_return: Option<Type>) -> Vec<llr::Instruction> {
-	let LowerState { fn_map, .. } = state;
+fn lower_return(state: &mut LowerState, expr: &Option<Expression>, signature: &Signature) -> Vec<llr::Instruction> {
 	// Typecheck return value
 	// None == None -> return == void
-	assert_eq!(expr.as_ref().map(|x| expression_type(x, fn_map)), expected_return);
+	assert_eq!(expr.as_ref().map(|x| expression_type(x, &state.fn_map)), signature.return_type);
 	let mut insts = vec![];
+	// TODO: YOU HAVE TO REMOVE THIS BLOCK after you add identifiers
+	// This pops every parameter. Once we can use identifiers (params are IDs)
+	// we'll ONLY want to pop "unused identifiers"
+	// Correction: actually we're cheating and using Dup to make locals
+	// without rearranging a DAG
+	// So the real TODO is to optimize locals/the stack together
+	for _param in &signature.parameters {
+		// TODO: Don't assume params are 32s
+		insts.push(llr::Instruction::Pop32);
+	}
 	if let Some(expr) = expr {
 		insts.append(&mut expression_to_push(state, &expr));
 	}
@@ -191,19 +200,19 @@ fn lower_return(state: &mut LowerState, expr: &Option<Expression>, expected_retu
 	insts
 }
 
-fn lower_statement(state: &mut LowerState, statement: &Statement, func_return_type: Option<Type>) -> Vec<llr::Instruction> {
+fn lower_statement(state: &mut LowerState, statement: &Statement, signature: &Signature) -> Vec<llr::Instruction> {
 	match statement {
 		Statement::FnCall(call) => {
 			lower_fn_call(state, call, true)
 		}
 		Statement::Return(expr) => {
-			lower_return(state, expr, func_return_type)
+			lower_return(state, expr, signature)
 		}
 		Statement::If(if_stmt) => {
 			let mut push_condition = expression_to_push(state, &if_stmt.condition);
 			let mut block = vec![];
 			for statement in &if_stmt.statements {
-				block.append(&mut lower_statement(state, statement, func_return_type))
+				block.append(&mut lower_statement(state, statement, signature))
 			}
 			let mut lowered = vec![];
 			lowered.append(&mut push_condition);
@@ -222,30 +231,17 @@ fn lower_statements(state: &mut LowerState, func: &Fn) -> Vec<llr::Instruction> 
 	let mut instructions = Vec::<llr::Instruction>::new();
 	// Lower every statement
 	for statement in func.statements.iter() {
-		instructions.append(&mut lower_statement(state, statement, func.signature.return_type));
+		instructions.append(&mut lower_statement(state, statement, &func.signature));
 	}
 	let last_statement_return = instructions.last() == Some(&llr::Instruction::Return);
-	// TODO: YOU HAVE TO REMOVE THIS BLOCK after you add identifiers
-	// This pops every parameter. Once we can use identifiers (params are IDs)
-	// we'll ONLY want to pop "unused identifiers"
-	// Correction: actually we're cheating and using Dup to make locals
-	// without rearranging a DAG
-	// So the real TODO is to optimize locals/the stack together
-	for _param in &func.signature.parameters {
-		// TODO: Don't assume params are 32s
-		instructions.push(llr::Instruction::Pop32);
-	}
+
 	// Add implied returns
 	// If the final command was a proper return, no need to clean it up
 	if !last_statement_return {
 		// If the function is empty or didn't end in return we need to add one
-		if func.signature.return_type == None {
-			// We can add the implicit void return
-			instructions.append(&mut lower_return(state, &None, None));
-		} else {
-			// We can't add an implicit return because () != the function type
-			panic!("function with type may not return");
-		}
+		// We can add the implicit void return but not implicit typed return
+		// However the error will be handlede properly by lower_return by passing the signature
+		instructions.append(&mut lower_return(state, &None, &func.signature));
 	}
 	instructions
 }
@@ -307,7 +303,6 @@ mod test {
 		// by the callee
 		let mut balance: isize = 0;
 		for func in fns {
-			println!("{:x?}", func.instructions);
 			for inst in func.instructions {
 				match inst {
 					Instruction::Push32(_) => balance += 8,

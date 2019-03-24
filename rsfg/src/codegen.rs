@@ -102,18 +102,15 @@ fn u32_bytes(word: u32) -> [u8; 4] {
 
 /// fn_headers / sep | strings / fn_bodies
 pub fn gen(tree: LLR) -> Vec<u8> {
-	println!("WARNING: codegen is incomplete!");
 	let mut code = b"bcfg".to_vec();
 	let mut fn_headers = Vec::new();
 	let mut fn_bodies = Vec::new();
 	for func in tree.fns {
-		println!("{}", func.signature.name.clone());
 		fn_headers.push(gen_fn_header(&func.signature));
 		fn_bodies.push(gen_fn_body(&func));
 	}
 	let mut extern_fn_headers = Vec::new();
 	for signature in tree.extern_fns {
-		println!("{}", signature.name);
 		extern_fn_headers.push(gen_fn_header(&signature));
 	}
 	// Calculate the beginning of the bodies
