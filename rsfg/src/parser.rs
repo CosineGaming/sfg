@@ -286,10 +286,15 @@ fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Result<Vec<
 		// This looks safe to me.... it's rb! macro but expanded out a bit
 		let saved_tokens = rtokens.clone();
 		for _ in 0..expect_tabs {
-			if let Err(err) = expect_token(rtokens, TokenType::Tab, "indented block") {
+			if let Err(_) = expect_token(rtokens, TokenType::Tab, "indented block") {
 				*rtokens = saved_tokens;
 				return Ok(statements);
 			}
+		}
+		// We have to allow a newline /again/ because sometimes there's a tab and then no statement (usually comments or long indented blocks)
+		if let Some(Token{kind:TokenType::Newline,..}) = rtokens.last() {
+			rtokens.pop();
+			continue;
 		}
 		statements.push(rb_try!(rtokens, parse_statement(rtokens, expect_tabs)));
 	}
