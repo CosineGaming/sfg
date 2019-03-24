@@ -33,6 +33,7 @@ fn serialize(what: Serializable) -> u8 {
 		S::Instruction(I::Pop32) => 0x37,
 		S::Instruction(I::Equals) => 0x38,
 		S::Instruction(I::JumpZero(_)) => 0x39,
+		S::Instruction(I::Dup(_)) => 0x3a,
 	};
 	typier as u8
 }
@@ -81,7 +82,7 @@ fn gen_fn_body(function: &Fn) -> Vec<u8> {
 				code.extend_from_slice(&u32_bytes(call.index as u32));
 			},
 			// u8 argument
-			JumpZero(what) => {
+			JumpZero(what) | Dup(what) => {
 				code.push(*what);
 			}
 			// As simple as serializing the instruction
