@@ -224,6 +224,7 @@ fn lower_statements(state: &mut LowerState, func: &Fn) -> Vec<llr::Instruction> 
 	for statement in func.statements.iter() {
 		instructions.append(&mut lower_statement(state, statement, func.signature.return_type));
 	}
+	let last_statement_return = instructions.last() == Some(&llr::Instruction::Return);
 	// TODO: YOU HAVE TO REMOVE THIS BLOCK after you add identifiers
 	// This pops every parameter. Once we can use identifiers (params are IDs)
 	// we'll ONLY want to pop "unused identifiers"
@@ -235,11 +236,10 @@ fn lower_statements(state: &mut LowerState, func: &Fn) -> Vec<llr::Instruction> 
 		instructions.push(llr::Instruction::Pop32);
 	}
 	// Add implied returns
-	match instructions.last() {
-		// If the final command was a proper return, no need to clean it up
-		Some(&llr::Instruction::Return) => (),
+	// If the final command was a proper return, no need to clean it up
+	if !last_statement_return {
 		// If the function is empty or didn't end in return we need to add one
-		_ => if func.signature.return_type == None {
+		if func.signature.return_type == None {
 			// We can add the implicit void return
 			instructions.append(&mut lower_return(state, &None, None));
 		} else {
