@@ -6,15 +6,20 @@ use indexmap::IndexMap;
 use std::collections::HashMap;
 
 // As much as it pains me to require fn_map, we need it to determine type of FnCall
-fn expression_type(expr: &Expression, fn_map: &IndexMap<String, &ASTNode>) -> Type {
+fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
 	match expr {
 		Expression::Literal(lit) => match lit {
 			Literal::String(_) => Type::Str,
 			Literal::Int(_) => Type::Int,
 		},
-		Expression::Identifier(id) => id.id_type,
+		Expression::Identifier(id) => {
+			match state.locals.get(&id.name) {
+				Some(id_type) => *id_type,
+				None => panic!("unknown local variable {}", id.name),
+			}
+		}
 		Expression::FnCall(func) => {
-			let node = match fn_map.get(&*func.name) {
+			let node = match state.fn_map.get(&*func.name) {
 				Some(func) => func,
 				None => panic!("could not find function {}", func.name),
 			};
@@ -59,7 +64,7 @@ fn i_as_u(what: i32) -> u32 {
 
 struct LowerState<'a> {
 	fn_map: IndexMap<String, &'a ASTNode>,
-	//locals: HashMap<String, u8>,
+	locals: IndexMap<String, Type>, // String / Index / Type
 	strings: &'a mut Vec<String>,
 }
 impl<'a> LowerState<'a> {
@@ -84,7 +89,7 @@ impl<'a> LowerState<'a> {
 		}
 		Self {
 			fn_map,
-			//locals: HashMap::new(),
+			locals: IndexMap::new(),
 			strings: strings,
 		}
 	}
@@ -103,13 +108,12 @@ fn expression_to_push(state: &mut LowerState, expr: &Expression) -> Vec<llr::Ins
 		// fn call leaves result on the stack which is exactly what we need
 		Expression::FnCall(call) => lower_fn_call(state, call, false),
 		Expression::Identifier(var) => {
-			//let mut insts = vec![];
-			//match locals.get(&var.name) {
-				//Some(i) => insts.push(llr::Instruction::Dup(*i)),
-				//None => panic!("unknown local variable {}", var.name),
-			//}
-			//insts
-			unimplemented!();
+			let mut insts = vec![];
+			match state.locals.get_full(&var.name) {
+				Some((i,_,_)) => insts.push(llr::Instruction::Dup(i as u8)),
+				None => panic!("unknown local variable {}", var.name),
+			}
+			insts
 		},
 		Expression::Binary(expr) => {
 			match expr.op {
@@ -145,7 +149,7 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> V
 	// Typecheck all arguments calls with their found IDs
 	for (i, arg) in call.arguments.iter().enumerate() {
 		let param = &params[i];
-		let given_type = expression_type(arg, &state.fn_map);
+		let given_type = expression_type(state, arg);
 		if types_match(given_type, param.id_type) == Some(false) {
 			panic!("expected type {:?} but got {:?}", param.id_type, given_type);
 		}
@@ -181,7 +185,7 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> V
 fn lower_return(state: &mut LowerState, expr: &Option<Expression>, signature: &Signature) -> Vec<llr::Instruction> {
 	// Typecheck return value
 	// None == None -> return == void
-	assert_eq!(expr.as_ref().map(|x| expression_type(x, &state.fn_map)), signature.return_type);
+	assert_eq!(expr.as_ref().map(|x| expression_type(state, x)), signature.return_type);
 	let mut insts = vec![];
 	// TODO: YOU HAVE TO REMOVE THIS BLOCK after you add identifiers
 	// This pops every parameter. Once we can use identifiers (params are IDs)
@@ -234,7 +238,6 @@ fn lower_statements(state: &mut LowerState, func: &Fn) -> Vec<llr::Instruction> 
 		instructions.append(&mut lower_statement(state, statement, &func.signature));
 	}
 	let last_statement_return = instructions.last() == Some(&llr::Instruction::Return);
-
 	// Add implied returns
 	// If the final command was a proper return, no need to clean it up
 	if !last_statement_return {
@@ -260,6 +263,9 @@ fn lower_signature(signature: &Signature) -> llr::Signature {
 }
 
 fn lower_fn(state: &mut LowerState, func: &Fn) -> llr::Fn {
+	for param in &func.signature.parameters {
+		state.locals.insert(param.name.clone(), param.id_type);
+	}
 	llr::Fn {
 		instructions: lower_statements(state, func),
 		signature: lower_signature(&func.signature),
@@ -268,11 +274,13 @@ fn lower_fn(state: &mut LowerState, func: &Fn) -> llr::Fn {
 
 pub fn lower(ast: AST) -> llr::LLR {
 	let mut out = llr::LLR::new();
-	let mut state = LowerState::new(&ast, &mut out.strings);
 	// Find all function calls and set their ID to the map's id
 	for node in ast.iter() {
 		match node {
 			ASTNode::Fn(func) => {
+				// We generate state for each function to keep locals scoped
+				// This might be cleaner if we used a real scoping system
+				let mut state = LowerState::new(&ast, &mut out.strings);
 				let out_f = lower_fn(&mut state, &func);
 				out.fns.push(out_f);
 			},
