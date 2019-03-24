@@ -17,7 +17,7 @@ impl std::fmt::Display for ParseError {
 			Expected(expected, got) => {
 				let expected_strings: Vec<String> = expected.iter().map(|e| format!("{:?}", e)).collect();
 				let expected_str = expected_strings.join(" or ");
-				write!(f, "expected {}, got {:?}", expected_str, got)
+				write!(f, "expected {}, got {:?} at {}:{}", expected_str, got.kind, got.line, got.col)
 			}
 			CouldNotConstruct(errs) => {
 				let error_strs: Vec<String> = errs.iter().map(|e| e.to_string()).collect();
@@ -130,7 +130,6 @@ fn parse_binary(rtokens: &mut Tokens, left: Expression) -> Result<BinaryExpr> {
 
 fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
 	// First we parse the left side of a binary expression which COULD be the whole expression
-	println!("{:?}", rtokens.last());
 	let left = match rtokens.last() {
 		Some(Token { kind: TokenType::StringLit(string), .. }) => {
 			rtokens.pop();
@@ -178,7 +177,7 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
 	rb_try!(rtokens, expect_token(rtokens, TokenType::LParen, "fn call"));
 	let mut arguments = vec![];
 	loop {
-		// TODO: is allowing commas at the beginning the worst idea ive rb_try!(rtokens, had)
+		// TODO: is allowing commas at the beginning the worst idea ive had?
 		arguments.push(match rtokens.last() {
 			Some(Token { kind: TokenType::RParen, .. }) => { rtokens.pop(); break },
 			Some(Token { kind: TokenType::Comma, .. }) => { rtokens.pop(); continue },
@@ -218,12 +217,20 @@ fn parse_return(rtokens: &mut Tokens) -> Result<Option<Expression>> {
 	})
 }
 
-fn parse_statement(rtokens: &mut Tokens) -> Result<Statement> {
+fn parse_if(rtokens: &mut Tokens, tabs: usize) -> Result<If> {
+	rb_try!(rtokens, expect_token(rtokens, TokenType::If, "if statement"));
+	let statements = rb_try!(rtokens, parse_indented_block(rtokens, tabs+1));
+	Ok(If { statements })
+}
+
+fn parse_statement(rtokens: &mut Tokens, tabs: usize) -> Result<Statement> {
 	let mut errors = vec![];
 	errors.push(rb_ok_or!(rtokens, parse_call(rtokens)
 	                     .and_then(|x| Ok(Statement::FnCall(x)))));
 	errors.push(rb_ok_or!(rtokens, parse_return(rtokens)
 	                     .and_then(|x| Ok(Statement::Return(x)))));
+	errors.push(rb_ok_or!(rtokens, parse_if(rtokens, tabs)
+	                     .and_then(|x| Ok(Statement::If(x)))));
 	Err(ParseError::CouldNotConstruct(errors))
 }
 
@@ -258,30 +265,30 @@ fn parse_signature(rtokens: &mut Tokens) -> Result<Signature> {
 	})
 }
 
+fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Result<Vec<Statement>> {
+	let mut statements = vec![];
+	loop {
+		println!("{:?}", rtokens.last().clone());
+		// Allow empty lines amongst function an indented statement
+		if let Some(Token{kind:TokenType::Newline,..}) = rtokens.last() {
+			rtokens.pop();
+			continue;
+		}
+		for _ in 0..expect_tabs {
+			if let Err(_) = rb!(rtokens, expect_token(rtokens, TokenType::Tab, "indented block")) {
+				println!("returning at {:?}", rtokens.last().clone());
+				return Ok(statements);
+			}
+		}
+		statements.push(rb_try!(rtokens, parse_statement(rtokens, expect_tabs)));
+	}
+}
+
 fn parse_fn(rtokens: &mut Tokens) -> Result<Fn> {
 	rb_try!(rtokens, expect_token(rtokens, TokenType::Fn, "fn"));
 	// Parse signature
 	let signature = rb_try!(rtokens, parse_signature(rtokens));
-	let mut statements = vec![];
-	loop {
-		let t = match rtokens.last() {
-			Some(t) => t,
-			None => return Ok(Fn {
-				signature,
-				statements,
-			})
-		};
-		match t {
-			Token { kind: TokenType::Tab, .. } => { rtokens.pop(); },
-			_ => break,
-		}
-		statements.push(rb_try!(rtokens, parse_statement(rtokens)));
-		match rtokens.pop() {
-			Some(Token { kind: TokenType::Newline, .. }) => (),
-			None => (),
-			Some(got) => return Err(ParseError::Expected(vec![TokenType::Newline], got)),
-		}
-	}
+	let statements = rb_try!(rtokens, parse_indented_block(rtokens, 1));
 	Ok(Fn {
 		signature,
 		statements,
@@ -311,6 +318,7 @@ pub fn parse(mut tokens: Vec<Token>) -> AST {
 			Some(t) => t,
 			None => break,
 		};
+		println!("at parse {:?}", t);
 		match t {
 			// Parse a function
 			Token { kind: TokenType::Fn, .. } => {
@@ -319,12 +327,11 @@ pub fn parse(mut tokens: Vec<Token>) -> AST {
 			Token { kind: TokenType::ExternFn, .. } => {
 				ast.push(ASTNode::ExternFn(parse_extern_fn(&mut rtokens).unwrap()));
 			},
-			Token { kind: TokenType::Newline, .. } => {},
+			Token { kind: TokenType::Newline, .. } => { rtokens.pop(); },
 			_ => {
 				panic!("expected Fn in global space, got {:?}", t);
 			},
 		};
-		rtokens.pop();
 	}
 	ast
 }

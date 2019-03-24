@@ -25,6 +25,7 @@ pub enum TokenType {
 	Newline,
 	LParen,
 	RParen,
+	If,
 }
 
 #[derive(PartialEq, Clone, Debug)]

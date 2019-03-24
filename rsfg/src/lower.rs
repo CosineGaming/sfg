@@ -146,6 +146,24 @@ fn lower_return(expr: &Option<Expression>, fn_map: &IndexMap<String, &ASTNode>, 
 	insts
 }
 
+fn lower_statement(statement: &Statement, fn_map: &IndexMap<String, &ASTNode>, func_return_type: Option<Type>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
+	match statement {
+		Statement::FnCall(call) => {
+			lower_fn_call(call, fn_map, strings, true)
+		}
+		Statement::Return(expr) => {
+			lower_return(expr, fn_map, func_return_type, strings)
+		}
+		Statement::If(if_stmt) => {
+			let mut lowered = vec![];
+			for statement in &if_stmt.statements {
+				lowered.append(&mut lower_statement(statement, fn_map, func_return_type, strings))
+			}
+			lowered
+		}
+	}
+}
+
 /// requires mutable reference to llr's strings so strings that come up can be added
 fn lower_statements(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mut Vec<String>) -> Vec<llr::Instruction> {
 	let mut instructions = Vec::<llr::Instruction>::new();
@@ -158,14 +176,7 @@ fn lower_statements(func: &Fn, fn_map: &IndexMap<String, &ASTNode>, strings: &mu
 	}
 	// Lower every statement
 	for statement in func.statements.iter() {
-		match statement {
-			Statement::FnCall(call) => {
-				instructions.append(&mut lower_fn_call(call, fn_map, strings, true));
-			}
-			Statement::Return(expr) => {
-				instructions.append(&mut lower_return(expr, fn_map, func.signature.return_type, strings));
-			}
-		}
+		instructions.append(&mut lower_statement(statement, fn_map, func.signature.return_type, strings));
 	}
 	// Add implied returns
 	match instructions.last() {

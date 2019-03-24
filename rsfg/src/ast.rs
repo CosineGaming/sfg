@@ -27,11 +27,12 @@ pub struct TypedId {
 	pub name: String,
 	pub id_type: Type,
 }
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Statement {
 	//pub Assignment(Assignment),
 	FnCall(FnCall),
 	Return(Option<Expression>),
+	If(If),
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Expression {
@@ -63,6 +64,10 @@ pub struct BinaryExpr {
 	pub left: Expression,
 	pub op: BinaryOp,
 	pub right: Expression,
+}
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub struct If {
+	pub statements: Vec<Statement>,
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum BinaryOp {

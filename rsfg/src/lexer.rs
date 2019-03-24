@@ -2,7 +2,7 @@
 
 use crate::{TokenType, Token};
 
-static DEBUG_LEXER: bool = true;
+static DEBUG_LEXER: bool = false;
 
 // A-Z or 0-9
 fn is_id(c: char) -> bool {
@@ -114,6 +114,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 					"int" => TokenType::Type(crate::Type::Int),
 					"str" => TokenType::Type(crate::Type::Str),
 					"return" => Return,
+					"if" => If,
 					_ => Identifier(text),
 				};
 				symbol_or_id
