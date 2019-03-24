@@ -44,6 +44,7 @@ enum Deser {
 	ExternFnHeader,
 	FnCall,
 	FnHeader,
+	JumpZero,
 	Pop32,
 	Push32,
 	Return,
@@ -71,6 +72,7 @@ fn deser(what: u8) -> Option<Deser> {
 		0x36 => Some(D::FnCall),
 		0x37 => Some(D::Pop32),
 		0x38 => Some(D::Equals),
+		0x39 => Some(D::JumpZero),
 		_ => None,
 	}
 }
@@ -249,6 +251,14 @@ impl Thread {
 				let b = self.stack.pop();
 				self.stack.push((a == b) as u32);
 			},
+			Deser::JumpZero => {
+				// TODO: i8 / jump backwards
+				let amount = next(&self.code, &mut self.ip);
+				let test = self.stack.pop().unwrap();
+				if test == 0 {
+					self.ip += amount as usize;
+				}
+			}
 			// TODO: Split deser into categories
 			_ => panic!("expected instruction, got unsupported {:x}", self.code[self.ip-1]),
 		}
