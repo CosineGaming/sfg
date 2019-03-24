@@ -7,6 +7,8 @@ use indexmap::IndexMap;
 const INIT_STACK_SIZE: usize = 50;
 /// Similarly chosen for the expected call stack size
 const INIT_CALL_STACK_SIZE: usize = 6;
+/// Prints the stack and each instruction
+const DEBUG: bool = false;
 
 #[derive(PartialEq, Debug)]
 pub struct Thread {
@@ -39,6 +41,7 @@ enum Type {
 
 #[derive(PartialEq, Eq, Debug)]
 enum Deser {
+	Dup,
 	Equals,
 	ExternFnCall,
 	ExternFnHeader,
@@ -73,6 +76,7 @@ fn deser(what: u8) -> Option<Deser> {
 		0x37 => Some(D::Pop32),
 		0x38 => Some(D::Equals),
 		0x39 => Some(D::JumpZero),
+		0x3a => Some(D::Dup),
 		_ => None,
 	}
 }
@@ -204,7 +208,6 @@ impl Thread {
 				_ => break,
 			}
 		}
-		println!("{:?}", fns);
 		Self {
 			stack: Vec::with_capacity(INIT_STACK_SIZE),
 			call_stack: Vec::with_capacity(INIT_CALL_STACK_SIZE),
@@ -259,6 +262,12 @@ impl Thread {
 					self.ip += amount as usize;
 				}
 			}
+			Deser::Dup => {
+				let count = next(&self.code, &mut self.ip) as usize;
+				// -1 because 0 means last but len() means last+1
+				let stack_elem = self.stack.get(self.stack.len()-count-1).unwrap();
+				self.stack.push(*stack_elem);
+			}
 			// TODO: Split deser into categories
 			_ => panic!("expected instruction, got unsupported {:x}", self.code[self.ip-1]),
 		}
@@ -271,7 +280,9 @@ impl Thread {
 		assert_ne!(func.ip, 0, "tried to call extern function");
 		self.ip = func.ip as usize;
 		loop {
-			println!("stack {:x?}| next {:x?}", self.stack, deser_strong(self.code[self.ip]));
+			if DEBUG {
+				println!("stack {:x?}| next {:x?}", self.stack, deser_strong(self.code[self.ip]));
+			}
 			if deser_strong(self.code[self.ip]) == Deser::Return {
 				self.ip = match self.call_stack.pop() {
 					Some(ip) => ip,

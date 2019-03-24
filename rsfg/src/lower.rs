@@ -3,7 +3,6 @@
 
 use crate::{Type, ast::*, llr};
 use indexmap::IndexMap;
-use std::collections::HashMap;
 
 // As much as it pains me to require fn_map, we need it to determine type of FnCall
 fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
