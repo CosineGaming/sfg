@@ -165,7 +165,8 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
 }
 
 fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
-	let name = match rtokens.last() {
+	let first_token = rtokens.last();
+	let name = match first_token {
 		Some(Token { kind: TokenType::Identifier(_), .. }) => match rtokens.pop() {
 			Some(Token { kind: TokenType::Identifier(name), .. }) => name,
 			_ => unreachable!(),
@@ -183,6 +184,14 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
 			Some(Token { kind: TokenType::Comma, .. }) => { rtokens.pop(); continue },
 			_ => rb_try!(rtokens, parse_expression(rtokens)),
 		});
+	}
+	// Assert has special handling because of line/col args
+	if &name[..] == "assert" {
+		if arguments.len() == 1 {
+			// Safe because we wouldn't be here without a token
+			arguments.push(Expression::Literal(Literal::Int(first_token.unwrap().line as i32)));
+			arguments.push(Expression::Literal(Literal::Int(first_token.unwrap().col as i32)));
+		}
 	}
 	Ok(FnCall {
 		name,
