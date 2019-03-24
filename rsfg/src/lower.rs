@@ -227,6 +227,14 @@ pub fn lower(ast: AST) -> llr::LLR {
 	for node in ast.iter() {
 		let name = match node {
 			ASTNode::Fn(func) => func.signature.name.clone(),
+			ASTNode::ExternFn(_) => continue,
+		};
+		fn_map.insert(name, node);
+	}
+	// In order to keep numbers consistent, we keep externs after interns at all times
+	for node in ast.iter() {
+		let name = match node {
+			ASTNode::Fn(_) => continue,
 			ASTNode::ExternFn(func) => func.signature.name.clone(),
 		};
 		fn_map.insert(name, node);
