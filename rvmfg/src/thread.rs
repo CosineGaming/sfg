@@ -8,7 +8,7 @@ const INIT_STACK_SIZE: usize = 50;
 /// Similarly chosen for the expected call stack size
 const INIT_CALL_STACK_SIZE: usize = 6;
 /// Prints the stack and each instruction
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 #[derive(PartialEq, Debug)]
 pub struct Thread {
@@ -273,6 +273,11 @@ impl Thread {
 			Deser::Panic => {
 				let col = self.stack.pop().unwrap();
 				let line = self.stack.pop().unwrap();
+				// Deallocate everything
+				self.stack.resize(0, 0);
+				self.stack.shrink_to_fit();
+				self.call_stack.resize(0, 0);
+				self.call_stack.shrink_to_fit();
 				panic!("sfg code panicked at line {}:{}", line, col);
 			}
 			// TODO: Split deser into categories

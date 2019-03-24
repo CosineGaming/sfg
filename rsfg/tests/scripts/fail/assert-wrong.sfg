@@ -1,0 +1,5 @@
+// All the main()s in fail/ should eventually panic!
+
+fn main()
+	assert(0)
+

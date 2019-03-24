@@ -109,7 +109,10 @@ fn expression_to_push(state: &mut LowerState, expr: &Expression) -> Vec<llr::Ins
 		Expression::Identifier(var) => {
 			let mut insts = vec![];
 			match state.locals.get_full(&var.name) {
-				Some((i,_,_)) => insts.push(llr::Instruction::Dup(i as u8)),
+				Some((i,_,_)) => {
+					let rindex = (state.locals.len() - i - 1) as u8;
+					insts.push(llr::Instruction::Dup(rindex));
+				}
 				None => panic!("unknown local variable {}", var.name),
 			}
 			insts

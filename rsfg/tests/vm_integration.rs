@@ -21,11 +21,16 @@ fn call_main(filename: &str) {
 	let bytecode = compile_file(filename);
 	let mut thread = Thread::new(bytecode);
 	call![thread.main()];
-	// There are some additional tests we can make on all programs
-	// By convention IN THIS TEST SUITE ONLY main() is void main(void)
-	// This allows us to assume no returns
-	// Note that there is a test in lower that checks for total push/pop balance
-	// So a problem here should indicate a VM problem
+	state_tests(&thread);
+}
+
+// There are some additional tests we can make on all programs
+// Like assert various things about the final state of the program
+// By convention IN THIS TEST SUITE ONLY main() is void main(void)
+// This allows us to assume no returns
+// Note that there is a test in lower that checks for total push/pop balance
+// So a problem here should indicate a VM problem
+fn state_tests(thread: &Thread) {
 	assert_eq!(thread.stack.len(), 0);
 	assert_eq!(thread.call_stack.len(), 0);
 }
@@ -37,8 +42,34 @@ fn test_scripts() -> std::io::Result<()> {
 		let path = entry.path();
 		if path.is_file() {
 			let pathstr = path.to_string_lossy();
-			println!("{}", pathstr);
+			println!("TESTING: {}", pathstr);
 			call_main(&pathstr);
+		}
+	}
+	Ok(())
+}
+
+#[test]
+fn test_fails() -> std::io::Result<()> {
+	use std::panic::{catch_unwind, AssertUnwindSafe};
+	for entry in std::fs::read_dir("tests/scripts/fail")? {
+		let entry = entry?;
+		let path = entry.path();
+		if path.is_file() {
+			let pathstr = path.to_string_lossy();
+			println!("TESTING (SHOULD PANIC): {}", pathstr);
+			let bytecode = compile_file(&pathstr);
+			let mut thread = Thread::new(bytecode);
+			// &mut is not UnwindSafe so we wrap it because we test
+			// that panics are expected and properly handled by the VM
+			// https://doc.rust-lang.org/beta/std/panic/trait.UnwindSafe.html
+			let mut wrapped = AssertUnwindSafe(&mut thread);
+			// These should panic. The following construction ensures that
+			// We can't use call! because it adds additional &mut already wrapped
+			let result = catch_unwind(move || wrapped.call_name("main"));
+			assert!(result.is_err());
+			// These should PASS. Thus not wrappend in catch_unwind
+			state_tests(&thread);
 		}
 	}
 	Ok(())
