@@ -47,6 +47,7 @@ enum Deser {
 	ExternFnHeader,
 	FnCall,
 	FnHeader,
+	Panic,
 	JumpZero,
 	Pop32,
 	Push32,
@@ -77,6 +78,7 @@ fn deser(what: u8) -> Option<Deser> {
 		0x38 => Some(D::Equals),
 		0x39 => Some(D::JumpZero),
 		0x3a => Some(D::Dup),
+		0x3b => Some(D::Panic),
 		_ => None,
 	}
 }
@@ -267,6 +269,11 @@ impl Thread {
 				// -1 because 0 means last but len() means last+1
 				let stack_elem = self.stack.get(self.stack.len()-count-1).unwrap();
 				self.stack.push(*stack_elem);
+			}
+			Deser::Panic => {
+				let col = self.stack.pop().unwrap();
+				let line = self.stack.pop().unwrap();
+				panic!("sfg code panicked at line {}:{}", line, col);
 			}
 			// TODO: Split deser into categories
 			_ => panic!("expected instruction, got unsupported {:x}", self.code[self.ip-1]),

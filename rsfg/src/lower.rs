@@ -128,10 +128,32 @@ fn expression_to_push(state: &mut LowerState, expr: &Expression) -> Vec<llr::Ins
 	}
 }
 
+fn lower_panic(state: &mut LowerState, call: &FnCall) -> Vec<llr::Instruction> {
+	let mut insts = vec![];
+	for arg in &call.arguments {
+		let given_type = expression_type(state, arg);
+		if types_match(given_type, Type::Int) == Some(false) {
+			panic!("expected type Int but got {:?}", given_type);
+		}
+		// TODO: storing the line/col in code rather than stack would be:
+		// 1. Simpler to compile
+		// 2. Safer (eg panic on stack overflow possible)
+		// But requires rewriting assert in Rust as well
+		// Also: this code is corrently fairly duplicated with lower_fn_call
+		let mut push = expression_to_push(state, arg);
+		insts.append(&mut push);
+	}
+	insts.push(llr::Instruction::Panic);
+	insts
+}
+
 fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> Vec<llr::Instruction> {
 	let (index, node) = match state.fn_map.get_full(&*call.name) {
 		Some((i, _, func)) => (i, func),
-		None => panic!("could not find function {}", call.name),
+		None => match &call.name[..] {
+			"panic" => return lower_panic(state, call),
+			_ => panic!("could not find function {}", call.name),
+		}
 	};
 	// Typecheck
 	// Sig needed for later op

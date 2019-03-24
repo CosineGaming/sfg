@@ -7,6 +7,7 @@ fn complex_fn(thing: int, another: int) // Same-line
 
 fn strings_only(what: str) str
 	log(what)
+	assert(8 == 8)
 	return "a literal"
 
 fn returns_string() str
