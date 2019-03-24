@@ -1,0 +1,13 @@
+// This file is written for the purpose of writing an explicit decompilation
+// integration test
+// The requirements behind this are essentially:
+// 1. short
+// 2. no std
+
+fn main()
+	if 8 == 8
+		return
+	log("hi")
+
+@fn log(what: str)
+

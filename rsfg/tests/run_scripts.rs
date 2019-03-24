@@ -1,17 +1,10 @@
 extern crate rsfg;
 use rsfg::compile;
 
-// TODO: eventually when we have an import system, lib is going to depend
-// on file operations so might as well bite the bullet
-fn get_stdlib() -> String {
-	let std_filename = "src/sfg/std.sfg";
-	std::fs::read_to_string(std_filename).expect("couldn't find std library")
-}
-
 fn compile_file(filename: &str) -> Vec<u8> {
 	let script_string = std::fs::read_to_string(filename)
 		.expect("could not load given file");
-	compile(&script_string, &get_stdlib())
+	compile(&script_string, "")
 }
 
 fn assert_hex(a: Vec<u8>, b: Vec<u8>) {
@@ -19,8 +12,8 @@ fn assert_hex(a: Vec<u8>, b: Vec<u8>) {
 }
 
 #[test]
-fn hello_world() {
-	let result = compile_file("tests/scripts/hello-world.sfg");
+fn decompile() {
+	let result = compile_file("tests/scripts/decompile.sfg");
 	assert_hex(result, vec![
 		// bcfg
 		0x62, 0x63, 0x66, 0x67,
@@ -53,6 +46,23 @@ fn hello_world() {
 		0x32,
 		// "hi\0"
 		0x68, 0x69, 0,
+		// push
+		0x30,
+		// 8
+		0x08, 0x00, 0x00, 0x00,
+		// push 8 again
+		0x30,
+		0x08, 0x00, 0x00, 0x00,
+		// equals
+		0x38,
+		// jump zero
+		0x39,
+		// by one instruction (just the return) to AFTER:
+		0x01,
+		// return
+		0x35,
+		// AFTER:
+		// call log:
 		// push string lit
 		0x30, 0x00, 0x00, 0x00,
 		// string index
@@ -65,13 +75,5 @@ fn hello_world() {
 		// Return
 		0x35,
 	]);
-}
-
-#[test]
-fn without_errors() {
-	// Basically, i just put everything i implement in this file, so it
-	// can check if it compiles without errors without having to design a
-	// rigorous test
-	compile_file("tests/scripts/without-errors.sfg");
 }
 
