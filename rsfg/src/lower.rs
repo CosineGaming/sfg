@@ -94,7 +94,8 @@ impl<'a> LowerState<'a> {
 	}
 }
 
-fn expression_to_push(state: &mut LowerState, expr: &Expression) -> Vec<llr::Instruction> {
+/// stack_plus: Parsing dup requires knowing how much extra we've added to the stack
+fn expression_to_push(state: &mut LowerState, expr: &Expression, stack_plus: u8) -> Vec<llr::Instruction> {
 	let LowerState { strings, .. } = state;
 	match expr {
 		Expression::Literal(Literal::String(string)) => {
@@ -110,7 +111,7 @@ fn expression_to_push(state: &mut LowerState, expr: &Expression) -> Vec<llr::Ins
 			let mut insts = vec![];
 			match state.locals.get_full(&var.name) {
 				Some((i,_,_)) => {
-					let rindex = (state.locals.len() - i - 1) as u8;
+					let rindex = (state.locals.len() - i - 1) as u8 + stack_plus;
 					insts.push(llr::Instruction::Dup(rindex));
 				}
 				None => panic!("unknown local variable {}", var.name),
@@ -121,8 +122,8 @@ fn expression_to_push(state: &mut LowerState, expr: &Expression) -> Vec<llr::Ins
 			match expr.op {
 				BinaryOp::Equals => {
 					let mut insts = vec![];
-					insts.append(&mut expression_to_push(state, &expr.left));
-					insts.append(&mut expression_to_push(state, &expr.right));
+					insts.append(&mut expression_to_push(state, &expr.left, 0));
+					insts.append(&mut expression_to_push(state, &expr.right, 1));
 					insts.push(llr::Instruction::Equals);
 					insts
 				},
@@ -133,7 +134,7 @@ fn expression_to_push(state: &mut LowerState, expr: &Expression) -> Vec<llr::Ins
 
 fn lower_panic(state: &mut LowerState, call: &FnCall) -> Vec<llr::Instruction> {
 	let mut insts = vec![];
-	for arg in &call.arguments {
+	for (i, arg) in call.arguments.iter().enumerate() {
 		let given_type = expression_type(state, arg);
 		if types_match(given_type, Type::Int) == Some(false) {
 			panic!("expected type Int but got {:?}", given_type);
@@ -143,7 +144,7 @@ fn lower_panic(state: &mut LowerState, call: &FnCall) -> Vec<llr::Instruction> {
 		// 2. Safer (eg panic on stack overflow possible)
 		// But requires rewriting assert in Rust as well
 		// Also: this code is corrently fairly duplicated with lower_fn_call
-		let mut push = expression_to_push(state, arg);
+		let mut push = expression_to_push(state, arg, i as u8);
 		insts.append(&mut push);
 	}
 	insts.push(llr::Instruction::Panic);
@@ -179,7 +180,8 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> V
 		}
 		// Otherwise our types are just fine
 		// Now we just have to evaluate it
-		let mut push = expression_to_push(state, arg);
+		// The number of arguments we've pushed already is i which is also stack_plus
+		let mut push = expression_to_push(state, arg, i as u8);
 		instructions.append(&mut push);
 	}
 	// Generate lowered call
@@ -211,18 +213,19 @@ fn lower_return(state: &mut LowerState, expr: &Option<Expression>, signature: &S
 	// None == None -> return == void
 	assert_eq!(expr.as_ref().map(|x| expression_type(state, x)), signature.return_type);
 	let mut insts = vec![];
+	if let Some(expr) = expr {
+		insts.append(&mut expression_to_push(state, &expr, 0));
+	}
 	// TODO: YOU HAVE TO REMOVE THIS BLOCK after you add identifiers
 	// This pops every parameter. Once we can use identifiers (params are IDs)
 	// we'll ONLY want to pop "unused identifiers"
 	// Correction: actually we're cheating and using Dup to make locals
 	// without rearranging a DAG
 	// So the real TODO is to optimize locals/the stack together
+	// TODO: when we return a value, we need to swap the return first
 	for _param in &signature.parameters {
 		// TODO: Don't assume params are 32s
 		insts.push(llr::Instruction::Pop32);
-	}
-	if let Some(expr) = expr {
-		insts.append(&mut expression_to_push(state, &expr));
 	}
 	insts.push(llr::Instruction::Return);
 	insts
@@ -237,7 +240,7 @@ fn lower_statement(state: &mut LowerState, statement: &Statement, signature: &Si
 			lower_return(state, expr, signature)
 		}
 		Statement::If(if_stmt) => {
-			let mut push_condition = expression_to_push(state, &if_stmt.condition);
+			let mut push_condition = expression_to_push(state, &if_stmt.condition, 0);
 			let mut block = vec![];
 			for statement in &if_stmt.statements {
 				block.append(&mut lower_statement(state, statement, signature))
