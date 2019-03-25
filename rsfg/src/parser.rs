@@ -117,6 +117,7 @@ fn parse_id(rtokens: &mut Tokens, type_required: bool) -> Result<TypedId> {
 fn parse_binary(rtokens: &mut Tokens, left: Expression) -> Result<BinaryExpr> {
 	let op = match rb_try!(rtokens, pop_no_eof(rtokens, "binary expr")) {
 		Token { kind: TokenType::Equals, .. } => BinaryOp::Equals,
+		Token { kind: TokenType::Plus, .. } => BinaryOp::Plus,
 		// TODO: Make Expected accept a token or vec of token
 		got => return Err(ParseError::Expected(vec![TokenType::Equals], got)),
 	};

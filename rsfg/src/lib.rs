@@ -26,6 +26,7 @@ pub enum TokenType {
 	LParen,
 	RParen,
 	If,
+	Plus,
 }
 
 #[derive(PartialEq, Clone, Debug)]

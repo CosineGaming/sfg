@@ -41,6 +41,7 @@ enum Type {
 
 #[derive(PartialEq, Eq, Debug)]
 enum Deser {
+	Add,
 	Dup,
 	Equals,
 	ExternFnCall,
@@ -79,6 +80,7 @@ fn deser(what: u8) -> Option<Deser> {
 		0x39 => Some(D::JumpZero),
 		0x3a => Some(D::Dup),
 		0x3b => Some(D::Panic),
+		0x3c => Some(D::Add),
 		_ => None,
 	}
 }
@@ -279,6 +281,11 @@ impl Thread {
 				self.call_stack.resize(0, 0);
 				self.call_stack.shrink_to_fit();
 				panic!("sfg code panicked at line {}:{}", line, col);
+			}
+			Deser::Add => {
+				let a = self.stack.pop().unwrap();
+				let b = self.stack.pop().unwrap();
+				self.stack.push(a + b);
 			}
 			// TODO: Split deser into categories
 			_ => panic!("expected instruction, got unsupported {:x}", self.code[self.ip-1]),

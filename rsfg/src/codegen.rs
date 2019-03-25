@@ -23,6 +23,7 @@ fn serialize(what: Serializable) -> u8 {
 		// Other 2x
 		S::Void => 0x21,
 		// Instructions 3x
+		// If we have to use 4x I want to do some deep thinking
 		S::Instruction(I::Push32(_)) => 0x30,
 		S::Instruction(I::ExternFnCall(_)) => 0x31,
 		S::StringLit => 0x32,
@@ -35,6 +36,7 @@ fn serialize(what: Serializable) -> u8 {
 		S::Instruction(I::JumpZero(_)) => 0x39,
 		S::Instruction(I::Dup(_)) => 0x3a,
 		S::Instruction(I::Panic) => 0x3b,
+		S::Instruction(I::Add) => 0x3c,
 	};
 	typier as u8
 }
@@ -91,6 +93,7 @@ fn gen_fn_body(function: &Fn) -> Vec<u8> {
 			| Pop32
 			| Equals
 			| Panic
+			| Add
 			=> {},
 		}
 	}

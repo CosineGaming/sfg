@@ -73,5 +73,6 @@ pub struct If {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum BinaryOp {
 	Equals,
+	Plus,
 }
 

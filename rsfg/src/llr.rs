@@ -39,6 +39,7 @@ pub enum Instruction {
 	Equals,
 	JumpZero(u8),
 	Dup(u8),
+	Add,
 	Panic,
 }
 pub type TypedVar = Type;
