@@ -74,5 +74,6 @@ pub struct If {
 pub enum BinaryOp {
 	Equals,
 	Plus,
+	Minus,
 }
 

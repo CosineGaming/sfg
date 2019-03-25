@@ -12,7 +12,7 @@ const DEBUG: bool = true;
 
 #[derive(PartialEq, Debug)]
 pub struct Thread {
-	pub stack: Vec<u32>,
+	pub stack: Vec<i32>,
 	/// The call stack is managed by the VM, containing calls only
 	/// It's kept separate as opposed to machine architectures because
 	/// the use of the data stack is made harder by combining them.
@@ -54,6 +54,7 @@ enum Deser {
 	Push32,
 	Return,
 	StringLit,
+	Sub,
 	Type(Type),
 	Void,
 }
@@ -81,6 +82,7 @@ fn deser(what: u8) -> Option<Deser> {
 		0x3a => Some(D::Dup),
 		0x3b => Some(D::Panic),
 		0x3c => Some(D::Add),
+		0x3d => Some(D::Sub),
 		_ => None,
 	}
 }
@@ -108,11 +110,13 @@ fn read_u32(code: &Vec<u8>, ip: &mut usize) -> u32 {
 	*ip += 4;
 	rv
 }
-
-fn from_u32(what: u32) -> [u8; 4] {
+fn read_i32(code: &Vec<u8>, ip: &mut usize) -> i32 {
 	use std::mem::transmute;
-	let le = what.to_le();
-	unsafe { transmute(le) }
+	let mut four: [u8; 4] = Default::default();
+	four.copy_from_slice(&code[*ip..*ip+4]);
+	let rv = i32::from_le(unsafe { transmute::<[u8; 4], i32>(four) });
+	*ip += 4;
+	rv
 }
 
 fn read_to_zero(code: &Vec<u8>, mut ip: &mut usize) -> Vec<u8> {
@@ -222,9 +226,13 @@ impl Thread {
 		}
 	}
 	fn exec_next(&mut self) {
+		// The stack is a rust Vec. rust vecs don't deallocate
+		// until asked to, so we don't have to worry about pop then
+		// push being slow. If we're worried, we can shrink_to at the
+		// end of each instruction
 		match deser_strong(next(&self.code, &mut self.ip)) {
 			Deser::Push32 => {
-				self.stack.push(read_u32(&self.code, &mut self.ip));
+				self.stack.push(read_i32(&self.code, &mut self.ip));
 			},
 			Deser::Pop32 => {
 				self.stack.pop();
@@ -256,7 +264,7 @@ impl Thread {
 			Deser::Equals => {
 				let a = self.stack.pop();
 				let b = self.stack.pop();
-				self.stack.push((a == b) as u32);
+				self.stack.push((a == b) as i32);
 			},
 			Deser::JumpZero => {
 				// TODO: i8 / jump backwards
@@ -287,12 +295,23 @@ impl Thread {
 				let b = self.stack.pop().unwrap();
 				self.stack.push(a + b);
 			}
-			// TODO: Split deser into categories
-			_ => panic!("expected instruction, got unsupported {:x}", self.code[self.ip-1]),
+			Deser::Sub => {
+				let a = self.stack.pop().unwrap();
+				let b = self.stack.pop().unwrap();
+				self.stack.push(a - b);
+			}
+			// TODO: Split deser into categories so this unreachable code won't be necessary
+			Deser::Return => panic!("return found out of function call"),
+			| got@Deser::Type(_)
+			| got@Deser::FnHeader
+			| got@Deser::ExternFnHeader
+			| got@Deser::StringLit
+			| got@Deser::Void
+			=> panic!("expected instruction, got {:?}", got),
 		}
 	}
 	pub fn push_string(&mut self, string: &String) {
-		let as_number = string as *const String as u32;
+		let as_number = string as *const String as i32;
 		self.stack.push(as_number);
 	}
 	fn call_fn(&mut self, func: Fn) {

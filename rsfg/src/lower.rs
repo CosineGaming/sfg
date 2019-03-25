@@ -35,7 +35,7 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
 			match expr.op {
 				// TODO: Use Bool type when present
 				BinaryOp::Equals => Type::Int,
-				BinaryOp::Plus => expression_type(state, &expr.left),
+				BinaryOp::Plus | BinaryOp::Minus => expression_type(state, &expr.left),
 			}
 		},
 	}
@@ -126,6 +126,7 @@ fn expression_to_push(state: &mut LowerState, expr: &Expression, stack_plus: u8)
 			insts.push(match expr.op {
 				BinaryOp::Equals => llr::Instruction::Equals,
 				BinaryOp::Plus => llr::Instruction::Add,
+				BinaryOp::Minus => llr::Instruction::Sub,
 			});
 			insts
 		},

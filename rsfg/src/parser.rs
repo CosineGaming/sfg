@@ -118,6 +118,7 @@ fn parse_binary(rtokens: &mut Tokens, left: Expression) -> Result<BinaryExpr> {
 	let op = match rb_try!(rtokens, pop_no_eof(rtokens, "binary expr")) {
 		Token { kind: TokenType::Equals, .. } => BinaryOp::Equals,
 		Token { kind: TokenType::Plus, .. } => BinaryOp::Plus,
+		Token { kind: TokenType::Minus, .. } => BinaryOp::Minus,
 		// TODO: Make Expected accept a token or vec of token
 		got => return Err(ParseError::Expected(vec![TokenType::Equals], got)),
 	};
@@ -140,6 +141,15 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
 			rtokens.pop();
 			Ok(Expression::Literal(Literal::Int(*number)))
 		},
+		// This minus, because we're parsing an expression, is part of an int literal
+		Some(Token{kind:TokenType::Minus,..}) => {
+			rtokens.pop();
+			match pop_no_eof(rtokens, "expression")? {
+				Token{kind:TokenType::IntLit(number),..} =>
+					Ok(Expression::Literal(Literal::Int(number))),
+				got => return Err(ParseError::Expected(vec![TokenType::IntLit(0)], got)),
+			}
+		}
 		Some(Token { kind: TokenType::Identifier(name), .. }) => {
 			// An identifier can start a call or just an identifier
 			// It can be a call...

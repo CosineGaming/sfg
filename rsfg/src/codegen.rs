@@ -37,6 +37,7 @@ fn serialize(what: Serializable) -> u8 {
 		S::Instruction(I::Dup(_)) => 0x3a,
 		S::Instruction(I::Panic) => 0x3b,
 		S::Instruction(I::Add) => 0x3c,
+		S::Instruction(I::Sub) => 0x3d,
 	};
 	typier as u8
 }
@@ -94,6 +95,7 @@ fn gen_fn_body(function: &Fn) -> Vec<u8> {
 			| Equals
 			| Panic
 			| Add
+			| Sub
 			=> {},
 		}
 	}

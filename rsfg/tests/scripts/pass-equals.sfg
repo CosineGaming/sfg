@@ -1,0 +1,8 @@
+// Some calling bugs only occur with multiple args
+fn callee(to_one: int, to_lit: int, to_other: int)
+	assert(to_lit == 5)
+	assert(to_one == to_other)
+
+fn main()
+	callee(2, 5, 2)
+

@@ -27,6 +27,7 @@ enum NextTokenType {
 	Comma,
 	Quote,
 	Plus,
+	Minus,
 	Unknown(char),
 }
 
@@ -73,6 +74,7 @@ impl<'src> Lexer<'src> {
 				',' => Comma,
 				'"' => Quote,
 				'+' => Plus,
+				'-' => Minus,
 				o => Unknown(o)
 			}
 		}
@@ -222,6 +224,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 				Newline
 			},
 			NextTokenType::Plus => Plus,
+			NextTokenType::Minus => Minus,
 			NextTokenType::LParen => LParen,
 			NextTokenType::RParen => RParen,
 			NextTokenType::Colon => Colon,
