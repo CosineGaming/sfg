@@ -298,7 +298,8 @@ impl Thread {
 			Deser::Sub => {
 				let a = self.stack.pop().unwrap();
 				let b = self.stack.pop().unwrap();
-				self.stack.push(a - b);
+				// The stack is placed in makes-sense order, we reverse
+				self.stack.push(b - a);
 			}
 			// TODO: Split deser into categories so this unreachable code won't be necessary
 			Deser::Return => panic!("return found out of function call"),
@@ -319,7 +320,7 @@ impl Thread {
 		self.ip = func.ip as usize;
 		loop {
 			if DEBUG {
-				println!("stack {:x?}| next {:x?}", self.stack, deser_strong(self.code[self.ip]));
+				println!("stack {:?}| next {:?}", self.stack, deser_strong(self.code[self.ip]));
 			}
 			if deser_strong(self.code[self.ip]) == Deser::Return {
 				self.ip = match self.call_stack.pop() {

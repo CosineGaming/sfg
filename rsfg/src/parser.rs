@@ -146,8 +146,8 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
 			rtokens.pop();
 			match pop_no_eof(rtokens, "expression")? {
 				Token{kind:TokenType::IntLit(number),..} =>
-					Ok(Expression::Literal(Literal::Int(number))),
-				got => return Err(ParseError::Expected(vec![TokenType::IntLit(0)], got)),
+					Ok(Expression::Literal(Literal::Int(-1 * number))),
+				got => Err(ParseError::Expected(vec![TokenType::IntLit(0)], got)),
 			}
 		}
 		Some(Token { kind: TokenType::Identifier(name), .. }) => {

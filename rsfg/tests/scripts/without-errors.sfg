@@ -1,6 +1,7 @@
 // The purpose of this is to throw everything at the compiler and make sure
 // it doesn't throw errors / infinite loops / etc
 // Note that what's in here DOES NOT guarantee correctness!
+// This "test" is mostly being retired now that we have asserts in favor of real tests
 
 fn complex_fn(thing: int, another: int) // Same-line
 	log("hello")
