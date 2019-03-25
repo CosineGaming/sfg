@@ -133,6 +133,15 @@ fn parse_binary(rtokens: &mut Tokens, left: Expression) -> Result<BinaryExpr> {
 fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
 	// First we parse the left side of a binary expression which COULD be the whole expression
 	let left = match rtokens.last() {
+		// In order to give binary operator precedence to parenthesis
+		Some(Token{kind:TokenType::LParen,..}) => {
+			rtokens.pop();
+			let res = parse_expression(rtokens);
+			match pop_no_eof(rtokens, "parenthesized expression")? {
+				Token{kind:TokenType::RParen,..} => res,
+				got => Err(ParseError::Expected(vec![TokenType::RParen], got)),
+			}
+		}
 		Some(Token { kind: TokenType::StringLit(string), .. }) => {
 			rtokens.pop();
 			Ok(Expression::Literal(Literal::String(string.clone())))
