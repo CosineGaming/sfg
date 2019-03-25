@@ -27,7 +27,7 @@ sfg language reference
 `sfg` is the name of this scripting language. The documentation for this
 language can be found in the `lang/` directory of this repository.
 
-Note that this language is **theoretical**, it has not yet been designed.
+Note that this language hasn't been fully designed.
 
 bcfg reference
 --------------
@@ -37,8 +37,8 @@ bytecode is intended to be a target of `sfg` compilation. Anyone could write a
 VM for this bytecode, or a compiler that targets it. It is designed such that
 the VM reading it may be simple. Simplicity within `bcfg` itself is not a goal.
 
-Documentation for the `bcfg` format can be found in the `bcfg/` directory of
-this repository.
+Documentation for the `bcfg` format can be found in the `bcfg/` directory
+of this repository.
 
 rsfg reference
 --------------
@@ -51,7 +51,7 @@ written in *Rust* (hence the name).
 implementation of `sfg`. The crate root is the `rsfg/` directory.
 
 Note that this application is mostly theoretical, so far supporting not much
-more than "hello world".
+more than a glorified pocket calculator.
 
 rvmfg reference
 ---------------
@@ -69,7 +69,8 @@ an assumed cost.
 `rvmfg` is included in this repository for now because it is the only known
 implementation of a VM for `bcfg`. It can be found in the `rvmfg/` directory.
 
-Note that this library is **theoretical**, it has not yet been implemented.
+`rvmfg` development is keeping pace with `rsfg`; due to its simplicity it's
+much closer to being generally useful.
 
 Non-goals
 ---------
