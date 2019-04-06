@@ -28,6 +28,7 @@ enum NextTokenType {
 	Quote,
 	Plus,
 	Minus,
+	Times,
 	Unknown(char),
 }
 
@@ -75,6 +76,7 @@ impl<'src> Lexer<'src> {
 				'"' => Quote,
 				'+' => Plus,
 				'-' => Minus,
+				'*' => Times,
 				o => Unknown(o)
 			}
 		}
@@ -186,7 +188,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 					}
 					_ => {
 						// Division
-						panic!("division operator not yet supported");
+						Divide
 					}
 				}
 			}
@@ -225,6 +227,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 			},
 			NextTokenType::Plus => Plus,
 			NextTokenType::Minus => Minus,
+			NextTokenType::Times => Times,
 			NextTokenType::LParen => LParen,
 			NextTokenType::RParen => RParen,
 			NextTokenType::Colon => Colon,

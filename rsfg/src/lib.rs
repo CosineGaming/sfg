@@ -28,6 +28,8 @@ pub enum TokenType {
 	If,
 	Plus,
 	Minus,
+	Times,
+	Divide,
 }
 
 #[derive(PartialEq, Clone, Debug)]

@@ -119,6 +119,8 @@ fn parse_binary(rtokens: &mut Tokens, left: Expression) -> Result<BinaryExpr> {
 		Token { kind: TokenType::Equals, .. } => BinaryOp::Equals,
 		Token { kind: TokenType::Plus, .. } => BinaryOp::Plus,
 		Token { kind: TokenType::Minus, .. } => BinaryOp::Minus,
+		Token { kind: TokenType::Times, .. } => BinaryOp::Times,
+		Token { kind: TokenType::Divide, .. } => BinaryOp::Divide,
 		// TODO: Make Expected accept a token or vec of token
 		got => return Err(ParseError::Expected(vec![TokenType::Equals], got)),
 	};

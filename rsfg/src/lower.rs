@@ -35,7 +35,17 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
 			match expr.op {
 				// TODO: Use Bool type when present
 				BinaryOp::Equals => Type::Int,
-				BinaryOp::Plus | BinaryOp::Minus => expression_type(state, &expr.left),
+				// Retains type of arguments
+				| BinaryOp::Plus
+				| BinaryOp::Minus
+				| BinaryOp::Times
+				| BinaryOp::Divide
+				=> {
+					let left = expression_type(state, &expr.left);
+					let right = expression_type(state, &expr.right);
+					assert_eq!(left, right, "Binary operation between different types");
+					left
+				}
 			}
 		},
 	}
@@ -121,13 +131,35 @@ fn expression_to_push(state: &mut LowerState, expr: &Expression, stack_plus: u8)
 		},
 		Expression::Binary(expr) => {
 			let mut insts = vec![];
-			insts.append(&mut expression_to_push(state, &expr.left, 0));
-			insts.append(&mut expression_to_push(state, &expr.right, 1));
-			insts.push(match expr.op {
-				BinaryOp::Equals => llr::Instruction::Equals,
-				BinaryOp::Plus => llr::Instruction::Add,
-				BinaryOp::Minus => llr::Instruction::Sub,
-			});
+			if expr.op != BinaryOp::Times {
+				insts.append(&mut expression_to_push(state, &expr.left, 0));
+				insts.append(&mut expression_to_push(state, &expr.right, 1));
+			}
+			match expr.op {
+				BinaryOp::Equals => insts.push(llr::Instruction::Equals),
+				BinaryOp::Plus => insts.push(llr::Instruction::Add),
+				BinaryOp::Minus => insts.push(llr::Instruction::Sub),
+				BinaryOp::Times => {
+					// TODO: perhaps a times instruction isn't so bad
+					// But for now:
+					// for i in range(right):
+					//     total += left
+					// Right side is counter
+					insts.append(&mut expression_to_push(state, &expr.right, 1));
+					// Start with left once
+					insts.append(&mut expression_to_push(state, &expr.left, 0));
+					let loop_begin = insts.len();
+					// Push another left (TODO: * 1 edgecase)
+					insts.append(&mut expression_to_push(state, &expr.left, 0));
+					// Add them together
+					insts.push(llr::Instruction::Add);
+					// Now for the loop, subtract from the right side
+					// By first swapping it to the top
+					insts.push(llr::Instruction::Dup(2))
+					let jump_length: i8 = loop_begin() - insts.len();
+					insts.push(llr::Instruction::JumpZero(jump_length));
+				},
+			};
 			insts
 		},
 	}

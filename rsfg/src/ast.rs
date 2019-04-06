@@ -75,5 +75,7 @@ pub enum BinaryOp {
 	Equals,
 	Plus,
 	Minus,
+	Times,
+	Divide,
 }
 
