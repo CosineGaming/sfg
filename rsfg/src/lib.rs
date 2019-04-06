@@ -26,6 +26,7 @@ pub enum TokenType {
 	LParen,
 	RParen,
 	If,
+	While,
 	Plus,
 	Minus,
 }

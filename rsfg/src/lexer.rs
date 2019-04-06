@@ -122,6 +122,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 					"str" => TokenType::Type(crate::Type::Str),
 					"return" => Return,
 					"if" => If,
+					"while" => While,
 					_ => Identifier(text),
 				};
 				symbol_or_id
