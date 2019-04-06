@@ -135,11 +135,10 @@ impl Thread {
 				self.stack.push((a == b) as i32);
 			},
 			Deser::JumpZero => {
-				// TODO: i8 / jump backwards
-				let amount = next(&self.code, &mut self.ip);
+				let amount = read_i8(&self.code, &mut self.ip);
 				let test = self.stack.pop().unwrap();
 				if test == 0 {
-					self.ip += amount as usize;
+					self.ip = (self.ip as isize + amount as isize) as usize;
 				}
 			}
 			Deser::Dup => {

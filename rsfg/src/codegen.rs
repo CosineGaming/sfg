@@ -86,9 +86,9 @@ fn gen_fn_body(function: &Fn) -> Vec<u8> {
 				code.extend_from_slice(&u32_bytes(call.index as u32));
 			},
 			// u8 argument
-			JumpZero(what) | Dup(what) => {
-				code.push(*what);
-			}
+			Dup(what) => code.push(*what),
+			// i8 argument
+			JumpZero(what) => code.push(i8_as_u8(*what)),
 			// As simple as serializing the instruction
 			| Return
 			| Pop32
@@ -105,6 +105,11 @@ fn gen_fn_body(function: &Fn) -> Vec<u8> {
 fn u32_bytes(word: u32) -> [u8; 4] {
 	use std::mem::transmute;
 	unsafe { transmute(word.to_le()) }
+}
+
+fn i8_as_u8(what: i8) -> u8 {
+	use std::mem::transmute;
+	unsafe { transmute(what) }
 }
 
 /// fn_headers / sep | strings / fn_bodies

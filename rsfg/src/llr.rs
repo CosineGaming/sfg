@@ -37,7 +37,7 @@ pub enum Instruction {
 	Pop32,
 	Return,
 	Equals,
-	JumpZero(u8),
+	JumpZero(i8),
 	Dup(u8),
 	Add,
 	Sub,

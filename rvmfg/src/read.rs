@@ -70,7 +70,7 @@ pub fn read_u32(code: &Vec<u8>, ip: &mut usize) -> u32 {
 	use std::mem::transmute;
 	let mut four: [u8; 4] = Default::default();
 	four.copy_from_slice(&code[*ip..*ip+4]);
-	let rv = u32::from_le(unsafe { transmute::<[u8; 4], u32>(four) });
+	let rv = u32::from_le(unsafe { transmute(four) });
 	*ip += 4;
 	rv
 }
@@ -78,9 +78,14 @@ pub fn read_i32(code: &Vec<u8>, ip: &mut usize) -> i32 {
 	use std::mem::transmute;
 	let mut four: [u8; 4] = Default::default();
 	four.copy_from_slice(&code[*ip..*ip+4]);
-	let rv = i32::from_le(unsafe { transmute::<[u8; 4], i32>(four) });
+	let rv = i32::from_le(unsafe { transmute(four) });
 	*ip += 4;
 	rv
+}
+pub fn read_i8(code: &Vec<u8>, ip: &mut usize) -> i8 {
+	use std::mem::transmute;
+	let as_u8 = next(code, ip);
+	unsafe { transmute(as_u8) }
 }
 
 pub fn read_to_zero(code: &Vec<u8>, mut ip: &mut usize) -> Vec<u8> {

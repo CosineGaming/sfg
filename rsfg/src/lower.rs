@@ -248,7 +248,7 @@ fn lower_statement(state: &mut LowerState, statement: &Statement, signature: &Si
 			}
 			let mut lowered = vec![];
 			lowered.append(&mut push_condition);
-			lowered.push(llr::Instruction::JumpZero(block.len() as u8));
+			lowered.push(llr::Instruction::JumpZero(block.len() as i8));
 			lowered.append(&mut block);
 			lowered
 		}
