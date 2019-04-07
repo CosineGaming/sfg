@@ -38,6 +38,7 @@ fn serialize(what: Serializable) -> u8 {
 		S::Instruction(I::Panic) => 0x3b,
 		S::Instruction(I::Add) => 0x3c,
 		S::Instruction(I::Sub) => 0x3d,
+		S::Instruction(I::Sub) => 0x3d,
 	};
 	typier as u8
 }
@@ -88,7 +89,7 @@ fn gen_fn_body(function: &Fn) -> Vec<u8> {
 			// u8 argument
 			Dup(what) => code.push(*what),
 			// i8 argument
-			JumpZero(what) => code.push(i8_as_u8(*what)),
+			JumpZero(what) => code.push(*what),
 			// As simple as serializing the instruction
 			| Return
 			| Pop32

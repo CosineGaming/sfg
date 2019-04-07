@@ -136,9 +136,12 @@ impl Thread {
 			},
 			Deser::JumpZero => {
 				let amount = read_i8(&self.code, &mut self.ip);
+				println!("{}", amount);
+				println!("{}", self.ip);
 				let test = self.stack.pop().unwrap();
 				if test == 0 {
 					self.ip = (self.ip as isize + amount as isize) as usize;
+					println!("{}", self.ip);
 				}
 			}
 			Deser::Dup => {

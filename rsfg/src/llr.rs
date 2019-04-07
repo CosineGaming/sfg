@@ -9,6 +9,8 @@
 
 use super::Type;
 
+static mut next_label: Label = 0;
+
 pub struct LLR {
 	pub fns: Vec<Fn>,
 	pub extern_fns: Vec<Signature>,
@@ -37,17 +39,24 @@ pub enum Instruction {
 	Pop32,
 	Return,
 	Equals,
-	JumpZero(i8),
+	// Difference in INSTRUCTIONS, not in bytes!
+	JumpZero(Label),
 	Dup(u8),
 	Add,
 	Sub,
 	Panic,
+	LabelMark(Label),
 }
 pub type TypedVar = Type;
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub struct FnCall {
 	pub index: NameKey,
 	pub arg_count: u8,
+}
+pub type Label = usize;
+pub fn get_label() -> Label {
+	next_label += 1;
+	next_label
 }
 
 impl LLR {
