@@ -67,6 +67,7 @@ struct LowerState<'a> {
 	fn_map: IndexMap<String, &'a ASTNode>,
 	locals: IndexMap<String, Type>, // String / Index / Type
 	strings: &'a mut Vec<String>,
+	next_label: usize,
 }
 impl<'a> LowerState<'a> {
 	fn new(ast: &'a AST, strings: &'a mut Vec<String>) -> Self {
@@ -92,21 +93,26 @@ impl<'a> LowerState<'a> {
 			fn_map,
 			locals: IndexMap::new(),
 			strings: strings,
+			next_label: 0,
 		}
+	}
+	fn get_label(&mut self) -> usize {
+		self.next_label += 1;
+		self.next_label
 	}
 }
 
 fn lower_loop(state: &mut LowerState, loop_data: &WhileLoop, parent_signature: &Signature) -> Vec<llr::Instruction> {
 	let mut insts = vec![];
-	let begin = llr::get_label();
-	let end = llr::get_label();
+	let begin = state.get_label();
+	let end = state.get_label();
 	insts.push(llr::Instruction::LabelMark(begin));
 	insts.append(&mut expression_to_push(state, &loop_data.condition, 0));
+	insts.push(llr::Instruction::JumpZero(end));
+	insts.append(&mut lower_statements(state, &loop_data.statements, parent_signature));
 	// Jump back to conditional, regardless
 	// Lacking a Jump command, we push zero and then JumpZero
 	insts.push(llr::Instruction::Push32(0));
-	insts.push(llr::Instruction::JumpZero(end));
-	insts.append(&mut lower_statements(state, &loop_data.statements, parent_signature));
 	insts.push(llr::Instruction::JumpZero(begin));
 	insts.push(llr::Instruction::LabelMark(end));
 	insts
@@ -262,7 +268,7 @@ fn lower_statement(state: &mut LowerState, statement: &Statement, signature: &Si
 			let mut block = lower_statements(state, &if_stmt.statements, signature);
 			let mut lowered = vec![];
 			lowered.append(&mut push_condition);
-			let end = llr::get_label();
+			let end = state.get_label();
 			lowered.push(llr::Instruction::JumpZero(end));
 			lowered.append(&mut block);
 			lowered.push(llr::Instruction::LabelMark(end));

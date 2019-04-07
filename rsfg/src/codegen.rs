@@ -1,5 +1,7 @@
 use crate::{Type, llr::*};
 
+static DEBUG: bool = true;
+
 enum Serializable {
 	Type(Type),
 	Instruction(Instruction),
@@ -8,6 +10,7 @@ enum Serializable {
 	StringLit,
 	FnHeader,
 	ExternFnHeader,
+	Placeholder,
 }
 fn serialize(what: Serializable) -> u8 {
 	use Type::*;
@@ -38,9 +41,37 @@ fn serialize(what: Serializable) -> u8 {
 		S::Instruction(I::Panic) => 0x3b,
 		S::Instruction(I::Add) => 0x3c,
 		S::Instruction(I::Sub) => 0x3d,
-		S::Instruction(I::Sub) => 0x3d,
+		// This should never be actually kept in the end
+		S::Placeholder => 0x50,
+		// Should never be serialized. TODO: type this better?
+		S::Instruction(I::LabelMark(_)) => panic!("tried to serialize unresolved label"),
 	};
 	typier as u8
+}
+
+type Label = usize;
+type Location = usize;
+#[derive(Default)]
+struct Labels {
+	marks: std::collections::HashMap<Label, Location>,
+	refs: Vec<(Label, Location)>,
+}
+#[derive(Default)]
+struct LabeledCode {
+	code: Vec<u8>,
+	labels: Labels,
+}
+
+fn append_labeled(base: &mut LabeledCode, mut new: LabeledCode) {
+	for (_, location) in &mut new.labels.marks {
+		*location += base.code.len();
+	}
+	for (_, location) in &mut new.labels.refs {
+		*location += base.code.len();
+	}
+	base.code.append(&mut new.code);
+	base.labels.refs.append(&mut new.labels.refs);
+	base.labels.marks.extend(new.labels.marks);
 }
 
 /// fn_header:
@@ -72,10 +103,15 @@ fn gen_fn_header(func: &Signature) -> Vec<u8> {
 	no_code_loc
 }
 
-fn gen_fn_body(function: &Fn) -> Vec<u8> {
+fn gen_fn_body(function: &Fn) -> LabeledCode {
 	let mut code = Vec::new();
+	let mut labels = Labels::default();
 	for instr in &function.instructions {
-		code.push(serialize(Serializable::Instruction(*instr)));
+		// Label marks aren't serialized at all
+		// Not sure how to do NOT so....
+		if let LabelMark(_) = instr {} else {
+			code.push(serialize(Serializable::Instruction(*instr)));
+		}
 		use Instruction::*;
 		match instr {
 			Push32(what) => {
@@ -88,8 +124,17 @@ fn gen_fn_body(function: &Fn) -> Vec<u8> {
 			},
 			// u8 argument
 			Dup(what) => code.push(*what),
-			// i8 argument
-			JumpZero(what) => code.push(*what),
+			// is label
+			LabelMark(label) => {
+				if DEBUG { println!("label marked, \"{}\" refers to {}", label, code.len()) }
+				labels.marks.insert(*label, code.len());
+			}
+			// label argument
+			JumpZero(label) => {
+				if DEBUG { println!("label referred, at {} references \"{}\"", code.len(), label) }
+				labels.refs.push((*label, code.len()));
+				code.push(serialize(Serializable::Placeholder));
+			}
 			// As simple as serializing the instruction
 			| Return
 			| Pop32
@@ -100,7 +145,24 @@ fn gen_fn_body(function: &Fn) -> Vec<u8> {
 			=> {},
 		}
 	}
-	code
+	LabeledCode {
+		code,
+		labels
+	}
+}
+
+/// Should only be called ONCE, when everything has been generated
+fn resolve_labels(labeled: &mut LabeledCode) {
+	for (label, location) in &labeled.labels.refs {
+		if DEBUG { println!("trying to look up {}", label) }
+		let refers = labeled.labels.marks.get(&label).expect("referred to non-existent label");
+		// Ensure that the ref location is in fact a placeholder byte
+		assert_eq!(labeled.code[*location],
+		          serialize(Serializable::Placeholder), "tried to write label to non-placeholder");
+		// TODO: non-relative labels as well
+		// Why do we add 1? because we've already popped location, so relative to the NEXT inst
+		labeled.code[*location] = i8_as_u8((*refers as isize - (*location + 1) as isize) as i8);
+	}
 }
 
 fn u32_bytes(word: u32) -> [u8; 4] {
@@ -115,7 +177,8 @@ fn i8_as_u8(what: i8) -> u8 {
 
 /// fn_headers / sep | strings / fn_bodies
 pub fn gen(tree: LLR) -> Vec<u8> {
-	let mut code = b"bcfg".to_vec();
+	let mut labeled = LabeledCode::default();
+	labeled.code = b"bcfg".to_vec();
 	let mut fn_headers = Vec::new();
 	let mut fn_bodies = Vec::new();
 	for func in tree.fns {
@@ -127,7 +190,7 @@ pub fn gen(tree: LLR) -> Vec<u8> {
 		extern_fn_headers.push(gen_fn_header(&signature));
 	}
 	// Calculate the beginning of the bodies
-	let mut code_loc = code.len();
+	let mut code_loc = labeled.code.len();
 	// Add the fn headers...
 	code_loc += fn_headers.iter().fold(0, |t,h| t+h.len());
 	// And the externs too....
@@ -141,25 +204,54 @@ pub fn gen(tree: LLR) -> Vec<u8> {
 	}
 	// Add the headers with the proper code locations given body sizes
 	for (mut header, body) in fn_headers.iter_mut().zip(fn_bodies.iter_mut()) {
-		code.push(serialize(Serializable::FnHeader));
+		labeled.code.push(serialize(Serializable::FnHeader));
 		header.append(&mut u32_bytes(code_loc as u32).to_vec());
-		code.append(&mut header);
-		code_loc += body.len();
+		labeled.code.append(&mut header);
+		code_loc += body.code.len();
 	}
 	// Add the extern fn headers with no bodies
 	for mut header in extern_fn_headers.iter_mut() {
-		code.push(serialize(Serializable::ExternFnHeader));
-		code.append(&mut header);
+		labeled.code.push(serialize(Serializable::ExternFnHeader));
+		labeled.code.append(&mut header);
 	}
 	for string in tree.strings {
-		code.push(serialize(Serializable::StringLit));
-		code.append(&mut string.into_bytes());
-		code.push(serialize(Serializable::Sep));
+		labeled.code.push(serialize(Serializable::StringLit));
+		labeled.code.append(&mut string.into_bytes());
+		labeled.code.push(serialize(Serializable::Sep));
 	}
 	// Actually add the bodies, after *all* the headers
-	for mut body in fn_bodies.iter_mut() {
-		code.append(&mut body);
+	for body in fn_bodies {
+		append_labeled(&mut labeled, body);
 	}
-	code
+	resolve_labels(&mut labeled);
+	labeled.code.to_vec()
+}
+
+#[cfg(test)]
+mod test {
+	#[test]
+	fn resolves_labels() {
+		use super::{resolve_labels, LabeledCode, Labels, serialize, Serializable};
+		use std::collections::HashMap;
+		// Initial:
+		// ref byte 0: Placeholder
+		// mark byte 1: 'm'
+		// Expected:
+		// ref byte 0: 0
+		// mark byte 1: 'm'
+		let mut marks = HashMap::new();
+		let label = 2;
+		marks.insert(label, 1);
+		let mut labeled = LabeledCode {
+			code: vec![serialize(Serializable::Placeholder), 'm' as u8],
+			labels: Labels {
+				marks,
+				refs: vec![(label, 0)],
+			},
+		};
+		let expected = vec![0, 'm' as u8];
+		resolve_labels(&mut labeled);
+		assert_eq!(labeled.code, expected);
+	}
 }
 

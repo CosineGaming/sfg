@@ -9,8 +9,6 @@
 
 use super::Type;
 
-static mut next_label: Label = 0;
-
 pub struct LLR {
 	pub fns: Vec<Fn>,
 	pub extern_fns: Vec<Signature>,
@@ -54,10 +52,6 @@ pub struct FnCall {
 	pub arg_count: u8,
 }
 pub type Label = usize;
-pub fn get_label() -> Label {
-	next_label += 1;
-	next_label
-}
 
 impl LLR {
 	pub fn new() -> Self {
