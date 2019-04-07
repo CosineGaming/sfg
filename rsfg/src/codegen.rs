@@ -27,14 +27,14 @@ fn serialize(what: Serializable) -> u8 {
 		S::Void => 0x21,
 		// Instructions 3x
 		// If we have to use 4x I want to do some deep thinking
-		S::Instruction(I::Push32(_)) => 0x30,
+		S::Instruction(I::Push(_)) => 0x30,
 		S::Instruction(I::ExternFnCall(_)) => 0x31,
 		S::StringLit => 0x32,
 		S::FnHeader => 0x33,
 		S::ExternFnHeader => 0x34,
 		S::Instruction(I::Return) => 0x35,
 		S::Instruction(I::FnCall(_)) => 0x36,
-		S::Instruction(I::Pop32) => 0x37,
+		S::Instruction(I::Pop) => 0x37,
 		S::Instruction(I::Equals) => 0x38,
 		S::Instruction(I::JumpZero(_)) => 0x39,
 		S::Instruction(I::Dup(_)) => 0x3a,
@@ -114,7 +114,7 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
 		}
 		use Instruction::*;
 		match instr {
-			Push32(what) => {
+			Push(what) => {
 				code.extend_from_slice(&u32_bytes(*what as u32));
 			},
 			// Besides instruction, the procedure for generating
@@ -137,7 +137,7 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
 			}
 			// As simple as serializing the instruction
 			| Return
-			| Pop32
+			| Pop
 			| Equals
 			| Panic
 			| Add

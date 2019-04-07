@@ -99,10 +99,10 @@ impl Thread {
 		// push being slow. If we're worried, we can shrink_to at the
 		// end of each instruction
 		match deser_strong(next(&self.code, &mut self.ip)) {
-			Deser::Push32 => {
+			Deser::Push => {
 				self.stack.push(read_i32(&self.code, &mut self.ip));
 			},
-			Deser::Pop32 => {
+			Deser::Pop => {
 				self.stack.pop();
 			},
 			Deser::ExternFnCall => {

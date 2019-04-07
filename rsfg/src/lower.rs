@@ -112,7 +112,7 @@ fn lower_loop(state: &mut LowerState, loop_data: &WhileLoop, parent_signature: &
 	insts.append(&mut lower_statements(state, &loop_data.statements, parent_signature));
 	// Jump back to conditional, regardless
 	// Lacking a Jump command, we push zero and then JumpZero
-	insts.push(llr::Instruction::Push32(0));
+	insts.push(llr::Instruction::Push(0));
 	insts.push(llr::Instruction::JumpZero(begin));
 	insts.push(llr::Instruction::LabelMark(end));
 	insts
@@ -124,10 +124,10 @@ fn expression_to_push(state: &mut LowerState, expr: &Expression, stack_plus: u8)
 	match expr {
 		Expression::Literal(Literal::String(string)) => {
 			strings.push(string.to_string());
-			vec![llr::Instruction::Push32((strings.len()-1) as u32)]
+			vec![llr::Instruction::Push((strings.len()-1) as u32)]
 		},
 		Expression::Literal(Literal::Int(int)) => {
-			vec![llr::Instruction::Push32(i_as_u(*int))]
+			vec![llr::Instruction::Push(i_as_u(*int))]
 		},
 		// fn call leaves result on the stack which is exactly what we need
 		Expression::FnCall(call) => lower_fn_call(state, call, false),
@@ -223,7 +223,7 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> V
 		// TODO: Support non u32 return types
 		match signature.return_type {
 			Some(rt) => match type_size(rt) {
-				32 => instructions.push(llr::Instruction::Pop32),
+				32 => instructions.push(llr::Instruction::Pop),
 				_ => panic!("non-u32 return types unsupported"),
 			},
 			None => (),
@@ -249,7 +249,7 @@ fn lower_return(state: &mut LowerState, expr: &Option<Expression>, signature: &S
 	// TODO: when we return a value, we need to swap the return first
 	for _param in &signature.parameters {
 		// TODO: Don't assume params are 32s
-		insts.push(llr::Instruction::Pop32);
+		insts.push(llr::Instruction::Pop);
 	}
 	insts.push(llr::Instruction::Return);
 	insts
@@ -369,8 +369,8 @@ mod test {
 		for func in fns {
 			for inst in func.instructions {
 				match inst {
-					Instruction::Push32(_) => balance += 8,
-					Instruction::Pop32 => balance -= 8,
+					Instruction::Push(_) => balance += 8,
+					Instruction::Pop => balance -= 8,
 					_ => (),
 				}
 			}

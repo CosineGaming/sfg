@@ -33,8 +33,8 @@ pub enum Instruction {
 	//pub Assignment(Assignment),
 	FnCall(FnCall),
 	ExternFnCall(FnCall),
-	Push32(u32),
-	Pop32,
+	Push(u32),
+	Pop,
 	Return,
 	Equals,
 	// Difference in INSTRUCTIONS, not in bytes!
