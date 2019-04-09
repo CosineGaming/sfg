@@ -82,7 +82,7 @@ struct LowerState<'a> {
 	next_label: usize,
 }
 impl<'a> LowerState<'a> {
-	fn new(ast: &'a AST, strings: &'a mut Vec<String>) -> Self {
+	fn new(ast: &'a AST, strings: &'a mut Vec<String>, next_label_global: usize) -> Self {
 		// IndexMap maintains indices of fns
 		let mut fn_map = IndexMap::new();
 		// Add all functions to the map
@@ -105,7 +105,7 @@ impl<'a> LowerState<'a> {
 			fn_map,
 			locals: IndexMap::new(),
 			strings: strings,
-			next_label: 0,
+			next_label: next_label_global,
 		}
 	}
 	fn get_label(&mut self) -> usize {
@@ -376,15 +376,18 @@ fn lower_fn(state: &mut LowerState, func: &Fn) -> llr::Fn {
 
 pub fn lower(ast: AST) -> llr::LLR {
 	let mut out = llr::LLR::new();
+	// We need to maintain globally unique state of next label
+	let mut next_label_global = 0;
 	// Find all function calls and set their ID to the map's id
 	for node in ast.iter() {
 		match node {
 			ASTNode::Fn(func) => {
 				// We generate state for each function to keep locals scoped
 				// This might be cleaner if we used a real scoping system
-				let mut state = LowerState::new(&ast, &mut out.strings);
+				let mut state = LowerState::new(&ast, &mut out.strings, next_label_global);
 				let out_f = lower_fn(&mut state, &func);
 				out.fns.push(out_f);
+				next_label_global = state.next_label;
 			},
 			ASTNode::ExternFn(func) => {
 				let out_s = lower_signature(&func.signature);
