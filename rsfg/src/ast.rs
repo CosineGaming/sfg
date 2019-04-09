@@ -29,10 +29,11 @@ pub struct TypedId {
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Statement {
-	//pub Assignment(Assignment),
+	Assignment(Assignment),
 	FnCall(FnCall),
 	Return(Option<Expression>),
 	If(If),
+	WhileLoop(WhileLoop),
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Expression {
@@ -67,6 +68,11 @@ pub struct BinaryExpr {
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct If {
+	pub condition: Expression,
+	pub statements: Vec<Statement>,
+}
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub struct WhileLoop {
 	pub condition: Expression,
 	pub statements: Vec<Statement>,
 }

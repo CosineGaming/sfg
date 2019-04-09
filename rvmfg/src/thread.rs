@@ -99,10 +99,10 @@ impl Thread {
 		// push being slow. If we're worried, we can shrink_to at the
 		// end of each instruction
 		match deser_strong(next(&self.code, &mut self.ip)) {
-			Deser::Push32 => {
+			Deser::Push => {
 				self.stack.push(read_i32(&self.code, &mut self.ip));
 			},
-			Deser::Pop32 => {
+			Deser::Pop => {
 				self.stack.pop();
 			},
 			Deser::ExternFnCall => {
@@ -135,11 +135,13 @@ impl Thread {
 				self.stack.push((a == b) as i32);
 			},
 			Deser::JumpZero => {
-				// TODO: i8 / jump backwards
-				let amount = next(&self.code, &mut self.ip);
+				let amount = read_i8(&self.code, &mut self.ip);
+				println!("{}", amount);
+				println!("{}", self.ip);
 				let test = self.stack.pop().unwrap();
 				if test == 0 {
-					self.ip += amount as usize;
+					self.ip = (self.ip as isize + amount as isize) as usize;
+					println!("{}", self.ip);
 				}
 			}
 			Deser::Dup => {
@@ -147,6 +149,15 @@ impl Thread {
 				// -1 because 0 means last but len() means last+1
 				let stack_elem = self.stack.get(self.stack.len()-count-1).unwrap();
 				self.stack.push(*stack_elem);
+			}
+			Deser::Swap => {
+				let count = next(&self.code, &mut self.ip) as usize;
+				// -1 because 0 means last but len() means last+1
+				let down_i = self.stack.len()-1-count;
+				let up_i = self.stack.len()-1;
+				let down = self.stack[down_i];
+				self.stack[down_i] = self.stack[up_i];
+				self.stack[up_i] = down;
 			}
 			Deser::Panic => {
 				let col = self.stack.pop().unwrap();

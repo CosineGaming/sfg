@@ -72,10 +72,12 @@ fn i_as_u(what: i32) -> u32 {
 	unsafe { std::mem::transmute::<i32, u32>(what) }
 }
 
+/// requires mutable reference to llr's strings so strings that come up can be added
 struct LowerState<'a> {
 	fn_map: IndexMap<String, &'a ASTNode>,
 	locals: IndexMap<String, Type>, // String / Index / Type
 	strings: &'a mut Vec<String>,
+	next_label: usize,
 }
 impl<'a> LowerState<'a> {
 	fn new(ast: &'a AST, strings: &'a mut Vec<String>) -> Self {
@@ -101,8 +103,29 @@ impl<'a> LowerState<'a> {
 			fn_map,
 			locals: IndexMap::new(),
 			strings: strings,
+			next_label: 0,
 		}
 	}
+	fn get_label(&mut self) -> usize {
+		self.next_label += 1;
+		self.next_label
+	}
+}
+
+fn lower_loop(state: &mut LowerState, loop_data: &WhileLoop, parent_signature: &Signature) -> Vec<llr::Instruction> {
+	let mut insts = vec![];
+	let begin = state.get_label();
+	let end = state.get_label();
+	insts.push(llr::Instruction::LabelMark(begin));
+	insts.append(&mut expression_to_push(state, &loop_data.condition, 0));
+	insts.push(llr::Instruction::JumpZero(end));
+	insts.append(&mut lower_statements(state, &loop_data.statements, parent_signature));
+	// Jump back to conditional, regardless
+	// Lacking a Jump command, we push zero and then JumpZero
+	insts.push(llr::Instruction::Push(0));
+	insts.push(llr::Instruction::JumpZero(begin));
+	insts.push(llr::Instruction::LabelMark(end));
+	insts
 }
 
 /// stack_plus: Parsing dup requires knowing how much extra we've added to the stack
@@ -111,22 +134,17 @@ fn expression_to_push(state: &mut LowerState, expr: &Expression, stack_plus: u8)
 	match expr {
 		Expression::Literal(Literal::String(string)) => {
 			strings.push(string.to_string());
-			vec![llr::Instruction::Push32((strings.len()-1) as u32)]
+			vec![llr::Instruction::Push((strings.len()-1) as u32)]
 		},
 		Expression::Literal(Literal::Int(int)) => {
-			vec![llr::Instruction::Push32(i_as_u(*int))]
+			vec![llr::Instruction::Push(i_as_u(*int))]
 		},
 		// fn call leaves result on the stack which is exactly what we need
 		Expression::FnCall(call) => lower_fn_call(state, call, false),
 		Expression::Identifier(var) => {
 			let mut insts = vec![];
-			match state.locals.get_full(&var.name) {
-				Some((i,_,_)) => {
-					let rindex = (state.locals.len() - i - 1) as u8 + stack_plus;
-					insts.push(llr::Instruction::Dup(rindex));
-				}
-				None => panic!("unknown local variable {}", var.name),
-			}
+			let rindex = stack_index(state, &var.name) + stack_plus;
+			insts.push(llr::Instruction::Dup(rindex));
 			insts
 		},
 		Expression::Binary(expr) => {
@@ -232,7 +250,7 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> V
 		// TODO: Support non u32 return types
 		match signature.return_type {
 			Some(rt) => match type_size(rt) {
-				32 => instructions.push(llr::Instruction::Pop32),
+				32 => instructions.push(llr::Instruction::Pop),
 				_ => panic!("non-u32 return types unsupported"),
 			},
 			None => (),
@@ -258,10 +276,17 @@ fn lower_return(state: &mut LowerState, expr: &Option<Expression>, signature: &S
 	// TODO: when we return a value, we need to swap the return first
 	for _param in &signature.parameters {
 		// TODO: Don't assume params are 32s
-		insts.push(llr::Instruction::Pop32);
+		insts.push(llr::Instruction::Pop);
 	}
 	insts.push(llr::Instruction::Return);
 	insts
+}
+
+fn stack_index(state: &mut LowerState, name: &str) -> u8 {
+	match state.locals.get_full(name) {
+		Some((i,_,_)) => (state.locals.len() - i - 1) as u8,
+		None => panic!("unknown local variable {}", name),
+	}
 }
 
 fn lower_statement(state: &mut LowerState, statement: &Statement, signature: &Signature) -> Vec<llr::Instruction> {
@@ -274,29 +299,46 @@ fn lower_statement(state: &mut LowerState, statement: &Statement, signature: &Si
 		}
 		Statement::If(if_stmt) => {
 			let mut push_condition = expression_to_push(state, &if_stmt.condition, 0);
-			let mut block = vec![];
-			for statement in &if_stmt.statements {
-				block.append(&mut lower_statement(state, statement, signature))
-			}
+			let mut block = lower_statements(state, &if_stmt.statements, signature);
 			let mut lowered = vec![];
 			lowered.append(&mut push_condition);
-			lowered.push(llr::Instruction::JumpZero(block.len() as u8));
+			let end = state.get_label();
+			lowered.push(llr::Instruction::JumpZero(end));
 			lowered.append(&mut block);
+			lowered.push(llr::Instruction::LabelMark(end));
 			lowered
+		}
+		Statement::WhileLoop(loop_data) => lower_loop(state, loop_data, signature),
+		Statement::Assignment(assign) => {
+			let mut insts = vec![];
+			// Compile rvalue first in case it depends on lvalue
+			insts.append(&mut expression_to_push(state, &assign.rvalue, 0));
+			// + 1 is to account for rvalue sitting on top
+			let rindex = stack_index(state, &assign.lvalue) + 1;
+			// Swap the old value to the top, new value is in old spot
+			insts.push(llr::Instruction::Swap(rindex));
+			// Pop old value off, never to be seen again
+			insts.push(llr::Instruction::Pop);
+			insts
 		}
 	}
 }
 
-/// requires mutable reference to llr's strings so strings that come up can be added
-fn lower_statements(state: &mut LowerState, func: &Fn) -> Vec<llr::Instruction> {
+fn lower_statements(state: &mut LowerState, statements: &Vec<Statement>, parent_signature: &Signature) -> Vec<llr::Instruction> {
+	let mut insts = vec![];
+	// Lower every statement
+	for statement in statements.iter() {
+		insts.append(&mut lower_statement(state, statement, &parent_signature));
+	}
+	insts
+}
+
+fn lower_fn_statements(state: &mut LowerState, func: &Fn) -> Vec<llr::Instruction> {
 	// We can't keep track of the stack perfectly, but we can assume
 	// the stack is clean and then look at what we expect to be there
 	//let mut locals = IndexMap::new();
 	let mut instructions = Vec::<llr::Instruction>::new();
-	// Lower every statement
-	for statement in func.statements.iter() {
-		instructions.append(&mut lower_statement(state, statement, &func.signature));
-	}
+	instructions.append(&mut lower_statements(state, &func.statements, &func.signature));
 	let last_statement_return = instructions.last() == Some(&llr::Instruction::Return);
 	// Add implied returns
 	// If the final command was a proper return, no need to clean it up
@@ -327,7 +369,7 @@ fn lower_fn(state: &mut LowerState, func: &Fn) -> llr::Fn {
 		state.locals.insert(param.name.clone(), param.id_type);
 	}
 	llr::Fn {
-		instructions: lower_statements(state, func),
+		instructions: lower_fn_statements(state, func),
 		signature: lower_signature(&func.signature),
 	}
 }
@@ -373,8 +415,8 @@ mod test {
 		for func in fns {
 			for inst in func.instructions {
 				match inst {
-					Instruction::Push32(_) => balance += 8,
-					Instruction::Pop32 => balance -= 8,
+					Instruction::Push(_) => balance += 8,
+					Instruction::Pop => balance -= 8,
 					_ => (),
 				}
 			}

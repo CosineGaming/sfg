@@ -254,6 +254,27 @@ fn parse_if(rtokens: &mut Tokens, tabs: usize) -> Result<If> {
 	let statements = rb_try!(rtokens, parse_indented_block(rtokens, tabs+1));
 	Ok(If { condition, statements })
 }
+// TODO: abstract this duplication with parse_if
+fn parse_loop(rtokens: &mut Tokens, tabs: usize) -> Result<WhileLoop> {
+	rb_try!(rtokens, expect_token(rtokens, TokenType::While, "if statement"));
+	let condition = rb_try!(rtokens, parse_expression(rtokens));
+	let statements = rb_try!(rtokens, parse_indented_block(rtokens, tabs+1));
+	Ok(WhileLoop { condition, statements })
+}
+
+fn parse_assignment(rtokens: &mut Tokens) -> Result<Assignment> {
+	let name = match rtokens.pop() {
+		Some(Token { kind: TokenType::Identifier(name), .. }) => name,
+		Some(what) => return Err(ParseError::Expected(vec![TokenType::Identifier("".to_string())], what.clone())),
+		None => return Err(ParseError::EOF("assignment".to_string())),
+	};
+	expect_token(rtokens, TokenType::Assignment, "assignment")?;
+	let rhs = parse_expression(rtokens)?;
+	Ok(Assignment {
+		lvalue: name,
+		rvalue: rhs,
+	})
+}
 
 fn parse_statement(rtokens: &mut Tokens, tabs: usize) -> Result<Statement> {
 	let mut errors = vec![];
@@ -263,6 +284,10 @@ fn parse_statement(rtokens: &mut Tokens, tabs: usize) -> Result<Statement> {
 	                     .and_then(|x| Ok(Statement::Return(x)))));
 	errors.push(rb_ok_or!(rtokens, parse_if(rtokens, tabs)
 	                     .and_then(|x| Ok(Statement::If(x)))));
+	errors.push(rb_ok_or!(rtokens, parse_loop(rtokens, tabs)
+	                     .and_then(|x| Ok(Statement::WhileLoop(x)))));
+	errors.push(rb_ok_or!(rtokens, parse_assignment(rtokens)
+	                     .and_then(|x| Ok(Statement::Assignment(x)))));
 	Err(ParseError::CouldNotConstruct(errors))
 }
 

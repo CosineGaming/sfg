@@ -20,11 +20,12 @@ pub enum Deser {
 	FnHeader,
 	Panic,
 	JumpZero,
-	Pop32,
-	Push32,
+	Pop,
+	Push,
 	Return,
 	StringLit,
 	Sub,
+	Swap,
 	Type(Type),
 	Void,
 }
@@ -39,20 +40,21 @@ pub fn deser(what: u8) -> Option<Deser> {
 		// Other 2x
 		0x21 => Some(D::Void),
 		// Instructions 3x
-		0x30 => Some(D::Push32),
+		0x30 => Some(D::Push),
 		0x31 => Some(D::ExternFnCall),
 		0x32 => Some(D::StringLit),
 		0x33 => Some(D::FnHeader),
 		0x34 => Some(D::ExternFnHeader),
 		0x35 => Some(D::Return),
 		0x36 => Some(D::FnCall),
-		0x37 => Some(D::Pop32),
+		0x37 => Some(D::Pop),
 		0x38 => Some(D::Equals),
 		0x39 => Some(D::JumpZero),
 		0x3a => Some(D::Dup),
 		0x3b => Some(D::Panic),
 		0x3c => Some(D::Add),
 		0x3d => Some(D::Sub),
+		0x3e => Some(D::Swap),
 		_ => None,
 	}
 }
@@ -70,7 +72,7 @@ pub fn read_u32(code: &Vec<u8>, ip: &mut usize) -> u32 {
 	use std::mem::transmute;
 	let mut four: [u8; 4] = Default::default();
 	four.copy_from_slice(&code[*ip..*ip+4]);
-	let rv = u32::from_le(unsafe { transmute::<[u8; 4], u32>(four) });
+	let rv = u32::from_le(unsafe { transmute(four) });
 	*ip += 4;
 	rv
 }
@@ -78,9 +80,14 @@ pub fn read_i32(code: &Vec<u8>, ip: &mut usize) -> i32 {
 	use std::mem::transmute;
 	let mut four: [u8; 4] = Default::default();
 	four.copy_from_slice(&code[*ip..*ip+4]);
-	let rv = i32::from_le(unsafe { transmute::<[u8; 4], i32>(four) });
+	let rv = i32::from_le(unsafe { transmute(four) });
 	*ip += 4;
 	rv
+}
+pub fn read_i8(code: &Vec<u8>, ip: &mut usize) -> i8 {
+	use std::mem::transmute;
+	let as_u8 = next(code, ip);
+	unsafe { transmute(as_u8) }
 }
 
 pub fn read_to_zero(code: &Vec<u8>, mut ip: &mut usize) -> Vec<u8> {

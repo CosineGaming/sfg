@@ -33,15 +33,19 @@ pub enum Instruction {
 	//pub Assignment(Assignment),
 	FnCall(FnCall),
 	ExternFnCall(FnCall),
-	Push32(u32),
-	Pop32,
+	Push(u32),
+	Pop,
+	// Swaps n down the stack with the top
+	Swap(u8),
 	Return,
 	Equals,
-	JumpZero(u8),
+	// Difference in INSTRUCTIONS, not in bytes!
+	JumpZero(Label),
 	Dup(u8),
 	Add,
 	Sub,
 	Panic,
+	LabelMark(Label),
 }
 pub type TypedVar = Type;
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -49,6 +53,7 @@ pub struct FnCall {
 	pub index: NameKey,
 	pub arg_count: u8,
 }
+pub type Label = usize;
 
 impl LLR {
 	pub fn new() -> Self {
