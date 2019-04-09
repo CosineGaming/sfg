@@ -1,0 +1,7 @@
+fn main()
+	log("hi")
+	// Say we had the following, commented out as such
+	//if 4 == 4
+		//log("yep")
+	// We want the extra tab to be handled with grace
+
