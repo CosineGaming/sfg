@@ -1,5 +1,5 @@
 fn main()
-	5 == 5
+	log("hi")
 	// Say we had the following, commented out as such
 	//if 4 == 4
 		//log("yep")
