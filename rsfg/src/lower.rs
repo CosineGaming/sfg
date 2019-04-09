@@ -158,25 +158,18 @@ fn expression_to_push(state: &mut LowerState, expr: &Expression, stack_plus: u8)
 				BinaryOp::Plus => insts.push(llr::Instruction::Add),
 				BinaryOp::Minus => insts.push(llr::Instruction::Sub),
 				BinaryOp::Times => {
-					// TODO: perhaps a times instruction isn't so bad
-					// But for now:
-					// for i in range(right):
-					//     total += left
-					// Right side is counter
-					insts.append(&mut expression_to_push(state, &expr.right, 1));
-					// Start with left once
-					insts.append(&mut expression_to_push(state, &expr.left, 0));
-					let loop_begin = insts.len();
-					// Push another left (TODO: * 1 edgecase)
-					insts.append(&mut expression_to_push(state, &expr.left, 0));
-					// Add them together
-					insts.push(llr::Instruction::Add);
-					// Now for the loop, subtract from the right side
-					// By first swapping it to the top
-					insts.push(llr::Instruction::Dup(2))
-					let jump_length: i8 = loop_begin() - insts.len();
-					insts.push(llr::Instruction::JumpZero(jump_length));
+					// Translate 4*5 to internal_times(4,5)
+					// This might be cleaner in a "sugar" / parser-side change
+					// TODO: obviously lacking Times instruction is slow af
+					// Also we could ditch the lower_fn_call and just add a FnCall
+					// instruction and then we could skip the push conditional up above
+					let call = FnCall {
+						name: "internal_times".to_string(),
+						arguments: vec![expr.left.clone(), expr.right.clone()]
+					};
+					insts.append(&mut lower_fn_call(state, &call, false))
 				},
+				BinaryOp::Divide => unimplemented!(),
 			};
 			insts
 		},

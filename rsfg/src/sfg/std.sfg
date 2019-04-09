@@ -20,5 +20,12 @@ fn assert(cond: int, line: int, col: int)
 		return
 	panic(line, col)
 
+fn internal_times(left: int, right: int) int
+	var total = 0
+	while right // != 0 implied
+		total = total + left // += unimplemented
+		right = right - 1
+	return total
+
 @fn log(what: str)
 
