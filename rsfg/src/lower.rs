@@ -242,7 +242,7 @@ fn lower_return(state: &mut LowerState, expr: &Option<Expression>, signature: &S
 	// without rearranging a DAG
 	// So the real TODO is to optimize locals/the stack together
 	// TODO: when we return a value, we need to swap the return first
-	for _param in &signature.parameters {
+	for _local in &state.locals {
 		// TODO: Don't assume params are 32s
 		insts.push(llr::Instruction::Pop);
 	}
@@ -288,6 +288,12 @@ fn lower_statement(state: &mut LowerState, statement: &Statement, signature: &Si
 			// Pop old value off, never to be seen again
 			insts.push(llr::Instruction::Pop);
 			insts
+		}
+		Statement::Declaration(decl) => {
+			// Declaration is just a push where we change locals
+			let rvalue_type = expression_type(state, &decl.rvalue);
+			state.locals.insert(decl.lvalue.clone(), rvalue_type);
+			expression_to_push(state, &decl.rvalue, 0)
 		}
 	}
 }
