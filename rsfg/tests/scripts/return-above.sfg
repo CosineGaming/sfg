@@ -1,0 +1,11 @@
+/// We test where we have stack [5, 6] and want to return 5
+
+fn main()
+	// Main can't return but must test return
+	assert(callee() == 5)
+
+fn callee() int
+	var not_to_return = 6
+	var to_return = 5
+	return to_return
+
