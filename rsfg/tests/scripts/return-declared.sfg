@@ -1,0 +1,8 @@
+fn main()
+	assert(return_declared() == 5)
+
+// This was a regression where return would not pop enough
+fn return_declared() int
+	var x = 5
+	return x
+

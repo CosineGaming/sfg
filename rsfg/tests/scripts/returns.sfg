@@ -1,0 +1,6 @@
+fn main()
+	assert(callee() == 4)
+
+fn callee() int
+	return 4
+
