@@ -121,7 +121,6 @@ fn parse_binary(rtokens: &mut Tokens, left: Expression) -> Result<BinaryExpr> {
 		Token { kind: TokenType::Minus, .. } => BinaryOp::Minus,
 		Token { kind: TokenType::Times, .. } => BinaryOp::Times,
 		Token { kind: TokenType::Divide, .. } => BinaryOp::Divide,
-		// TODO: Make Expected accept a token or vec of token
 		got => return Err(ParseError::Expected(vec![TokenType::Equals], got)),
 	};
 	let right = rb_try!(rtokens, parse_expression(rtokens));
@@ -254,7 +253,6 @@ fn parse_if(rtokens: &mut Tokens, tabs: usize) -> Result<If> {
 	let statements = rb_try!(rtokens, parse_indented_block(rtokens, tabs+1));
 	Ok(If { condition, statements })
 }
-// TODO: abstract this duplication with parse_if
 fn parse_loop(rtokens: &mut Tokens, tabs: usize) -> Result<WhileLoop> {
 	rb_try!(rtokens, expect_token(rtokens, TokenType::While, "if statement"));
 	let condition = rb_try!(rtokens, parse_expression(rtokens));

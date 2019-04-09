@@ -242,7 +242,7 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> V
 	instructions.push(call);
 	if is_statement {
 		// Return value is unused if so it needs to be popped for balance
-		// TODO: Support non u32 return types
+		// TODO: Support >32-bit returns
 		match signature.return_type {
 			Some(rt) => match type_size(rt) {
 				32 => instructions.push(llr::Instruction::Pop),
@@ -413,10 +413,6 @@ mod test {
 		let parsed = parse(lexed);
 		let lowered = lower(parsed);
 		let fns = lowered.fns;
-		// TODO: This should be a usize so it'll panic if pop EVER exceeds push
-		// However, this requires STARTING at a no-parameter function
-		// because the function calls do pushing that should be popped
-		// by the callee
 		let mut balance: isize = 0;
 		for func in fns {
 			for inst in func.instructions {
