@@ -9,6 +9,7 @@
 
 use super::Type;
 
+#[derive(PartialEq, Eq, Debug)]
 pub struct LLR {
 	pub fns: Vec<Fn>,
 	pub extern_fns: Vec<Signature>,

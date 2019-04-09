@@ -4,6 +4,8 @@
 use crate::{Type, ast::*, llr};
 use indexmap::IndexMap;
 
+static DEBUG: bool = true;
+
 // As much as it pains me to require fn_map, we need it to determine type of FnCall
 fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
 	match expr {
@@ -228,24 +230,23 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> V
 }
 
 fn lower_return(state: &mut LowerState, expr: &Option<Expression>, signature: &Signature) -> Vec<llr::Instruction> {
+	let num_locals = state.locals.len();
 	// Typecheck return value
 	// None == None -> return == void
 	assert_eq!(expr.as_ref().map(|x| expression_type(state, x)), signature.return_type);
 	let mut insts = vec![];
 	if let Some(expr) = expr {
 		insts.append(&mut expression_to_push(state, &expr, 0));
+		// We want to preserve value from coming pops by moving it to the bottom
+		insts.push(llr::Instruction::Swap(num_locals as u8))
 	}
-	// TODO: YOU HAVE TO REMOVE THIS BLOCK after you add identifiers
-	// This pops every parameter. Once we can use identifiers (params are IDs)
-	// we'll ONLY want to pop "unused identifiers"
-	// Correction: actually we're cheating and using Dup to make locals
-	// without rearranging a DAG
-	// So the real TODO is to optimize locals/the stack together
-	// TODO: when we return a value, we need to swap the return first
+	// This pops every local
+	// TODO: a proper stack machine will consume locals when last used
+	// in an expression, which would make this obsolete
 	for _local in &state.locals {
-		// TODO: Don't assume params are 32s
 		insts.push(llr::Instruction::Pop);
 	}
+	// Return only deals with the instruction pointer
 	insts.push(llr::Instruction::Return);
 	insts
 }
@@ -365,6 +366,9 @@ pub fn lower(ast: AST) -> llr::LLR {
 				out.extern_fns.push(out_s);
 			}
 		}
+	}
+	if DEBUG {
+		println!("{:#?}", out);
 	}
 	out
 }
