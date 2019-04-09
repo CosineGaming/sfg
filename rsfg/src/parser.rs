@@ -343,7 +343,26 @@ fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Result<Vec<
 				return Ok(statements);
 			}
 		}
-		// We have to allow a newline /again/ because sometimes there's a tab and then no statement (usually comments or long indented blocks)
+		// Consider the following program:
+		// fn main()
+		//     return 5
+		//     //if 5
+		//         //something else
+		// We want this commenting style to work, so we must:
+		// - allow *at least* n tabs
+		// - allow a newline again with no statement
+		// To allow n tabs:
+		if let Some(Token{kind:TokenType::Tab,..}) = rtokens.last() {
+			// If there's an extra tab, get ALL the extra tabs
+			println!("extra tab found");
+			while let Some(Token{kind:TokenType::Tab,..}) = rtokens.last() {
+				rtokens.pop();
+			}
+			// And *demand* there's no expression (otherwise it's an unexpected indent)
+			expect_token(rtokens, TokenType::Newline, "unexpected indented block")?;
+			continue;
+		}
+		// Otherwise, *allow* no expression
 		if let Some(Token{kind:TokenType::Newline,..}) = rtokens.last() {
 			rtokens.pop();
 			continue;
