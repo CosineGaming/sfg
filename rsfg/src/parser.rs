@@ -275,6 +275,11 @@ fn parse_assignment(rtokens: &mut Tokens) -> Result<Assignment> {
 		rvalue: rhs,
 	})
 }
+/// Declaration is just an assignment starting with var
+fn parse_declaration(rtokens: &mut Tokens) -> Result<Assignment> {
+	expect_token(rtokens, TokenType::Declare, "declaration")?;
+	parse_assignment(rtokens)
+}
 
 fn parse_statement(rtokens: &mut Tokens, tabs: usize) -> Result<Statement> {
 	let mut errors = vec![];
@@ -288,6 +293,8 @@ fn parse_statement(rtokens: &mut Tokens, tabs: usize) -> Result<Statement> {
 	                     .and_then(|x| Ok(Statement::WhileLoop(x)))));
 	errors.push(rb_ok_or!(rtokens, parse_assignment(rtokens)
 	                     .and_then(|x| Ok(Statement::Assignment(x)))));
+	errors.push(rb_ok_or!(rtokens, parse_declaration(rtokens)
+	                     .and_then(|x| Ok(Statement::Declaration(x)))));
 	Err(ParseError::CouldNotConstruct(errors))
 }
 

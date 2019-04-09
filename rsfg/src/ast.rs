@@ -30,6 +30,8 @@ pub struct TypedId {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Statement {
 	Assignment(Assignment),
+	/// The data in a declaration is the same as assignment
+	Declaration(Assignment),
 	FnCall(FnCall),
 	Return(Option<Expression>),
 	If(If),

@@ -27,6 +27,7 @@ pub enum TokenType {
 	RParen,
 	If,
 	While,
+	Declare,
 	Assignment,
 	Plus,
 	Minus,
