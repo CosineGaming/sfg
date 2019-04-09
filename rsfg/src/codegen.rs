@@ -41,6 +41,7 @@ fn serialize(what: Serializable) -> u8 {
 		S::Instruction(I::Panic) => 0x3b,
 		S::Instruction(I::Add) => 0x3c,
 		S::Instruction(I::Sub) => 0x3d,
+		S::Instruction(I::Swap(_)) => 0x3e,
 		// This should never be actually kept in the end
 		S::Placeholder => 0x50,
 		// Should never be serialized. TODO: type this better?
@@ -123,7 +124,7 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
 				code.extend_from_slice(&u32_bytes(call.index as u32));
 			},
 			// u8 argument
-			Dup(what) => code.push(*what),
+			Dup(what) | Swap(what) => code.push(*what),
 			// is label
 			LabelMark(label) => {
 				if DEBUG { println!("label marked, \"{}\" refers to {}", label, code.len()) }

@@ -1,0 +1,9 @@
+fn main()
+	declare_proxy(5)
+
+// Because we don't have `let` / declare yet, we use function call,
+// which does the same thing
+fn declare_proxy(assign_to: int)
+	assign_to = 6
+	assert(assign_to == 6)
+

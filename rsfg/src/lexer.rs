@@ -215,7 +215,7 @@ pub fn lex(text: &str) -> Vec<Token> {
 			NextTokenType::AssignmentOrEquals => {
 				match lexer.rchars.last() {
 					Some('=') => { lexer.rchars.pop(); Equals },
-					_ => unimplemented!(),//Assignment,
+					_ => Assignment,
 				}
 			},
 			NextTokenType::Newline => {

@@ -35,6 +35,8 @@ pub enum Instruction {
 	ExternFnCall(FnCall),
 	Push(u32),
 	Pop,
+	// Swaps n down the stack with the top
+	Swap(u8),
 	Return,
 	Equals,
 	// Difference in INSTRUCTIONS, not in bytes!

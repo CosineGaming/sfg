@@ -133,13 +133,8 @@ fn expression_to_push(state: &mut LowerState, expr: &Expression, stack_plus: u8)
 		Expression::FnCall(call) => lower_fn_call(state, call, false),
 		Expression::Identifier(var) => {
 			let mut insts = vec![];
-			match state.locals.get_full(&var.name) {
-				Some((i,_,_)) => {
-					let rindex = (state.locals.len() - i - 1) as u8 + stack_plus;
-					insts.push(llr::Instruction::Dup(rindex));
-				}
-				None => panic!("unknown local variable {}", var.name),
-			}
+			let rindex = stack_index(state, &var.name) + stack_plus;
+			insts.push(llr::Instruction::Dup(rindex));
 			insts
 		},
 		Expression::Binary(expr) => {
@@ -255,6 +250,13 @@ fn lower_return(state: &mut LowerState, expr: &Option<Expression>, signature: &S
 	insts
 }
 
+fn stack_index(state: &mut LowerState, name: &str) -> u8 {
+	match state.locals.get_full(name) {
+		Some((i,_,_)) => (state.locals.len() - i - 1) as u8,
+		None => panic!("unknown local variable {}", name),
+	}
+}
+
 fn lower_statement(state: &mut LowerState, statement: &Statement, signature: &Signature) -> Vec<llr::Instruction> {
 	match statement {
 		Statement::FnCall(call) => {
@@ -275,6 +277,18 @@ fn lower_statement(state: &mut LowerState, statement: &Statement, signature: &Si
 			lowered
 		}
 		Statement::WhileLoop(loop_data) => lower_loop(state, loop_data, signature),
+		Statement::Assignment(assign) => {
+			let mut insts = vec![];
+			// Compile rvalue first in case it depends on lvalue
+			insts.append(&mut expression_to_push(state, &assign.rvalue, 0));
+			// + 1 is to account for rvalue sitting on top
+			let rindex = stack_index(state, &assign.lvalue) + 1;
+			// Swap the old value to the top, new value is in old spot
+			insts.push(llr::Instruction::Swap(rindex));
+			// Pop old value off, never to be seen again
+			insts.push(llr::Instruction::Pop);
+			insts
+		}
 	}
 }
 

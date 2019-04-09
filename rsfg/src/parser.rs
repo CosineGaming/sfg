@@ -260,6 +260,20 @@ fn parse_loop(rtokens: &mut Tokens, tabs: usize) -> Result<WhileLoop> {
 	Ok(WhileLoop { condition, statements })
 }
 
+fn parse_assignment(rtokens: &mut Tokens) -> Result<Assignment> {
+	let name = match rtokens.pop() {
+		Some(Token { kind: TokenType::Identifier(name), .. }) => name,
+		Some(what) => return Err(ParseError::Expected(vec![TokenType::Identifier("".to_string())], what.clone())),
+		None => return Err(ParseError::EOF("assignment".to_string())),
+	};
+	expect_token(rtokens, TokenType::Assignment, "assignment")?;
+	let rhs = parse_expression(rtokens)?;
+	Ok(Assignment {
+		lvalue: name,
+		rvalue: rhs,
+	})
+}
+
 fn parse_statement(rtokens: &mut Tokens, tabs: usize) -> Result<Statement> {
 	let mut errors = vec![];
 	errors.push(rb_ok_or!(rtokens, parse_call(rtokens)
@@ -270,6 +284,8 @@ fn parse_statement(rtokens: &mut Tokens, tabs: usize) -> Result<Statement> {
 	                     .and_then(|x| Ok(Statement::If(x)))));
 	errors.push(rb_ok_or!(rtokens, parse_loop(rtokens, tabs)
 	                     .and_then(|x| Ok(Statement::WhileLoop(x)))));
+	errors.push(rb_ok_or!(rtokens, parse_assignment(rtokens)
+	                     .and_then(|x| Ok(Statement::Assignment(x)))));
 	Err(ParseError::CouldNotConstruct(errors))
 }
 

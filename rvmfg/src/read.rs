@@ -25,6 +25,7 @@ pub enum Deser {
 	Return,
 	StringLit,
 	Sub,
+	Swap,
 	Type(Type),
 	Void,
 }
@@ -53,6 +54,7 @@ pub fn deser(what: u8) -> Option<Deser> {
 		0x3b => Some(D::Panic),
 		0x3c => Some(D::Add),
 		0x3d => Some(D::Sub),
+		0x3e => Some(D::Swap),
 		_ => None,
 	}
 }

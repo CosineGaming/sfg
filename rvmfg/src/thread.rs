@@ -150,6 +150,15 @@ impl Thread {
 				let stack_elem = self.stack.get(self.stack.len()-count-1).unwrap();
 				self.stack.push(*stack_elem);
 			}
+			Deser::Swap => {
+				let count = next(&self.code, &mut self.ip) as usize;
+				// -1 because 0 means last but len() means last+1
+				let down_i = self.stack.len()-1-count;
+				let up_i = self.stack.len()-1;
+				let down = self.stack[down_i];
+				self.stack[down_i] = self.stack[up_i];
+				self.stack[up_i] = down;
+			}
 			Deser::Panic => {
 				let col = self.stack.pop().unwrap();
 				let line = self.stack.pop().unwrap();
