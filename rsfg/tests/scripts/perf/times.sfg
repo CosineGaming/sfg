@@ -1,0 +1,7 @@
+fn main()
+	// Make a bunch of operations happen
+	// We know that times uses a bunch of adds and uses right-hand number
+	// So this is at least 3*n instructions
+	var n = 100000
+	assert(n == 1 * n)
+

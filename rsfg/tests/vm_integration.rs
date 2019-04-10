@@ -49,6 +49,22 @@ fn test_scripts() -> std::io::Result<()> {
 	Ok(())
 }
 
+// Ignore because these performance tests literally take a long time
+#[ignore]
+#[test]
+fn test_perf_tests() -> std::io::Result<()> {
+	for entry in std::fs::read_dir("tests/scripts/perf")? {
+		let entry = entry?;
+		let path = entry.path();
+		if path.is_file() {
+			let pathstr = path.to_string_lossy();
+			println!("TESTING: {}", pathstr);
+			call_main(&pathstr);
+		}
+	}
+	Ok(())
+}
+
 #[test]
 fn test_fails() -> std::io::Result<()> {
 	use std::panic::{catch_unwind, AssertUnwindSafe};
