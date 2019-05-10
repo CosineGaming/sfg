@@ -8,6 +8,11 @@ use indexmap::IndexMap;
 const INIT_STACK_SIZE: usize = 50;
 /// Similarly chosen for the expected call stack size
 const INIT_CALL_STACK_SIZE: usize = 6;
+/// This is mostly arbitrary but keeps us from unrecoverable OOM error on
+/// incorrect recursion
+/// 256MB is excessively large but within the realms of normal operation
+/// /4 means gives twice on 64-bit
+const CALL_STACK_MAX_SIZE: usize = 256*1024*1024/4;
 /// Prints the stack and each instruction
 const DEBUG: bool = false;
 
@@ -131,6 +136,10 @@ impl Thread {
                 // call_fn? because call_fn by user should not
                 // push to stack, it should allow exit
                 self.call_stack.push(self.ip);
+                if self.call_stack.len() > CALL_STACK_MAX_SIZE {
+                    self.sane_state();
+                    panic!("call stack overflow (too much recursion?)");
+                }
                 Self::set_fn(&mut self.ip, func);
             }
             Deser::Equals => {
@@ -163,11 +172,7 @@ impl Thread {
             Deser::Panic => {
                 let col = self.stack.pop().unwrap();
                 let line = self.stack.pop().unwrap();
-                // Deallocate everything
-                self.stack.resize(0, 0);
-                self.stack.shrink_to_fit();
-                self.call_stack.resize(0, 0);
-                self.call_stack.shrink_to_fit();
+                self.sane_state();
                 panic!("sfg code panicked at line {}:{}", line, col);
             }
             Deser::Add => {
@@ -195,6 +200,13 @@ impl Thread {
             | got @ Deser::Void => panic!("expected instruction, got {:?}", got),
         }
         false
+    }
+    fn sane_state(&mut self) {
+        // Deallocate everything
+        self.stack.resize(0, 0);
+        self.stack.shrink_to_fit();
+        self.call_stack.resize(0, 0);
+        self.call_stack.shrink_to_fit();
     }
     // Changed to an associated function because borrow checker still can't
     // understand that Fn is contained within self
