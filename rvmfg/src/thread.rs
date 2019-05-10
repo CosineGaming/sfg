@@ -94,7 +94,8 @@ impl Thread {
             fns,
         }
     }
-    fn exec_next(&mut self) {
+    /// Returns whether a return has been called requiring exit
+    fn exec_next(&mut self) -> bool {
         // The stack is a rust Vec. rust vecs don't deallocate
         // until asked to, so we don't have to worry about pop then
         // push being slow. If we're worried, we can shrink_to at the
@@ -123,14 +124,14 @@ impl Thread {
             Deser::FnCall => {
                 let index = read_u32(&self.code, &mut self.ip);
                 let func = match self.fns.get_index(index as usize) {
-                    Some((_name, func)) => func.clone(),
+                    Some((_name, func)) => func,
                     _ => panic!("could not find function at {}", index),
                 };
                 // We do we push ip here and not in
                 // call_fn? because call_fn by user should not
                 // push to stack, it should allow exit
                 self.call_stack.push(self.ip);
-                self.call_fn(func);
+                Self::set_fn(&mut self.ip, func);
             }
             Deser::Equals => {
                 let a = self.stack.pop();
@@ -183,39 +184,43 @@ impl Thread {
                 // The stack is placed in makes-sense order, we reverse
                 self.stack.push(b - a);
             }
+            Deser::Return => {
+                self.ip = match self.call_stack.pop() {
+                    Some(ip) => ip,
+                    None => return true,
+                };
+            }
             // TODO: Split deser into categories so this unreachable code won't be necessary
-            Deser::Return => panic!("return found out of function call"),
             got @ Deser::Type(_)
             | got @ Deser::FnHeader
             | got @ Deser::ExternFnHeader
             | got @ Deser::StringLit
             | got @ Deser::Void => panic!("expected instruction, got {:?}", got),
         }
+        false
+    }
+    // Changed to an associated function because borrow checker still can't
+    // understand that Fn is contained within self
+    fn set_fn(ip: &mut usize, func: &Fn) {
+        assert_ne!(func.ip, 0, "tried to call extern function");
+        *ip = func.ip as usize;
+    }
+    fn run(&mut self) {
+        loop {
+            if DEBUG {
+                println!(
+                    "stack {:?}| next {:?}| call stack {:?}",
+                    self.stack,
+                    deser_strong(self.code[self.ip]),
+                    self.call_stack,
+                );
+            }
+            self.exec_next();
+        }
     }
     pub fn push_string(&mut self, string: &String) {
         let as_number = string as *const String as i32;
         self.stack.push(as_number);
-    }
-    fn call_fn(&mut self, func: Fn) {
-        assert_ne!(func.ip, 0, "tried to call extern function");
-        self.ip = func.ip as usize;
-        loop {
-            if DEBUG {
-                println!(
-                    "stack {:?}| next {:?}",
-                    self.stack,
-                    deser_strong(self.code[self.ip])
-                );
-            }
-            if deser_strong(self.code[self.ip]) == Deser::Return {
-                self.ip = match self.call_stack.pop() {
-                    Some(ip) => ip,
-                    None => break,
-                };
-                break;
-            }
-            self.exec_next();
-        }
     }
     /// This ONLY calls the function, does NOT push to stack
     /// use the c! macro to perform a call. It's only public because
@@ -223,9 +228,10 @@ impl Thread {
     #[doc(hidden)]
     pub fn call_name(&mut self, name: &str) {
         let func = match self.fns.get(name) {
-            Some(func) => func.clone(),
+            Some(func) => func,
             None => panic!("could not find function {}", name),
         };
-        self.call_fn(func);
+        Self::set_fn(&mut self.ip, func);
+        self.run();
     }
 }
