@@ -13,8 +13,6 @@ const INIT_CALL_STACK_SIZE: usize = 6;
 /// 256MB is excessively large but within the realms of normal operation
 /// /4 means gives twice on 64-bit
 const CALL_STACK_MAX_SIZE: usize = 256*1024*1024/4;
-/// Prints the stack and each instruction
-const DEBUG: bool = false;
 
 #[derive(PartialEq, Debug)]
 pub struct Thread {
@@ -216,14 +214,12 @@ impl Thread {
     }
     fn run(&mut self) {
         loop {
-            if DEBUG {
-                println!(
-                    "stack {:?}| next {:?}| call stack {:?}",
-                    self.stack,
-                    deser_strong(self.code[self.ip]),
-                    self.call_stack,
-                );
-            }
+            debug!(
+                "stack {:?}| next {:?}| call stack {:?}",
+                self.stack,
+                deser_strong(self.code[self.ip]),
+                self.call_stack,
+            );
             if self.exec_next() {
                 break;
             }

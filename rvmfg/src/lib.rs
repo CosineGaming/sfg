@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate log;
+
 mod read;
 mod sfg_std;
 mod thread;
