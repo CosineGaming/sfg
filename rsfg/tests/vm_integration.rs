@@ -64,28 +64,40 @@ fn test_perf_tests() -> std::io::Result<()> {
     Ok(())
 }
 
+fn test_should_fail(entry: std::fs::DirEntry) {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    let path = entry.path();
+    if path.is_file() {
+        let pathstr = path.to_string_lossy();
+        println!("TESTING (SHOULD PANIC): {}", pathstr);
+        let bytecode = compile_file(&pathstr);
+        let mut thread = Thread::new(bytecode);
+        // &mut is not UnwindSafe so we wrap it because we test
+        // that panics are expected and properly handled by the VM
+        // https://doc.rust-lang.org/beta/std/panic/trait.UnwindSafe.html
+        let mut wrapped = AssertUnwindSafe(&mut thread);
+        // These should panic. The following construction ensures that
+        // We can't use call! because it adds additional &mut already wrapped
+        let result = catch_unwind(move || wrapped.call_name("main"));
+        assert!(result.is_err());
+        // These should PASS. Thus not wrappend in catch_unwind
+        state_tests(&thread);
+    }
+}
+
 #[test]
 fn test_fails() -> std::io::Result<()> {
-    use std::panic::{catch_unwind, AssertUnwindSafe};
     for entry in std::fs::read_dir("tests/scripts/fail")? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file() {
-            let pathstr = path.to_string_lossy();
-            println!("TESTING (SHOULD PANIC): {}", pathstr);
-            let bytecode = compile_file(&pathstr);
-            let mut thread = Thread::new(bytecode);
-            // &mut is not UnwindSafe so we wrap it because we test
-            // that panics are expected and properly handled by the VM
-            // https://doc.rust-lang.org/beta/std/panic/trait.UnwindSafe.html
-            let mut wrapped = AssertUnwindSafe(&mut thread);
-            // These should panic. The following construction ensures that
-            // We can't use call! because it adds additional &mut already wrapped
-            let result = catch_unwind(move || wrapped.call_name("main"));
-            assert!(result.is_err());
-            // These should PASS. Thus not wrappend in catch_unwind
-            state_tests(&thread);
-        }
+        test_should_fail(entry?);
+    }
+    Ok(())
+}
+
+#[ignore]
+#[test]
+fn test_ignored_fails() -> std::io::Result<()> {
+    for entry in std::fs::read_dir("tests/scripts/fail/ignore")? {
+        test_should_fail(entry?);
     }
     Ok(())
 }
