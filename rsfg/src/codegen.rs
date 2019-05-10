@@ -1,7 +1,5 @@
 use crate::{llr::*, Type};
 
-static DEBUG: bool = true;
-
 enum Serializable {
     Type(Type),
     Instruction(Instruction),
@@ -128,16 +126,12 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
             Dup(what) | Swap(what) => code.push(*what),
             // is label
             LabelMark(label) => {
-                if DEBUG {
-                    println!("label marked, \"{}\" refers to {}", label, code.len())
-                }
+                debug!("CODEGEN: label marked, \"{}\" refers to {}", label, code.len());
                 labels.marks.insert(*label, code.len());
             }
             // label argument
             JumpZero(label) => {
-                if DEBUG {
-                    println!("label referred, at {} references \"{}\"", code.len(), label)
-                }
+                debug!("CODEGEN: label referred, at {} references \"{}\"", code.len(), label);
                 labels.refs.push((*label, code.len()));
                 code.push(serialize(Serializable::Placeholder));
             }
@@ -151,9 +145,7 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
 /// Should only be called ONCE, when everything has been generated
 fn resolve_labels(labeled: &mut LabeledCode) {
     for (label, location) in &labeled.labels.refs {
-        if DEBUG {
-            println!("trying to look up {}", label)
-        }
+        debug!("CODEGEN: trying to look up {}", label);
         let refers = labeled.labels.marks.get(&label).expect("referred to non-existent label");
         // Ensure that the ref location is in fact a placeholder byte
         assert_eq!(

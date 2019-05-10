@@ -1,8 +1,10 @@
 // all roads lead to lib.rs
 
+#[macro_use]
+extern crate log;
+
 mod ast;
 mod llr;
-
 mod codegen;
 mod lexer;
 mod lower;

@@ -15,5 +15,4 @@ fn main() {
     let compiled = compile(&script_string, &stdlib);
     let out = script_path.with_extension("bcfg");
     std::fs::write(out, compiled.clone()).expect("couldn't output compiled file");
-    println!("{:X?}", compiled);
 }

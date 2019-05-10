@@ -6,6 +6,18 @@ extern crate rvmfg;
 use rsfg::compile;
 use rvmfg::{call, Thread};
 
+// Log needs to be initialized once in the async mess that is cargo test
+use std::sync::{Once, ONCE_INIT};
+static LOGGER_INIT: Once = ONCE_INIT;
+
+fn ensure_log_init() {
+    LOGGER_INIT.call_once(|| env_logger::builder()
+        .filter_level(log::LevelFilter::Debug)
+        .is_test(true)
+        .init()
+    );
+}
+
 fn get_stdlib() -> String {
     let std_filename = "src/sfg/std.sfg";
     std::fs::read_to_string(std_filename).expect("couldn't find std library")
@@ -36,6 +48,7 @@ fn state_tests(thread: &Thread) {
 
 #[test]
 fn test_scripts() -> std::io::Result<()> {
+    ensure_log_init();
     for entry in std::fs::read_dir("tests/scripts")? {
         let entry = entry?;
         let path = entry.path();
@@ -52,6 +65,7 @@ fn test_scripts() -> std::io::Result<()> {
 #[ignore]
 #[test]
 fn test_perf_tests() -> std::io::Result<()> {
+    // No log to accurately test perf - TODO: actually may still log if ran after logging one
     for entry in std::fs::read_dir("tests/scripts/perf")? {
         let entry = entry?;
         let path = entry.path();
@@ -70,7 +84,9 @@ fn test_should_fail(entry: std::fs::DirEntry) {
     if path.is_file() {
         let pathstr = path.to_string_lossy();
         println!("TESTING (SHOULD PANIC): {}", pathstr);
+        // Compilation should succeed
         let bytecode = compile_file(&pathstr);
+        // As well as LOADING into the vm
         let mut thread = Thread::new(bytecode);
         // &mut is not UnwindSafe so we wrap it because we test
         // that panics are expected and properly handled by the VM
@@ -87,6 +103,7 @@ fn test_should_fail(entry: std::fs::DirEntry) {
 
 #[test]
 fn test_fails() -> std::io::Result<()> {
+    ensure_log_init();
     for entry in std::fs::read_dir("tests/scripts/fail")? {
         test_should_fail(entry?);
     }
@@ -96,6 +113,7 @@ fn test_fails() -> std::io::Result<()> {
 #[ignore]
 #[test]
 fn test_ignored_fails() -> std::io::Result<()> {
+    // No log to speed up - TODO: actually may still log if ran after logging one
     for entry in std::fs::read_dir("tests/scripts/fail/ignore")? {
         test_should_fail(entry?);
     }

@@ -12,6 +12,8 @@ fn assert_hex(a: Vec<u8>, b: Vec<u8>) {
 
 #[test]
 fn decompile() {
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Debug);
     let result = compile_file("tests/scripts/decompile.sfg");
     assert_hex(
         result,

@@ -4,8 +4,6 @@
 use crate::{ast::*, llr, Type};
 use indexmap::IndexMap;
 
-static DEBUG: bool = true;
-
 // As much as it pains me to require fn_map, we need it to determine type of FnCall
 fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
     match expr {
@@ -413,9 +411,6 @@ pub fn lower(ast: AST) -> llr::LLR {
                 out.extern_fns.push(out_s);
             }
         }
-    }
-    if DEBUG {
-        println!("{:#?}", out);
     }
     out
 }

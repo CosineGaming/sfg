@@ -395,7 +395,7 @@ fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Result<Vec<
         // To allow n tabs:
         if let Some(Token { kind: TokenType::Tab, .. }) = rtokens.last() {
             // If there's an extra tab, get ALL the extra tabs
-            println!("extra tab found");
+            debug!("PARSER: extra tab found");
             while let Some(Token { kind: TokenType::Tab, .. }) = rtokens.last() {
                 rtokens.pop();
             }

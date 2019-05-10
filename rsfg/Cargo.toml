@@ -7,3 +7,5 @@ edition = "2018"
 [dependencies]
 indexmap = "1.0.2"
 rvmfg = { version = "0.1.0", path = "../rvmfg" }
+log = "0.4.6"
+env_logger = "0.6.1"
