@@ -9,7 +9,7 @@ const INIT_STACK_SIZE: usize = 50;
 /// Similarly chosen for the expected call stack size
 const INIT_CALL_STACK_SIZE: usize = 6;
 /// Prints the stack and each instruction
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 #[derive(PartialEq, Debug)]
 pub struct Thread {
@@ -140,12 +140,9 @@ impl Thread {
             }
             Deser::JumpZero => {
                 let amount = read_i8(&self.code, &mut self.ip);
-                println!("{}", amount);
-                println!("{}", self.ip);
                 let test = self.stack.pop().unwrap();
                 if test == 0 {
                     self.ip = (self.ip as isize + amount as isize) as usize;
-                    println!("{}", self.ip);
                 }
             }
             Deser::Dup => {
@@ -215,7 +212,9 @@ impl Thread {
                     self.call_stack,
                 );
             }
-            self.exec_next();
+            if self.exec_next() {
+                break;
+            }
         }
     }
     pub fn push_string(&mut self, string: &String) {
