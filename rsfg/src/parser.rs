@@ -51,6 +51,7 @@ macro_rules! rb {
 	}
 }
 /// Combines rb with try/?
+/// Not strictly necessary
 macro_rules! rb_try {
 	( $tokens:ident, $call:expr ) => {
 		rb!($tokens, $call)?
