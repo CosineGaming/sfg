@@ -58,7 +58,10 @@ pub fn deser(what: u8) -> Option<Deser> {
     }
 }
 pub fn deser_strong(what: u8) -> Deser {
-    deser(what).expect(&format!("tried to match invalid u8 0x{:X}", what))
+    match deser(what) {
+        Some(res) => res,
+        None => panic!("tried to match invalid u8 0x{:X}", what),
+    }
 }
 
 pub fn next(code: &Vec<u8>, ip: &mut usize) -> u8 {
