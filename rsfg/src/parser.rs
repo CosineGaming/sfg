@@ -149,6 +149,7 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
                 got => Err(ParseError::Expected(vec![TokenType::RParen], got)),
             }
         }
+        // Literals
         Some(Token { kind: TokenType::StringLit(string), .. }) => {
             rtokens.pop();
             Ok(Expression::Literal(Literal::String(string.clone())))
@@ -167,6 +168,16 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
                 got => Err(ParseError::Expected(vec![TokenType::IntLit(0)], got)),
             }
         }
+        // Builtin literals
+        Some(Token { kind: TokenType::True, .. }) => {
+            rtokens.pop();
+            Ok(Expression::Literal(Literal::Bool(true)))
+        }
+        Some(Token { kind: TokenType::False, .. }) => {
+            rtokens.pop();
+            Ok(Expression::Literal(Literal::Bool(false)))
+        }
+        // And finally identifiers
         Some(Token { kind: TokenType::Identifier(name), .. }) => {
             // An identifier can start a call or just an identifier
             // It can be a call...
@@ -214,7 +225,6 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
     rb_try!(rtokens, expect_token(rtokens, TokenType::LParen, "fn call"));
     let mut arguments = vec![];
     loop {
-        // TODO: is allowing commas at the beginning the worst idea ive had?
         arguments.push(match rtokens.last() {
             Some(Token { kind: TokenType::RParen, .. }) => {
                 rtokens.pop();

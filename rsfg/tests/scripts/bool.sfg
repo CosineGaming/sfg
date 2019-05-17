@@ -1,0 +1,7 @@
+fn main()
+	var is_bool = true
+	my_compare(is_bool, 5 == 5)
+
+fn my_compare(a: bool, b: bool)
+	assert(a == b)
+

@@ -14,7 +14,7 @@
 //
 // This file is implementations of section (a) of (1) and all the externs of (2)
 
-fn assert(cond: int, line: int, col: int)
+fn assert(cond: bool, line: int, col: int)
 	// TODO: Once we implement not or else, simplify this code
 	if cond
 		return

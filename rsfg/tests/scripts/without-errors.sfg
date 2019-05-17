@@ -3,7 +3,7 @@
 // Note that what's in here DOES NOT guarantee correctness!
 // This "test" is mostly being retired now that we have asserts in favor of real tests
 
-fn complex_fn(thing: int, another: int) // Same-line
+fn complex_fn(thing: int, another: bool) // Same-line
 	log("hello")
 
 fn strings_only(what: str) str

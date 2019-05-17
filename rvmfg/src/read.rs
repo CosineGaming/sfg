@@ -6,6 +6,7 @@ use crate::thread::Fn;
 pub enum Type {
     Str,
     Int,
+    Bool,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -36,6 +37,7 @@ pub fn deser(what: u8) -> Option<Deser> {
         // Types 1x
         0x10 => Some(D::Type(Int)),
         0x11 => Some(D::Type(Str)),
+        0x12 => Some(D::Type(Bool)),
         // Other 2x
         0x21 => Some(D::Void),
         // Instructions 3x

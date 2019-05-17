@@ -35,6 +35,8 @@ pub enum TokenType {
     Minus,
     Times,
     Divide,
+    True,
+    False,
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -47,6 +49,7 @@ pub struct Token {
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Type {
     Int,
+    Bool,
     Str,
     Infer,
 }

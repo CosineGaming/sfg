@@ -50,6 +50,7 @@ pub enum Expression {
 pub enum Literal {
     String(String),
     Int(i32),
+    Bool(bool),
     //pub Float(f32),
 }
 #[derive(PartialEq, Eq, Clone, Debug)]

@@ -10,6 +10,7 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
         Expression::Literal(lit) => match lit {
             Literal::String(_) => Type::Str,
             Literal::Int(_) => Type::Int,
+            Literal::Bool(_) => Type::Bool,
         },
         Expression::Identifier(id) => match state.locals.get(&id.name) {
             Some(id_type) => *id_type,
@@ -31,13 +32,12 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
         }
         Expression::Binary(expr) => {
             match expr.op {
-                // TODO: Use Bool type when present
-                BinaryOp::Equals => Type::Int,
+                BinaryOp::Equals => Type::Bool,
                 // Retains type of arguments
                 BinaryOp::Plus | BinaryOp::Minus | BinaryOp::Times | BinaryOp::Divide => {
                     let left = expression_type(state, &expr.left);
                     let right = expression_type(state, &expr.right);
-                    assert_eq!(left, right, "Binary operation between different types");
+                    assert_eq!(left, right, "Commutative operation between different types");
                     left
                 }
             }
@@ -48,7 +48,8 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
 fn type_size(id_type: Type) -> u8 {
     use Type::*;
     match id_type {
-        Int | Str => 32,
+        // TODO: 8-bit types? like bool?
+        Int | Str | Bool => 32,
         Infer => panic!("type not yet inferred by size check"),
     }
 }
@@ -138,6 +139,7 @@ fn expression_to_push(
             vec![llr::Instruction::Push((strings.len() - 1) as u32)]
         }
         Expression::Literal(Literal::Int(int)) => vec![llr::Instruction::Push(i_as_u(*int))],
+        Expression::Literal(Literal::Bool(val)) => vec![llr::Instruction::Push(i_as_u(*val as i32))],
         // fn call leaves result on the stack which is exactly what we need
         Expression::FnCall(call) => lower_fn_call(state, call, false),
         Expression::Identifier(var) => {
@@ -305,6 +307,7 @@ fn lower_statement(
         Statement::FnCall(call) => lower_fn_call(state, call, true),
         Statement::Return(expr) => lower_return(state, expr, signature),
         Statement::If(if_stmt) => {
+            assert_eq!(expression_type(state, &if_stmt.condition), Type::Bool, "if statement requires bool");
             let mut push_condition = expression_to_push(state, &if_stmt.condition, 0);
             let mut block = lower_statements(state, &if_stmt.statements, signature);
             let mut lowered = vec![];

@@ -119,6 +119,9 @@ pub fn lex(text: &str) -> Vec<Token> {
                     // These names clash, it sucks
                     "int" => TokenType::Type(crate::Type::Int),
                     "str" => TokenType::Type(crate::Type::Str),
+                    "bool" => TokenType::Type(crate::Type::Bool),
+                    "true" => True,
+                    "false" => False,
                     "return" => Return,
                     "if" => If,
                     "while" => While,
