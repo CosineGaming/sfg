@@ -309,13 +309,21 @@ fn lower_statement(
         Statement::If(if_stmt) => {
             assert_eq!(expression_type(state, &if_stmt.condition), Type::Bool, "if statement requires bool");
             let mut push_condition = expression_to_push(state, &if_stmt.condition, 0);
-            let mut block = lower_statements(state, &if_stmt.statements, signature);
+            let mut if_block = lower_statements(state, &if_stmt.statements, signature);
+            let mut else_block = lower_statements(state, &if_stmt.else_statements, signature);
+            let else_start = state.get_label();
+            let else_end = state.get_label();
             let mut lowered = vec![];
             lowered.append(&mut push_condition);
-            let end = state.get_label();
-            lowered.push(llr::Instruction::JumpZero(end));
-            lowered.append(&mut block);
-            lowered.push(llr::Instruction::LabelMark(end));
+            lowered.push(llr::Instruction::JumpZero(else_start));
+            lowered.append(&mut if_block);
+            // if we executed if, don't execute else (jump to end of else)
+            // TODO: unconditional jump, rather than push zero jmp0
+            lowered.push(llr::Instruction::Push(0));
+            lowered.push(llr::Instruction::JumpZero(else_end));
+            lowered.push(llr::Instruction::LabelMark(else_start));
+            lowered.append(&mut else_block);
+            lowered.push(llr::Instruction::LabelMark(else_end));
             lowered
         }
         Statement::WhileLoop(loop_data) => lower_loop(state, loop_data, signature),
