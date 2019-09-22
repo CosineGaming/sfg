@@ -197,6 +197,7 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
         }
         None => Err(ParseError::EOF("expression".to_string())),
     }?;
+    println!("{:?}", left);
     // Then we try to parse a binary expression with it
     rb_ok_or!(
         rtokens,
@@ -288,11 +289,48 @@ fn parse_return(rtokens: &mut Tokens) -> Result<Option<Expression>> {
 }
 
 fn parse_if(rtokens: &mut Tokens, tabs: usize) -> Result<If> {
+    debug!("if");
     rb_try!(rtokens, expect_token(rtokens, TokenType::If, "if statement"));
     let condition = rb_try!(rtokens, parse_expression(rtokens));
     let statements = rb_try!(rtokens, parse_indented_block(rtokens, tabs + 1));
-    Ok(If { condition, statements })
+    // Remember, rb! JUST rolls back on error, but doesn't necessarily return!
+    // rb is still necessary to not eat up following non-else code and first tab
+    let else_or_err = rb!(rtokens, {
+        match rb_expect_indent(rtokens, tabs) {
+            Ok(()) => {
+                // Indent exists. Check for else (still optional)
+                let else_result = expect_token(rtokens, TokenType::Else, "if statement");
+                match else_result {
+                    Ok(_) => {
+                        // There is an else
+                        let else_statements = rb_try!(rtokens, parse_indented_block(rtokens, tabs + 1));
+                        debug!("there IS an else!");
+                        Ok(else_statements)
+                    }
+                    Err(_) => {
+                        // There's no else, but there was tab. rollback tab eating with an error
+                        debug!("indent, but not else");
+                        Err(())
+                    }
+                }
+            }
+            Err(_) => {
+                // No indent exists. It's long since time to cede back (end if SURROUNDING block)
+                debug!("no indent at all");
+                Err(())
+            }
+        }
+    });
+    match else_or_err {
+        Ok(else_statements) => {
+            Ok(If { condition, statements, else_statements })
+        }
+        Err(()) => {
+            Ok(If { condition, statements, else_statements: vec![] })
+        }
+    }
 }
+
 fn parse_loop(rtokens: &mut Tokens, tabs: usize) -> Result<WhileLoop> {
     rb_try!(rtokens, expect_token(rtokens, TokenType::While, "if statement"));
     let condition = rb_try!(rtokens, parse_expression(rtokens));
@@ -378,6 +416,24 @@ fn parse_signature(rtokens: &mut Tokens) -> Result<Signature> {
     Ok(Signature { name, parameters, return_type })
 }
 
+/// If an indent of `tabs` count exists, then pop it, and return Ok(())
+/// Otherwise, **don't affect rtokens at all**, and return Err(Expected tab)
+/// The "Otherwise" case (this behaves as if alredy wrappen in rb!) is the
+/// reason for the name rb_...
+fn rb_expect_indent(rtokens: &mut Tokens, tabs: usize) -> Result<()> {
+    // This looks safe to me.... it's rb! macro but expanded out a bit
+    let saved_tokens = rtokens.clone();
+    for _ in 0..tabs {
+        if let Err(err) = expect_token(rtokens, TokenType::Tab, "indented block") {
+            // Failed to satisfy an indent
+            *rtokens = saved_tokens;
+            return Err(err);
+        }
+    }
+    // We got all the way through the indent
+    Ok(())
+}
+
 fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Result<Vec<Statement>> {
     let mut statements = vec![];
     loop {
@@ -386,13 +442,9 @@ fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Result<Vec<
             rtokens.pop();
             continue;
         }
-        // This looks safe to me.... it's rb! macro but expanded out a bit
-        let saved_tokens = rtokens.clone();
-        for _ in 0..expect_tabs {
-            if let Err(_) = expect_token(rtokens, TokenType::Tab, "indented block") {
-                *rtokens = saved_tokens;
-                return Ok(statements);
-            }
+        // If we can't satisfy the indent, return immediately with the statements we've collected
+        if let Err(_) = rb_expect_indent(rtokens, expect_tabs) {
+            return Ok(statements);
         }
         // Consider the following program:
         // fn main()

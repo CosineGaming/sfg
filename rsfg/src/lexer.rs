@@ -124,6 +124,7 @@ pub fn lex(text: &str) -> Vec<Token> {
                     "false" => False,
                     "return" => Return,
                     "if" => If,
+                    "else" => Else,
                     "while" => While,
                     "var" => Declare,
                     _ => Identifier(text),

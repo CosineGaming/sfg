@@ -1,0 +1,13 @@
+fn main()
+	var do_panic = true
+	if true
+		do_panic = false
+	else
+		panic()
+	if do_panic
+		panic()
+	// Else and panic is required so that "ifs never execute" doesn't pass
+	else
+		return
+	panic()
+

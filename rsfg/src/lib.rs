@@ -28,6 +28,7 @@ pub enum TokenType {
     LParen,
     RParen,
     If,
+    Else,
     While,
     Declare,
     Assignment,

@@ -73,6 +73,7 @@ pub struct BinaryExpr {
 pub struct If {
     pub condition: Expression,
     pub statements: Vec<Statement>,
+    pub else_statements: Vec<Statement>,
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct WhileLoop {
