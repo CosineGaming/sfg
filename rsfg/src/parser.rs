@@ -296,7 +296,7 @@ fn parse_if(rtokens: &mut Tokens, tabs: usize) -> Result<If> {
     // Remember, rb! JUST rolls back on error, but doesn't necessarily return!
     // rb is still necessary to not eat up following non-else code and first tab
     let else_or_err = rb!(rtokens, {
-        match rb_expect_indent(rtokens, tabs) {
+        match rb!(rtokens, expect_indent(rtokens, tabs)) {
             Ok(()) => {
                 // Indent exists. Check for else (still optional)
                 let else_result = expect_token(rtokens, TokenType::Else, "if statement");
@@ -416,35 +416,15 @@ fn parse_signature(rtokens: &mut Tokens) -> Result<Signature> {
     Ok(Signature { name, parameters, return_type })
 }
 
-/// If an indent of `tabs` count exists, then pop it, and return Ok(())
-/// Otherwise, **don't affect rtokens at all**, and return Err(Expected tab)
-/// The "Otherwise" case (this behaves as if alredy wrappen in rb!) is the
-/// reason for the name rb_...
-fn rb_expect_indent(rtokens: &mut Tokens, tabs: usize) -> Result<()> {
-    // This looks safe to me.... it's rb! macro but expanded out a bit
-    let saved_tokens = rtokens.clone();
-    for _ in 0..tabs {
-        if let Err(err) = expect_token(rtokens, TokenType::Tab, "indented block") {
-            // Failed to satisfy an indent
-            *rtokens = saved_tokens;
-            return Err(err);
-        }
-    }
-    // We got all the way through the indent
-    Ok(())
-}
-
-fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Result<Vec<Statement>> {
-    let mut statements = vec![];
+/// If an indent of `tabs` count exists, then pop them all, and return Ok(())
+/// Otherwise, UNDEFINED DESTRUCTION OCCURS (call with rb!)
+fn expect_indent(rtokens: &mut Tokens, tabs: usize) -> Result<()> {
     loop {
-        // Allow empty lines amongst function an indented statement
-        if let Some(Token { kind: TokenType::Newline, .. }) = rtokens.last() {
-            rtokens.pop();
-            continue;
-        }
-        // If we can't satisfy the indent, return immediately with the statements we've collected
-        if let Err(_) = rb_expect_indent(rtokens, expect_tabs) {
-            return Ok(statements);
+        for _ in 0..tabs {
+            if let Err(err) = expect_token(rtokens, TokenType::Tab, "indented block") {
+                // Failed to satisfy an indent
+                return Err(err);
+            }
         }
         // Consider the following program:
         // fn main()
@@ -463,12 +443,32 @@ fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Result<Vec<
             }
             // And *demand* there's no expression (otherwise it's an unexpected indent)
             expect_token(rtokens, TokenType::Newline, "unexpected indented block")?;
+            // We continue because we still must satisfy the REAL indent
             continue;
         }
         // Otherwise, *allow* no expression
         if let Some(Token { kind: TokenType::Newline, .. }) = rtokens.last() {
             rtokens.pop();
+            // See above for continue reason
             continue;
+        }
+        // We got all the way through the indent, and either ended with
+        // nothing or the beginning of a statement
+        return Ok(());
+    }
+}
+
+fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Result<Vec<Statement>> {
+    let mut statements = vec![];
+    loop {
+        // Allow empty lines amongst function an indented statement
+        if let Some(Token { kind: TokenType::Newline, .. }) = rtokens.last() {
+            rtokens.pop();
+            continue;
+        }
+        // If we can't satisfy the indent, return immediately with the statements we've collected
+        if let Err(_) = rb!(rtokens, expect_indent(rtokens, expect_tabs)) {
+            return Ok(statements);
         }
         statements.push(rb_try!(rtokens, parse_statement(rtokens, expect_tabs)));
     }
