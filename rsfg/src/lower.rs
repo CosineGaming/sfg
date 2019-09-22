@@ -311,19 +311,25 @@ fn lower_statement(
             let mut push_condition = expression_to_push(state, &if_stmt.condition, 0);
             let mut if_block = lower_statements(state, &if_stmt.statements, signature);
             let mut else_block = lower_statements(state, &if_stmt.else_statements, signature);
-            let else_start = state.get_label();
-            let else_end = state.get_label();
             let mut lowered = vec![];
             lowered.append(&mut push_condition);
+            let else_start = state.get_label();
             lowered.push(llr::Instruction::JumpZero(else_start));
             lowered.append(&mut if_block);
-            // if we executed if, don't execute else (jump to end of else)
-            // TODO: unconditional jump, rather than push zero jmp0
-            lowered.push(llr::Instruction::Push(0));
-            lowered.push(llr::Instruction::JumpZero(else_end));
+            // CHECK: does creating a label you might not use, fuck things up? So far, no
+            let else_end = state.get_label();
+            // Don't bother with jump if no statements in else
+            if if_stmt.else_statements.len() != 0 {
+                // if we executed if, don't execute else (jump to end of else)
+                // TODO: unconditional jump, rather than push zero jmp0
+                lowered.push(llr::Instruction::Push(0));
+                lowered.push(llr::Instruction::JumpZero(else_end));
+            }
             lowered.push(llr::Instruction::LabelMark(else_start));
-            lowered.append(&mut else_block);
-            lowered.push(llr::Instruction::LabelMark(else_end));
+            if if_stmt.else_statements.len() != 0 {
+                lowered.append(&mut else_block);
+                lowered.push(llr::Instruction::LabelMark(else_end));
+            }
             lowered
         }
         Statement::WhileLoop(loop_data) => lower_loop(state, loop_data, signature),
