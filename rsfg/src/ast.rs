@@ -89,6 +89,8 @@ pub enum BinaryOp {
     GreaterEquals,
     Less,
     LessEquals,
+    Or,
+    And,
     Plus,
     Minus,
     Times,

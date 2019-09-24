@@ -29,6 +29,8 @@ pub enum TokenType {
     LessEquals,
     GreaterEquals,
     Not,
+    Or,
+    And,
     Colon,
     Newline,
     LParen,

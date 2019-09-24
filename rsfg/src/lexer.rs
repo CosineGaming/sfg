@@ -21,6 +21,8 @@ enum NextTokenType {
     NotOrEquals,
     LessOrEquals,
     GreaterOrEquals,
+    Or,
+    And,
     Newline,
     LParen,
     RParen,
@@ -69,6 +71,8 @@ impl<'src> Lexer<'src> {
                 '!' => NotOrEquals,
                 '>' => GreaterOrEquals,
                 '<' => LessOrEquals,
+                '|' => Or,
+                '&' => And,
                 ' ' | '\t' => Space(c),
                 '0'..='9' => Digit(c),
                 '/' => CommentOrDivision,
@@ -248,6 +252,20 @@ pub fn lex(text: &str) -> Vec<Token> {
                     NotEquals
                 }
                 _ => Not
+            }
+            NextTokenType::Or => match lexer.rchars.last() {
+                Some('|') => {
+                    lexer.rchars.pop();
+                    Or
+                }
+                _ => panic!("unknown token |, did you mean ||")
+            }
+            NextTokenType::And => match lexer.rchars.last() {
+                Some('&') => {
+                    lexer.rchars.pop();
+                    And
+                }
+                _ => panic!("unknown token &, did you mean &&")
             }
             NextTokenType::Newline => {
                 lexer.line += 1;

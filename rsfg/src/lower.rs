@@ -34,7 +34,7 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
         Expression::Binary(expr) => {
             use BinaryOp::*;
             match expr.op {
-                Equals | NotEquals | Greater | GreaterEquals | Less | LessEquals => Type::Bool,
+                Equals | NotEquals | Greater | GreaterEquals | Less | LessEquals | Or | And => Type::Bool,
                 // Retains type of arguments
                 Plus | Minus | Times | Divide => {
                     let left = expression_type(state, &expr.left);
@@ -145,7 +145,7 @@ fn expression_to_push(
         Expression::Not(expr) => {
             let mut insts = vec![];
             // expr == false
-            insts.append(&mut expression_to_push(state, expr, 0));
+            insts.append(&mut expression_to_push(state, expr, stack_plus));
             insts.push(llr::Instruction::Push(0));
             insts.push(llr::Instruction::Equals);
             insts
@@ -163,23 +163,23 @@ fn expression_to_push(
             let mut insts = vec![];
             // Special cases (most binary ops follow similar rules)
             match expr.op {
-                Times | GreaterEquals | LessEquals => (),
+                Times | GreaterEquals | LessEquals | And => (),
                 NotEquals => {
                     let mut as_equals = expr.clone();
                     as_equals.op = Equals;
                     let desugared = Expression::Not(Box::new(Expression::Binary(as_equals)));
-                    insts.append(&mut expression_to_push(state, &desugared, 0));
+                    insts.append(&mut expression_to_push(state, &desugared, stack_plus));
                 }
                 // Right, left, op-to-follow
                 // r l < == l r >
                 Greater => {
-                    insts.append(&mut expression_to_push(state, &expr.right, 0));
-                    insts.append(&mut expression_to_push(state, &expr.left, 1));
+                    insts.append(&mut expression_to_push(state, &expr.right, stack_plus));
+                    insts.append(&mut expression_to_push(state, &expr.left, stack_plus+1));
                 }
                 // Left, right, op-to-follow
                 _ => {
-                    insts.append(&mut expression_to_push(state, &expr.left, 0));
-                    insts.append(&mut expression_to_push(state, &expr.right, 1));
+                    insts.append(&mut expression_to_push(state, &expr.left, stack_plus));
+                    insts.append(&mut expression_to_push(state, &expr.right, stack_plus+1));
                 }
             }
             match expr.op {
@@ -190,27 +190,27 @@ fn expression_to_push(
                 GreaterEquals | LessEquals => {
                     match expr.op {
                         LessEquals => {
-                            insts.append(&mut expression_to_push(state, &expr.left, 0));
-                            insts.append(&mut expression_to_push(state, &expr.right, 1));
+                            insts.append(&mut expression_to_push(state, &expr.left, stack_plus));
+                            insts.append(&mut expression_to_push(state, &expr.right, stack_plus+1));
                         }
                         GreaterEquals => {
-                            insts.append(&mut expression_to_push(state, &expr.right, 0));
-                            insts.append(&mut expression_to_push(state, &expr.left, 1));
+                            insts.append(&mut expression_to_push(state, &expr.right, stack_plus));
+                            insts.append(&mut expression_to_push(state, &expr.left, stack_plus+1));
                         }
                         _ => unreachable!(),
                     };
                     // Stack: l r
                     // (if > then it's r l but assume < for now)
                     // Duplicate left
-                    insts.push(llr::Instruction::Dup(1));
+                    insts.push(llr::Instruction::Dup(stack_plus+1));
                     // Stack: l r l
                     // Duplicate right (further forward now)
-                    insts.push(llr::Instruction::Dup(1));
+                    insts.push(llr::Instruction::Dup(stack_plus+1));
                     // Stack: l r l r
                     insts.push(llr::Instruction::Less);
                     // Stack: l r <
                     // Swap g to back
-                    insts.push(llr::Instruction::Swap(2));
+                    insts.push(llr::Instruction::Swap(stack_plus+2));
                     // Stack: > l r
                     insts.push(llr::Instruction::Equals);
                     // Stack: > =
@@ -227,6 +227,15 @@ fn expression_to_push(
                     // instruction and then we could skip the push conditional up above
                     let call = FnCall {
                         name: "internal_times".to_string(),
+                        arguments: vec![expr.left.clone(), expr.right.clone()],
+                    };
+                    insts.append(&mut lower_fn_call(state, &call, false))
+                }
+                Or => insts.push(llr::Instruction::Add),
+                And => {
+                    // TODO: use multiply-generic? Or instruction?
+                    let call = FnCall {
+                        name: "internal_and".to_string(),
                         arguments: vec![expr.left.clone(), expr.right.clone()],
                     };
                     insts.append(&mut lower_fn_call(state, &call, false))

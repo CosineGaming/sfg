@@ -132,6 +132,8 @@ fn parse_binary(rtokens: &mut Tokens, left: Expression) -> Result<BinaryExpr> {
         Token { kind: TokenType::Less, .. } => BinaryOp::Less,
         Token { kind: TokenType::LessEquals, .. } => BinaryOp::LessEquals,
         Token { kind: TokenType::NotEquals, .. } => BinaryOp::NotEquals,
+        Token { kind: TokenType::And, .. } => BinaryOp::And,
+        Token { kind: TokenType::Or, .. } => BinaryOp::Or,
         Token { kind: TokenType::Plus, .. } => BinaryOp::Plus,
         Token { kind: TokenType::Minus, .. } => BinaryOp::Minus,
         Token { kind: TokenType::Times, .. } => BinaryOp::Times,

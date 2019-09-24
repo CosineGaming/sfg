@@ -27,5 +27,12 @@ fn internal_times(left: int, right: int) int
 		right = right - 1
 	return total
 
+fn internal_and(left: bool, right: bool) bool
+	if left
+		return true
+	if right
+		return true
+	return false
+
 @fn log(what: str)
 
