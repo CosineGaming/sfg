@@ -1,0 +1,39 @@
+// Entry point for tests is main
+fn main()
+	// log must be defined in VM
+	log("hello world")
+	// Calling functions
+	log(log_and_return("twice"))
+	// Variables (implicit type)
+	var x = 5
+	// Math (DOESN'T FOLLOW ORDER OF OPERATIONS YET)
+	// Parses right-to-left
+	x = 5 * 2 + 6 // 40
+	// Asserts
+	assert(x == 40)
+	// If / else
+	if false
+		log("unreachable")
+	else if x == 40
+		log("certain, because of assert")
+	else
+		// Panic at line number
+		panic()
+	// While loops
+	// implicit != 0
+	while x
+		x = x - 1
+	assert(x == 0)
+
+// Note types are required in function signature
+fn log_and_return(what: str) str
+	log(what)
+	return what
+
+
+// Extern funcs will be explained better once fully implemented
+@fn extern_func(athing: int)
+// Nothing below it
+
+@fn @func_with_at(athing: int)
+
