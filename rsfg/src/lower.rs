@@ -15,7 +15,8 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
         Expression::Identifier(id) => match state.locals.get(&id.name) {
             Some(id_type) => *id_type,
             None => panic!("unknown local variable {}", id.name),
-        },
+        }
+        Expression::Not(_) => Type::Bool,
         Expression::FnCall(func) => {
             let node = match state.fn_map.get(&*func.name) {
                 Some(func) => func,
@@ -31,10 +32,11 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
             }
         }
         Expression::Binary(expr) => {
+            use BinaryOp::*;
             match expr.op {
-                BinaryOp::Equals => Type::Bool,
+                Equals | NotEquals | Greater | GreaterEquals | Less | LessEquals => Type::Bool,
                 // Retains type of arguments
-                BinaryOp::Plus | BinaryOp::Minus | BinaryOp::Times | BinaryOp::Divide => {
+                Plus | Minus | Times | Divide => {
                     let left = expression_type(state, &expr.left);
                     let right = expression_type(state, &expr.right);
                     assert_eq!(left, right, "Commutative operation between different types");
@@ -140,6 +142,14 @@ fn expression_to_push(
         }
         Expression::Literal(Literal::Int(int)) => vec![llr::Instruction::Push(i_as_u(*int))],
         Expression::Literal(Literal::Bool(val)) => vec![llr::Instruction::Push(i_as_u(*val as i32))],
+        Expression::Not(expr) => {
+            let mut insts = vec![];
+            // expr == false
+            insts.append(&mut expression_to_push(state, expr, 0));
+            insts.push(llr::Instruction::Push(0));
+            insts.push(llr::Instruction::Equals);
+            insts
+        }
         // fn call leaves result on the stack which is exactly what we need
         Expression::FnCall(call) => lower_fn_call(state, call, false),
         Expression::Identifier(var) => {
@@ -150,9 +160,18 @@ fn expression_to_push(
         }
         Expression::Binary(expr) => {
             let mut insts = vec![];
-            if expr.op != BinaryOp::Times {
-                insts.append(&mut expression_to_push(state, &expr.left, 0));
-                insts.append(&mut expression_to_push(state, &expr.right, 1));
+            // Special cases (most binary ops follow similar rules)
+            match expr.op {
+                BinaryOp::Times => {
+                    insts.append(&mut expression_to_push(state, &expr.left, 0));
+                    insts.append(&mut expression_to_push(state, &expr.right, 1));
+                }
+                BinaryOp::NotEquals => {
+                    let mut as_equals = expr.clone();
+                    as_equals.op = BinaryOp::Equals;
+                    let desugared = Expression::Not(Box::new(Expression::Binary(as_equals)));
+                    insts.append(&mut expression_to_push(state, &desugared, 0));
+                }
             }
             match expr.op {
                 BinaryOp::Equals => insts.push(llr::Instruction::Equals),
@@ -170,6 +189,7 @@ fn expression_to_push(
                     };
                     insts.append(&mut lower_fn_call(state, &call, false))
                 }
+                BinaryOp::NotEquals => (),
                 BinaryOp::Divide => unimplemented!(),
             };
             insts

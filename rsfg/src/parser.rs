@@ -127,6 +127,11 @@ fn parse_id(rtokens: &mut Tokens, type_required: bool) -> Result<TypedId> {
 fn parse_binary(rtokens: &mut Tokens, left: Expression) -> Result<BinaryExpr> {
     let op = match rb_try!(rtokens, pop_no_eof(rtokens, "binary expr")) {
         Token { kind: TokenType::Equals, .. } => BinaryOp::Equals,
+        Token { kind: TokenType::Greater, .. } => BinaryOp::Greater,
+        Token { kind: TokenType::GreaterEquals, .. } => BinaryOp::GreaterEquals,
+        Token { kind: TokenType::Less, .. } => BinaryOp::Less,
+        Token { kind: TokenType::LessEquals, .. } => BinaryOp::LessEquals,
+        Token { kind: TokenType::NotEquals, .. } => BinaryOp::NotEquals,
         Token { kind: TokenType::Plus, .. } => BinaryOp::Plus,
         Token { kind: TokenType::Minus, .. } => BinaryOp::Minus,
         Token { kind: TokenType::Times, .. } => BinaryOp::Times,
@@ -148,6 +153,12 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
                 Token { kind: TokenType::RParen, .. } => res,
                 got => Err(ParseError::Expected(vec![TokenType::RParen], got)),
             }
+        }
+        // Not
+        Some(Token { kind: TokenType::Not, .. }) => {
+            rtokens.pop();
+            let not_of = parse_expression(rtokens)?;
+            Ok(Expression::Not(Box::new(not_of)))
         }
         // Literals
         Some(Token { kind: TokenType::StringLit(string), .. }) => {

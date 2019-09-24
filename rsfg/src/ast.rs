@@ -41,6 +41,7 @@ pub enum Statement {
 pub enum Expression {
     Literal(Literal),
     Identifier(TypedId),
+    Not(Box<Expression>),
     // A FnCall can be an expression as well as a statement
     // A statement FnCall is lowered differently than an expression FnCall
     FnCall(FnCall),
@@ -83,6 +84,11 @@ pub struct WhileLoop {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum BinaryOp {
     Equals,
+    NotEquals,
+    Greater,
+    GreaterEquals,
+    Less,
+    LessEquals,
     Plus,
     Minus,
     Times,

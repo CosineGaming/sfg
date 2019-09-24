@@ -1,0 +1,9 @@
+fn main()
+	assert(!false)
+	assert(5 < 10)
+	assert(!(5 > 10))
+	assert(5 <= 5)
+	assert(5 >= 5)
+	assert(4 != 5)
+	assert(!(4 != 4))
+

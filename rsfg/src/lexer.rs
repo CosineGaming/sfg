@@ -18,6 +18,9 @@ enum NextTokenType {
     ExternFnOrExternCall,
     CommentOrDivision,
     AssignmentOrEquals,
+    NotOrEquals,
+    LessOrEquals,
+    GreaterOrEquals,
     Newline,
     LParen,
     RParen,
@@ -63,6 +66,9 @@ impl<'src> Lexer<'src> {
                 'A'..='Z' | 'a'..='z' => SymbolOrId(c),
                 '@' => ExternFnOrExternCall,
                 '=' => AssignmentOrEquals,
+                '!' => NotOrEquals,
+                '>' => GreaterOrEquals,
+                '<' => LessOrEquals,
                 ' ' | '\t' => Space(c),
                 '0'..='9' => Digit(c),
                 '/' => CommentOrDivision,
@@ -221,7 +227,28 @@ pub fn lex(text: &str) -> Vec<Token> {
                     Equals
                 }
                 _ => Assignment,
-            },
+            }
+            NextTokenType::LessOrEquals => match lexer.rchars.last() {
+                Some('=') => {
+                    lexer.rchars.pop();
+                    LessEquals
+                }
+                _ => Less
+            }
+            NextTokenType::GreaterOrEquals => match lexer.rchars.last() {
+                Some('=') => {
+                    lexer.rchars.pop();
+                    GreaterEquals
+                }
+                _ => Greater
+            }
+            NextTokenType::NotOrEquals => match lexer.rchars.last() {
+                Some('=') => {
+                    lexer.rchars.pop();
+                    NotEquals
+                }
+                _ => Not
+            }
             NextTokenType::Newline => {
                 lexer.line += 1;
                 lexer.col = 0;
