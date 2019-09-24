@@ -40,6 +40,7 @@ pub enum Instruction {
     Swap(u8),
     Return,
     Equals,
+    Less,
     // Difference in INSTRUCTIONS, not in bytes!
     JumpZero(Label),
     Dup(u8),

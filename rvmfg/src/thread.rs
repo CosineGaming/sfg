@@ -145,6 +145,11 @@ impl Thread {
                 let b = self.stack.pop();
                 self.stack.push((a == b) as i32);
             }
+            Deser::Less => {
+                let a = self.stack.pop();
+                let b = self.stack.pop();
+                self.stack.push((b < a) as i32);
+            }
             Deser::JumpZero => {
                 let amount = read_i8(&self.code, &mut self.ip);
                 let test = self.stack.pop().unwrap();

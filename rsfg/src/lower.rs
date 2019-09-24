@@ -159,25 +159,67 @@ fn expression_to_push(
             insts
         }
         Expression::Binary(expr) => {
+            use BinaryOp::*;
             let mut insts = vec![];
             // Special cases (most binary ops follow similar rules)
             match expr.op {
-                BinaryOp::Times => {
-                    insts.append(&mut expression_to_push(state, &expr.left, 0));
-                    insts.append(&mut expression_to_push(state, &expr.right, 1));
-                }
-                BinaryOp::NotEquals => {
+                Times | GreaterEquals | LessEquals => (),
+                NotEquals => {
                     let mut as_equals = expr.clone();
-                    as_equals.op = BinaryOp::Equals;
+                    as_equals.op = Equals;
                     let desugared = Expression::Not(Box::new(Expression::Binary(as_equals)));
                     insts.append(&mut expression_to_push(state, &desugared, 0));
                 }
+                // Right, left, op-to-follow
+                // r l < == l r >
+                Greater => {
+                    insts.append(&mut expression_to_push(state, &expr.right, 0));
+                    insts.append(&mut expression_to_push(state, &expr.left, 1));
+                }
+                // Left, right, op-to-follow
+                _ => {
+                    insts.append(&mut expression_to_push(state, &expr.left, 0));
+                    insts.append(&mut expression_to_push(state, &expr.right, 1));
+                }
             }
             match expr.op {
-                BinaryOp::Equals => insts.push(llr::Instruction::Equals),
-                BinaryOp::Plus => insts.push(llr::Instruction::Add),
-                BinaryOp::Minus => insts.push(llr::Instruction::Sub),
-                BinaryOp::Times => {
+                Equals => insts.push(llr::Instruction::Equals),
+                // Arguments reversed previously
+                Greater => insts.push(llr::Instruction::Less),
+                Less => insts.push(llr::Instruction::Less),
+                GreaterEquals | LessEquals => {
+                    match expr.op {
+                        LessEquals => {
+                            insts.append(&mut expression_to_push(state, &expr.left, 0));
+                            insts.append(&mut expression_to_push(state, &expr.right, 1));
+                        }
+                        GreaterEquals => {
+                            insts.append(&mut expression_to_push(state, &expr.right, 0));
+                            insts.append(&mut expression_to_push(state, &expr.left, 1));
+                        }
+                        _ => unreachable!(),
+                    };
+                    // Stack: l r
+                    // (if > then it's r l but assume < for now)
+                    // Duplicate left
+                    insts.push(llr::Instruction::Dup(1));
+                    // Stack: l r l
+                    // Duplicate right (further forward now)
+                    insts.push(llr::Instruction::Dup(1));
+                    // Stack: l r l r
+                    insts.push(llr::Instruction::Less);
+                    // Stack: l r <
+                    // Swap g to back
+                    insts.push(llr::Instruction::Swap(2));
+                    // Stack: > l r
+                    insts.push(llr::Instruction::Equals);
+                    // Stack: > =
+                    // Or == Add
+                    insts.push(llr::Instruction::Add);
+                }
+                Plus => insts.push(llr::Instruction::Add),
+                Minus => insts.push(llr::Instruction::Sub),
+                Times => {
                     // Translate 4*5 to internal_times(4,5)
                     // This might be cleaner in a "sugar" / parser-side change
                     // TODO: obviously lacking Times instruction is slow af
@@ -189,8 +231,8 @@ fn expression_to_push(
                     };
                     insts.append(&mut lower_fn_call(state, &call, false))
                 }
-                BinaryOp::NotEquals => (),
-                BinaryOp::Divide => unimplemented!(),
+                NotEquals => (),
+                Divide => unimplemented!(),
             };
             insts
         }
