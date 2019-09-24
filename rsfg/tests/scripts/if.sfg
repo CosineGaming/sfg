@@ -1,6 +1,8 @@
 fn main()
 	var do_panic = true
-	if true
+	if false
+		panic()
+	else if true
 		do_panic = false
 	else
 		panic()

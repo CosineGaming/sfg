@@ -302,8 +302,26 @@ fn parse_if(rtokens: &mut Tokens, tabs: usize) -> Result<If> {
                 let else_result = expect_token(rtokens, TokenType::Else, "if statement");
                 match else_result {
                     Ok(_) => {
-                        // There is an else
-                        let else_statements = rb_try!(rtokens, parse_indented_block(rtokens, tabs + 1));
+                        let else_statements = match rtokens.last() {
+                            Some(Token { kind: TokenType::If, .. }) => {
+                                // else if
+                                vec![Statement::If(parse_if(rtokens, tabs)?)]
+                            }
+                            Some(Token { kind: TokenType::Newline, .. }) => {
+                                // else
+                                // 	stuff
+                                parse_indented_block(rtokens, tabs + 1)?
+                            }
+                            Some(what) => {
+                                // else garbage
+                                return Err(
+                                    ParseError::Expected(
+                                        vec![TokenType::If, TokenType::Newline],
+                                        what.clone()))
+                            }
+                            // else\0
+                            None => vec![],
+                        };
                         debug!("there IS an else!");
                         Ok(else_statements)
                     }
