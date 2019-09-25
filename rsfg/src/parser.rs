@@ -260,29 +260,20 @@ fn parse_args(rtokens: &mut Tokens) -> Result<Vec<TypedId>> {
     let mut args = vec![];
     rb_try!(rtokens, expect_token(rtokens, TokenType::LParen, "fn parameters"));
     loop {
-        args.push(match rtokens.last() {
-            Some(Token { kind: TokenType::Identifier(_), .. }) => {
-                rb_try!(rtokens, parse_id(rtokens, true))
+        // TODO: Why unreachable code warning here? Tests pass
+        expect_any!("parameters", rtokens.last() => {
+            Identifier(__,String::from("")) => {
+                args.push(rb_try!(rtokens, parse_id(rtokens, true)));
             }
-            Some(Token { kind: TokenType::RParen, .. }) => {
+            RParen => {
                 rtokens.pop();
                 break;
             }
-            Some(got) => {
-                return Err(ParseError::Expected(
-                    vec![TokenType::Identifier(String::new()), TokenType::RParen],
-                    got.clone(),
-                ))
-            }
-            None => return Err(ParseError::EOF("parameters".to_string())),
-        });
-        match pop_no_eof(rtokens, "fn params")? {
-            Token { kind: TokenType::Comma, .. } => (),
-            Token { kind: TokenType::RParen, .. } => break,
-            got => {
-                return Err(ParseError::Expected(vec![TokenType::Comma, TokenType::RParen], got))
-            }
-        }
+        })?;
+        expect_any!("fn params", rtokens.pop().as_ref() => {
+            Comma => (),
+            RParen => break,
+        })?;
     }
     Ok(args)
 }
@@ -309,26 +300,17 @@ fn parse_if(rtokens: &mut Tokens, tabs: usize) -> Result<If> {
                 let else_result = expect_token(rtokens, TokenType::Else, "if statement");
                 match else_result {
                     Ok(_) => {
-                        let else_statements = match rtokens.last() {
-                            Some(Token { kind: TokenType::If, .. }) => {
+                        let else_statements = expect_any!("if-else", rtokens.last() => {
+                            If => {
                                 // else if
                                 vec![Statement::If(parse_if(rtokens, tabs)?)]
                             }
-                            Some(Token { kind: TokenType::Newline, .. }) => {
+                            Newline => {
                                 // else
                                 // 	stuff
                                 parse_indented_block(rtokens, tabs + 1)?
                             }
-                            Some(what) => {
-                                // else garbage
-                                return Err(
-                                    ParseError::Expected(
-                                        vec![TokenType::If, TokenType::Newline],
-                                        what.clone()))
-                            }
-                            // else\0
-                            None => vec![],
-                        };
+                        })?;
                         debug!("there IS an else!");
                         Ok(else_statements)
                     }
@@ -364,34 +346,25 @@ fn parse_loop(rtokens: &mut Tokens, tabs: usize) -> Result<WhileLoop> {
 }
 
 fn parse_assignment(rtokens: &mut Tokens) -> Result<Assignment> {
-    let name = match rtokens.pop() {
-        Some(Token { kind: TokenType::Identifier(name), .. }) => name,
-        Some(what) => {
-            return Err(ParseError::Expected(
-                vec![TokenType::Identifier("".to_string())],
-                what.clone(),
-            ))
-        }
-        None => return Err(ParseError::EOF("assignment".to_string())),
-    };
+    let name = expect_any!("assignment", rtokens.pop() => {
+        Identifier(name,String::from("")) => name,
+    })?;
     let op = rtokens.pop();
     let rhs = parse_expression(rtokens)?;
-    match op {
-        Some(Token { kind: TokenType::Assignment, .. }) => {
-            Ok(Assignment { lvalue: name, rvalue: rhs })
+    expect_any!("assignment", op => {
+        Assignment => {
+            Assignment { lvalue: name, rvalue: rhs }
         }
-        Some(Token { kind: TokenType::PlusEquals, .. }) => {
+        PlusEquals => {
             let op = Expression::Binary(Box::new(BinaryExpr {
                 // TODO: It is at this moment that i realize it should be id_type: Option<Type>, not Type::Infer
                 left: Expression::Identifier(TypedId { name: name.clone(), id_type: Type::Infer }),
                 op: BinaryOp::Plus,
                 right: rhs,
             }));
-            Ok(Assignment { lvalue: name, rvalue: op })
+            Assignment { lvalue: name, rvalue: op }
         }
-        Some(what) => Err(ParseError::Expected(vec![TokenType::Assignment, TokenType::PlusEquals], what)),
-        _ => Err(ParseError::EOF("assignment".to_string())),
-    }
+    })
 }
 /// Declaration is just an assignment starting with var
 fn parse_declaration(rtokens: &mut Tokens) -> Result<Assignment> {
@@ -423,36 +396,21 @@ fn parse_signature(rtokens: &mut Tokens) -> Result<Signature> {
     // An extern function that serves only as a typecheck might use the
     // @ in the name. The lexer misinterprets this as ExternFnCall despite
     // not being a call
-    let name = match rb_try!(rtokens, pop_no_eof(rtokens, "fn")) {
-        Token { kind: TokenType::Identifier(name), .. } => name,
-        Token { kind: TokenType::ExternFnCall(name), .. } => name,
-        got => {
-            return Err(ParseError::Expected(
-                vec![TokenType::Identifier(String::new()), TokenType::ExternFnCall(String::new())],
-                got,
-            ))
-        }
-    };
+    let name = expect_any!("fn", rtokens.pop() => {
+        Identifier(name,String::from("")) => name,
+        ExternFnCall(name,String::from("")) => name,
+    })?;
     let parameters = rb_try!(rtokens, parse_args(rtokens));
-    let return_type = match rtokens.last() {
-        Some(Token { kind: TokenType::Type(_), .. }) => match rtokens.pop() {
+    let return_type = expect_any!("assignment", rtokens.last() => {
+        Type(__,Type::Infer) => match rtokens.pop() {
             Some(Token { kind: TokenType::Type(r_type), .. }) => Some(r_type),
             _ => unreachable!(),
         },
-        Some(Token { kind: TokenType::Newline, .. }) => None,
-        Some(got) => {
-            return Err(ParseError::Expected(
-                vec![TokenType::Newline, TokenType::Type(Type::Str)],
-                got.clone(),
-            ))
-        }
-        None => return Err(ParseError::EOF("signature".to_string())),
-    };
-    match rtokens.pop() {
-        Some(Token { kind: TokenType::Newline, .. }) => (),
-        Some(got) => return Err(ParseError::Expected(vec![TokenType::Newline], got)),
-        None => return Err(ParseError::EOF("signature".to_string())),
-    }
+        Newline => None,
+    })?;
+    expect_any!("assignment", rtokens.pop() => {
+        Newline => (),
+    })?;
     Ok(Signature { name, parameters, return_type })
 }
 
@@ -544,10 +502,7 @@ fn parse_fn(rtokens: &mut Tokens) -> Result<Fn> {
 }
 
 fn parse_extern_fn(rtokens: &mut Tokens) -> Result<ExternFn> {
-    match rtokens.pop() {
-        Some(Token { kind: TokenType::ExternFn, .. }) => (),
-        _ => panic!("internal: extern fn didn't start with @fn"),
-    }
+    expect_token(rtokens, TokenType::ExternFn, "extern fn")?;
     let signature = rb_try!(rtokens, parse_signature(rtokens));
     Ok(ExternFn { signature })
 }
