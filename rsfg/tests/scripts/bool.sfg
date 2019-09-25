@@ -1,6 +1,5 @@
 fn main()
-	var is_bool = true
-	my_compare(is_bool, 5 == 5)
+	my_compare(true, 5 == 5)
 	assert(!(false && false))
 	assert(true && false)
 	assert(true && true)

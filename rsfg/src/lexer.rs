@@ -59,6 +59,18 @@ impl<'src> Lexer<'src> {
         }
     }
 
+    fn reinterpret(&mut self, plain: TokenType, change: char, changed: TokenType) -> TokenType {
+        match self.rchars.last() {
+            Some(what) => if *what == change {
+                self.rchars.pop();
+                changed
+            } else {
+                plain
+            }
+            _ => plain
+        }
+    }
+
     fn next_symbol_type(&mut self) -> NextTokenType {
         use NextTokenType::*;
 
@@ -198,6 +210,10 @@ pub fn lex(text: &str) -> Vec<Token> {
                         }
                         continue;
                     }
+                    Some('=') => {
+                        lexer.rchars.pop();
+                        DivideEquals
+                    }
                     _ => {
                         // Division
                         Divide
@@ -225,34 +241,14 @@ pub fn lex(text: &str) -> Vec<Token> {
                 };
                 symbol_or_id
             }
-            NextTokenType::AssignmentOrEquals => match lexer.rchars.last() {
-                Some('=') => {
-                    lexer.rchars.pop();
-                    Equals
-                }
-                _ => Assignment,
-            }
-            NextTokenType::LessOrEquals => match lexer.rchars.last() {
-                Some('=') => {
-                    lexer.rchars.pop();
-                    LessEquals
-                }
-                _ => Less
-            }
-            NextTokenType::GreaterOrEquals => match lexer.rchars.last() {
-                Some('=') => {
-                    lexer.rchars.pop();
-                    GreaterEquals
-                }
-                _ => Greater
-            }
-            NextTokenType::NotOrEquals => match lexer.rchars.last() {
-                Some('=') => {
-                    lexer.rchars.pop();
-                    NotEquals
-                }
-                _ => Not
-            }
+            NextTokenType::AssignmentOrEquals =>
+            	lexer.reinterpret(Assignment, '=', Equals),
+            NextTokenType::LessOrEquals =>
+            	lexer.reinterpret(Less, '=', LessEquals),
+            NextTokenType::GreaterOrEquals =>
+            	lexer.reinterpret(Greater, '=', GreaterEquals),
+            NextTokenType::NotOrEquals =>
+            	lexer.reinterpret(Not, '=', NotEquals),
             NextTokenType::Or => match lexer.rchars.last() {
                 Some('|') => {
                     lexer.rchars.pop();
@@ -273,9 +269,12 @@ pub fn lex(text: &str) -> Vec<Token> {
                 lexer.col_begin = lexer.rchars.len();
                 Newline
             }
-            NextTokenType::Plus => Plus,
-            NextTokenType::Minus => Minus,
-            NextTokenType::Times => Times,
+            NextTokenType::Plus =>
+                lexer.reinterpret(Plus, '=', PlusEquals),
+            NextTokenType::Minus =>
+                lexer.reinterpret(Minus, '=', MinusEquals),
+            NextTokenType::Times =>
+                lexer.reinterpret(Times, '=', TimesEquals),
             NextTokenType::LParen => LParen,
             NextTokenType::RParen => RParen,
             NextTokenType::Colon => Colon,

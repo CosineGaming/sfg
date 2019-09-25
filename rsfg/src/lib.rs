@@ -41,9 +41,13 @@ pub enum TokenType {
     Declare,
     Assignment,
     Plus,
+    PlusEquals,
     Minus,
+    MinusEquals,
     Times,
+    TimesEquals,
     Divide,
+    DivideEquals,
     True,
     False,
 }

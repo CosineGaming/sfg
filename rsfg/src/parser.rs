@@ -71,6 +71,18 @@ macro_rules! rb_ok_or {
     };
 }
 
+macro_rules! expect_any {
+    ( $to_match:expr => { $($token_type:ty => $expr:expr)* } ) => {
+        match $to_match {
+            $(Some(Token { kind: token_type, .. }) => $expr)*,
+            Some(what) => Err(ParseError::Expected(vec![
+				$(token_type)*
+			], what)),
+			None => Err(EOF("TODO".to_string()));
+        }
+    }
+}
+
 fn pop_no_eof(from: &mut Tokens, parsing_what: &str) -> Result<Token> {
     match from.pop() {
         Some(token) => Ok(token),
@@ -380,9 +392,24 @@ fn parse_assignment(rtokens: &mut Tokens) -> Result<Assignment> {
         }
         None => return Err(ParseError::EOF("assignment".to_string())),
     };
-    expect_token(rtokens, TokenType::Assignment, "assignment")?;
+    let op = rtokens.pop();
     let rhs = parse_expression(rtokens)?;
-    Ok(Assignment { lvalue: name, rvalue: rhs })
+    match op {
+        Some(Token { kind: TokenType::Assignment, .. }) => {
+            Ok(Assignment { lvalue: name, rvalue: rhs })
+        }
+        Some(Token { kind: TokenType::PlusEquals, .. }) => {
+            let op = Expression::Binary(Box::new(BinaryExpr {
+                // TODO: It is at this moment that i realize it should be id_type: Option<Type>, not Type::Infer
+                left: Expression::Identifier(TypedId { name: name.clone(), id_type: Type::Infer }),
+                op: BinaryOp::Plus,
+                right: rhs,
+            }));
+            Ok(Assignment { lvalue: name, rvalue: op })
+        }
+        Some(what) => Err(ParseError::Expected(vec![TokenType::Assignment, TokenType::PlusEquals], what)),
+        _ => Err(ParseError::EOF("assignment".to_string())),
+    }
 }
 /// Declaration is just an assignment starting with var
 fn parse_declaration(rtokens: &mut Tokens) -> Result<Assignment> {

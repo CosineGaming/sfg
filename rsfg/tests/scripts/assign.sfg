@@ -3,4 +3,6 @@ fn main()
 	assert(x == 5)
 	x = 6
 	assert(x == 6)
+	x += 1
+	assert(x == 7)
 
