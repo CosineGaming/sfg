@@ -37,7 +37,7 @@ fn serialize(what: Serializable) -> u8 {
         S::Instruction(I::Equal) => 0x38,
         S::Instruction(I::JumpZero(_)) => 0x39,
         S::Instruction(I::Dup(_)) => 0x3a,
-        S::Instruction(I::Panic) => 0x3b,
+        S::Instruction(I::Panic(_,_)) => 0x3b,
         S::Instruction(I::Add) => 0x3c,
         S::Instruction(I::Sub) => 0x3d,
         S::Instruction(I::Swap(_)) => 0x3e,
@@ -119,6 +119,11 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
             Push(what) => {
                 code.extend_from_slice(&u32_bytes(*what as u32));
             }
+            // Two u32 args
+            Panic(l, c) => {
+                code.extend_from_slice(&u32_bytes(*l as u32));
+                code.extend_from_slice(&u32_bytes(*c as u32));
+            }
             // Besides instruction, the procedure for generating
             // FnCall and ExternFnCall is the same
             FnCall(call) | ExternFnCall(call) => {
@@ -138,7 +143,7 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
                 code.push(serialize(Serializable::Placeholder));
             }
             // As simple as serializing the instruction
-            Return | Pop | Equal | Panic | Add | Sub | Less => {}
+            Return | Pop | Equal | Add | Sub | Less => {}
         }
     }
     LabeledCode { code, labels }

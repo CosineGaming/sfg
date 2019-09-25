@@ -250,21 +250,37 @@ fn expression_to_push(
 
 fn lower_panic(state: &mut LowerState, call: &FnCall) -> Vec<llr::Instruction> {
     let mut insts = vec![];
-    for (i, arg) in call.arguments.iter().enumerate() {
-        let given_type = expression_type(state, arg);
-        if types_match(given_type, Type::Int) == Some(false) {
-            panic!("expected type Int but got {:?}", given_type);
-        }
-        // TODO: storing the line/col in code rather than stack would be:
-        // 1. Simpler to compile
-        // 2. Safer (eg panic on stack overflow possible)
-        // But requires rewriting assert in Rust as well
-        // Also: this code is corrently fairly duplicated with lower_fn_call
-        let mut push = expression_to_push(state, arg, i as u8);
-        insts.append(&mut push);
-    }
-    insts.push(llr::Instruction::Panic);
+    let (line, col) = match (call.arguments[0].clone(), call.arguments[1].clone()) {
+        (Expression::Literal(Literal::Int(l)), Expression::Literal(Literal::Int(c))) => (l,c),
+        got => panic!("Panic expected line + col as Int, got {:?}", got),
+    };
+    insts.push(llr::Instruction::Panic(line as u32, col as u32));
     insts
+}
+
+fn lower_assert(state: &mut LowerState, call: &FnCall) -> Vec<llr::Instruction> {
+    let condition = call.arguments[0].clone();
+    let line = call.arguments[1].clone();
+    let col = call.arguments[2].clone();
+    // panic(line, col)
+    let panic_statement = Statement::FnCall(FnCall {
+        name: "panic".to_string(),
+        arguments: vec![line, col],
+    });
+    // if !condition
+    // 	panic(line, col)
+    let desugared = Statement::If(If {
+        condition: Expression::Not(Box::new(condition)),
+        statements: vec![panic_statement],
+        else_statements: vec![],
+    });
+    // Completely arbitrary, but lower_statement expects it in case of return
+    let dummy_sig = Signature {
+        name: "".to_string(),
+        return_type: None,
+        parameters: vec![],
+    };
+    lower_statement(state, &desugared, &dummy_sig)
 }
 
 fn lower_fn_call(
@@ -276,6 +292,7 @@ fn lower_fn_call(
         Some((i, _, func)) => (i, func),
         None => match &call.name[..] {
             "panic" => return lower_panic(state, call),
+            "assert" => return lower_assert(state, call),
             _ => panic!("could not find function {}", call.name),
         },
     };

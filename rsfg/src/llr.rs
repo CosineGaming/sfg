@@ -46,7 +46,7 @@ pub enum Instruction {
     Dup(u8),
     Add,
     Sub,
-    Panic,
+    Panic(u32, u32),
     LabelMark(Label),
 }
 pub type TypedVar = Type;

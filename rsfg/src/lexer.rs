@@ -53,8 +53,8 @@ impl<'src> Lexer<'src> {
             tokens: Vec::new(),
             spaces_count: 0,
             rchars: source.chars().rev().collect(),
-            line: 0,
-            col: 0,
+            line: 1,
+            col: 1,
             col_begin: source.len(),
         }
     }
@@ -265,7 +265,7 @@ pub fn lex(text: &str) -> Vec<Token> {
             }
             NextTokenType::Newline => {
                 lexer.line += 1;
-                lexer.col = 0;
+                lexer.col = 1;
                 lexer.col_begin = lexer.rchars.len();
                 Newline
             }
@@ -334,8 +334,8 @@ mod test {
         assert_eq!(
             lexed,
             vec![
-                Token { kind: IntLit(578), line: 0, col: 0 },
-                Token { kind: IntLit(980), line: 0, col: 4 }
+                Token { kind: IntLit(578), line: 1, col: 1 },
+                Token { kind: IntLit(980), line: 1, col: 5 }
             ]
         );
     }
@@ -345,10 +345,10 @@ mod test {
         assert_eq!(
             lexed,
             vec![
-                Token { kind: Newline, line: 0, col: 0 },
-                Token { kind: Tab, line: 1, col: 0 },
-                Token { kind: Tab, line: 1, col: 1 },
-                Token { kind: IntLit(5), line: 1, col: 2 },
+                Token { kind: Newline, line: 1, col: 1 },
+                Token { kind: Tab, line: 2, col: 1 },
+                Token { kind: Tab, line: 2, col: 2 },
+                Token { kind: IntLit(5), line: 2, col: 3 },
             ]
         );
     }

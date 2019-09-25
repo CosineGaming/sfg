@@ -249,13 +249,15 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
             _ => rb_try!(rtokens, parse_expression(rtokens)),
         });
     }
-    // Assert has special handling because of line/col args
-    if &name[..] == "assert" {
-        if arguments.len() == 1 {
+    // Panic/assert has special handling because of line/col args
+    match &name[..] {
+        // ==1 => Don't do it if line/col explicit
+        "panic" | "assert" if arguments.len() <= 1 => {
             // Safe because we wouldn't be here without a token
             arguments.push(Expression::Literal(Literal::Int(first_token.unwrap().line as i32)));
             arguments.push(Expression::Literal(Literal::Int(first_token.unwrap().col as i32)));
         }
+        _ => (),
     }
     Ok(FnCall { name, arguments })
 }
@@ -530,9 +532,9 @@ pub fn parse(mut tokens: Vec<Token>) -> AST {
             Some(t) => t,
             None => break,
         };
-        match t {
+        match expect_any!("global space", Some(t) => {
             // Parse a function
-            Token { kind: TokenType::Fn, .. } => {
+            Fn => {
                 match parse_fn(&mut rtokens) {
                     Ok(func) => ast.push(ASTNode::Fn(func)),
                     Err(err) => {
@@ -541,7 +543,7 @@ pub fn parse(mut tokens: Vec<Token>) -> AST {
                     }
                 }
             }
-            Token { kind: TokenType::ExternFn, .. } => {
+            ExternFn => {
                 match parse_extern_fn(&mut rtokens) {
                     Ok(func) => ast.push(ASTNode::ExternFn(func)),
                     Err(err) => {
@@ -550,13 +552,19 @@ pub fn parse(mut tokens: Vec<Token>) -> AST {
                     }
                 }
             }
-            Token { kind: TokenType::Newline, .. } => {
+            Newline => {
                 rtokens.pop();
             }
-            _ => {
-                panic!("expected Fn in global space, got {:?}", t);
+            Tab => {
+                rtokens.pop();
             }
-        };
+        }) {
+            Ok(()) => (),
+            Err(err) => {
+                println!("USER ERROR: {}", err);
+                panic!(err);
+            }
+        }
     }
     ast
 }

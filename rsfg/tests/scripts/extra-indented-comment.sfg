@@ -1,3 +1,6 @@
+// nothing then
+	// lead with tab
+
 fn main()
 	log("hi")
 	// Say we had the following, commented out as such

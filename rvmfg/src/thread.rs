@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 
 /// Should be small enough to make small scripts low-RAM, but high enough
 /// that startup doesn't take forever with 1000s of incremental allocs
-const INIT_STACK_SIZE: usize = 50;
+const INIT_STACK_SIZE: usize = 32;
 /// Similarly chosen for the expected call stack size
 const INIT_CALL_STACK_SIZE: usize = 6;
 /// This is mostly arbitrary but keeps us from unrecoverable OOM error on
@@ -173,8 +173,8 @@ impl Thread {
                 self.stack[up_i] = down;
             }
             Deser::Panic => {
-                let col = self.stack.pop().unwrap();
-                let line = self.stack.pop().unwrap();
+                let line = read_u32(&self.code, &mut self.ip);
+                let col = read_u32(&self.code, &mut self.ip);
                 self.sane_state();
                 panic!("sfg code panicked at line {}:{}", line, col);
             }

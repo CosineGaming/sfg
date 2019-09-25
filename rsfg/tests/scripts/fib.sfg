@@ -12,7 +12,6 @@ fn main()
 		temp = a + b
 		a = b
 		b = temp
-		// TODO -= sugar
-		n = n - 1
+		n -= 1
 	assert(b == 701408733)
 

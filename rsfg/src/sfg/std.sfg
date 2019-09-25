@@ -14,10 +14,6 @@
 //
 // This file is implementations of section (a) of (1) and all the externs of (2)
 
-fn assert(cond: bool, line: int, col: int)
-	if !cond
-		panic(line, col)
-
 fn internal_times(left: int, right: int) int
 	var total = 0
 	while right // != 0 implied
