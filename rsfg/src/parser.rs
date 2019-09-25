@@ -7,7 +7,6 @@ enum ParseError {
     // Expected, got
     Expected(Vec<TokenType>, Token),
     CouldNotConstruct(Vec<ParseError>),
-    Unsupported(String, usize, usize),
     EOF(String),
 }
 impl std::fmt::Display for ParseError {
@@ -29,7 +28,6 @@ impl std::fmt::Display for ParseError {
                 let error_str = error_strs.join("\n\n");
                 write!(f, "could not construct any possible variant expected here. the following errors were returned:\n\n{}", error_str)
             }
-            Unsupported(what, line, col) => write!(f, "unsupported {} at {}:{}", what, line, col),
             EOF(parsing) => write!(f, "unexpected EOF parsing {}", parsing),
         }
     }
@@ -72,13 +70,17 @@ macro_rules! rb_ok_or {
 }
 
 macro_rules! expect_any {
-    ( $to_match:expr => { $($token_type:ty => $expr:expr)* } ) => {
+    ( $during:literal, $to_match:expr => { $($token_type:ident$(($subordinate:ident,$literal:expr))? => $expr:expr $(,)?)* } ) => {
         match $to_match {
-            $(Some(Token { kind: token_type, .. }) => $expr)*,
-            Some(what) => Err(ParseError::Expected(vec![
-				$(token_type)*
-			], what)),
-			None => Err(EOF("TODO".to_string()));
+            $(Some(Token { kind: TokenType::$token_type$(($subordinate))?, .. }) => {Ok($expr)})*,
+            Some(got) => Err(ParseError::Expected(vec![
+                $(
+                    // This should be illegal, may be illegal, is hacky, but it's necessary
+                    TokenType::$token_type
+                    $(($literal))?
+                ),*
+            ], got.clone())),
+            None => Err(ParseError::EOF($during.to_string()))
         }
     }
 }
@@ -137,30 +139,29 @@ fn parse_id(rtokens: &mut Tokens, type_required: bool) -> Result<TypedId> {
 }
 
 fn parse_binary(rtokens: &mut Tokens, left: Expression) -> Result<BinaryExpr> {
-    let op = match rb_try!(rtokens, pop_no_eof(rtokens, "binary expr")) {
-        Token { kind: TokenType::Equals, .. } => BinaryOp::Equals,
-        Token { kind: TokenType::Greater, .. } => BinaryOp::Greater,
-        Token { kind: TokenType::GreaterEquals, .. } => BinaryOp::GreaterEquals,
-        Token { kind: TokenType::Less, .. } => BinaryOp::Less,
-        Token { kind: TokenType::LessEquals, .. } => BinaryOp::LessEquals,
-        Token { kind: TokenType::NotEquals, .. } => BinaryOp::NotEquals,
-        Token { kind: TokenType::And, .. } => BinaryOp::And,
-        Token { kind: TokenType::Or, .. } => BinaryOp::Or,
-        Token { kind: TokenType::Plus, .. } => BinaryOp::Plus,
-        Token { kind: TokenType::Minus, .. } => BinaryOp::Minus,
-        Token { kind: TokenType::Times, .. } => BinaryOp::Times,
-        Token { kind: TokenType::Divide, .. } => BinaryOp::Divide,
-        got => return Err(ParseError::Expected(vec![TokenType::Equals], got)),
-    };
+    let op = expect_any!("binary expression", rtokens.pop() => {
+        Equals => BinaryOp::Equals,
+        Greater => BinaryOp::Greater,
+        GreaterEquals => BinaryOp::GreaterEquals,
+        Less => BinaryOp::Less,
+        LessEquals => BinaryOp::LessEquals,
+        NotEquals => BinaryOp::NotEquals,
+        And => BinaryOp::And,
+        Or => BinaryOp::Or,
+        Plus => BinaryOp::Plus,
+        Minus => BinaryOp::Minus,
+        Times => BinaryOp::Times,
+        Divide => BinaryOp::Divide,
+    })?;
     let right = rb_try!(rtokens, parse_expression(rtokens));
     Ok(BinaryExpr { left, op, right })
 }
 
 fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
     // First we parse the left side of a binary expression which COULD be the whole expression
-    let left = match rtokens.last() {
+    let left = expect_any!("expression", rtokens.last() => {
         // In order to give binary operator precedence to parenthesis
-        Some(Token { kind: TokenType::LParen, .. }) => {
+        LParen => {
             rtokens.pop();
             let res = parse_expression(rtokens);
             match pop_no_eof(rtokens, "parenthesized expression")? {
@@ -169,22 +170,22 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
             }
         }
         // Not
-        Some(Token { kind: TokenType::Not, .. }) => {
+        Not => {
             rtokens.pop();
             let not_of = parse_expression(rtokens)?;
             Ok(Expression::Not(Box::new(not_of)))
         }
         // Literals
-        Some(Token { kind: TokenType::StringLit(string), .. }) => {
+        StringLit(string,String::from("")) => {
             rtokens.pop();
             Ok(Expression::Literal(Literal::String(string.clone())))
         }
-        Some(Token { kind: TokenType::IntLit(number), .. }) => {
+        IntLit(number,0) => {
             rtokens.pop();
             Ok(Expression::Literal(Literal::Int(*number)))
         }
         // This minus, because we're parsing an expression, is part of an int literal
-        Some(Token { kind: TokenType::Minus, .. }) => {
+        Minus => {
             rtokens.pop();
             match pop_no_eof(rtokens, "expression")? {
                 Token { kind: TokenType::IntLit(number), .. } => {
@@ -194,16 +195,16 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
             }
         }
         // Builtin literals
-        Some(Token { kind: TokenType::True, .. }) => {
+        True => {
             rtokens.pop();
             Ok(Expression::Literal(Literal::Bool(true)))
         }
-        Some(Token { kind: TokenType::False, .. }) => {
+        False => {
             rtokens.pop();
             Ok(Expression::Literal(Literal::Bool(false)))
         }
         // And finally identifiers
-        Some(Token { kind: TokenType::Identifier(name), .. }) => {
+        Identifier(name,String::from("")) => {
             // An identifier can start a call or just an identifier
             // It can be a call...
             let call_res =
@@ -217,11 +218,7 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
                 call_res
             }
         }
-        Some(token) => {
-            Err(ParseError::Unsupported("expression".to_string(), token.line, token.col))
-        }
-        None => Err(ParseError::EOF("expression".to_string())),
-    }?;
+    })??;
     println!("{:?}", left);
     // Then we try to parse a binary expression with it
     rb_ok_or!(
