@@ -34,7 +34,7 @@ fn serialize(what: Serializable) -> u8 {
         S::Instruction(I::Return) => 0x35,
         S::Instruction(I::FnCall(_)) => 0x36,
         S::Instruction(I::Pop) => 0x37,
-        S::Instruction(I::Equals) => 0x38,
+        S::Instruction(I::Equal) => 0x38,
         S::Instruction(I::JumpZero(_)) => 0x39,
         S::Instruction(I::Dup(_)) => 0x3a,
         S::Instruction(I::Panic) => 0x3b,
@@ -138,7 +138,7 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
                 code.push(serialize(Serializable::Placeholder));
             }
             // As simple as serializing the instruction
-            Return | Pop | Equals | Panic | Add | Sub | Less => {}
+            Return | Pop | Equal | Panic | Add | Sub | Less => {}
         }
     }
     LabeledCode { code, labels }

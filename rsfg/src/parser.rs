@@ -70,7 +70,7 @@ macro_rules! rb_ok_or {
 }
 
 macro_rules! expect_any {
-    ( $during:literal, $to_match:expr => { $($token_type:ident$(($subordinate:ident,$literal:expr))? => $expr:expr $(,)?)* } ) => {
+    ( $during:literal, $to_match:expr => { $($token_type:ident$(($subordinate:pat,$literal:expr))? => $expr:expr $(,)?)* } ) => {
         match $to_match {
             $(Some(Token { kind: TokenType::$token_type$(($subordinate))?, .. }) => {Ok($expr)})*,
             Some(got) => Err(ParseError::Expected(vec![
@@ -132,21 +132,25 @@ fn parse_id(rtokens: &mut Tokens, type_required: bool) -> Result<TypedId> {
     Ok(TypedId { name, id_type: Type::Infer })
 }
 
-fn parse_binary(rtokens: &mut Tokens, left: Expression) -> Result<BinaryExpr> {
-    let op = expect_any!("binary expression", rtokens.pop() => {
-        Equals => BinaryOp::Equals,
+fn token_to_binary_op(token: Option<Token>) -> Result<BinaryOp> {
+    expect_any!("binary expression", token => {
+        Equal => BinaryOp::Equal,
         Greater => BinaryOp::Greater,
-        GreaterEquals => BinaryOp::GreaterEquals,
+        GreaterEqual => BinaryOp::GreaterEqual,
         Less => BinaryOp::Less,
-        LessEquals => BinaryOp::LessEquals,
-        NotEquals => BinaryOp::NotEquals,
+        LessEqual => BinaryOp::LessEqual,
+        NotEqual => BinaryOp::NotEqual,
         And => BinaryOp::And,
         Or => BinaryOp::Or,
         Plus => BinaryOp::Plus,
         Minus => BinaryOp::Minus,
         Times => BinaryOp::Times,
         Divide => BinaryOp::Divide,
-    })?;
+    })
+}
+
+fn parse_binary(rtokens: &mut Tokens, left: Expression) -> Result<BinaryExpr> {
+    let op = token_to_binary_op(rtokens.pop())?;
     let right = rb_try!(rtokens, parse_expression(rtokens));
     Ok(BinaryExpr { left, op, right })
 }
@@ -355,11 +359,18 @@ fn parse_assignment(rtokens: &mut Tokens) -> Result<Assignment> {
         Assignment => {
             Assignment { lvalue: name, rvalue: rhs }
         }
-        PlusEquals => {
+        // TODO: Weird ID fanagle with following redundant match is ugly, switch to one match
+        OpAssign(ref _op, Box::new(TokenType::Identifier(String::from("any binary operator")))) => {
+            let dummy_op_token = match op {
+                Some(Token { kind: TokenType::OpAssign(right), line, col }) => Token {
+                    kind: *right, line, col
+                },
+                _ => unreachable!()
+            };
             let op = Expression::Binary(Box::new(BinaryExpr {
                 // TODO: It is at this moment that i realize it should be id_type: Option<Type>, not Type::Infer
                 left: Expression::Identifier(TypedId { name: name.clone(), id_type: Type::Infer }),
-                op: BinaryOp::Plus,
+                op: token_to_binary_op(Some(dummy_op_token))?,
                 right: rhs,
             }));
             Assignment { lvalue: name, rvalue: op }
@@ -522,10 +533,22 @@ pub fn parse(mut tokens: Vec<Token>) -> AST {
         match t {
             // Parse a function
             Token { kind: TokenType::Fn, .. } => {
-                ast.push(ASTNode::Fn(parse_fn(&mut rtokens).unwrap()));
+                match parse_fn(&mut rtokens) {
+                    Ok(func) => ast.push(ASTNode::Fn(func)),
+                    Err(err) => {
+                        println!("USER ERROR: {}", err);
+                        panic!();
+                    }
+                }
             }
             Token { kind: TokenType::ExternFn, .. } => {
-                ast.push(ASTNode::ExternFn(parse_extern_fn(&mut rtokens).unwrap()));
+                match parse_extern_fn(&mut rtokens) {
+                    Ok(func) => ast.push(ASTNode::ExternFn(func)),
+                    Err(err) => {
+                        println!("USER ERROR: {}", err);
+                        panic!();
+                    }
+                }
             }
             Token { kind: TokenType::Newline, .. } => {
                 rtokens.pop();

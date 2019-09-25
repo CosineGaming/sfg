@@ -34,7 +34,7 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
         Expression::Binary(expr) => {
             use BinaryOp::*;
             match expr.op {
-                Equals | NotEquals | Greater | GreaterEquals | Less | LessEquals | Or | And => Type::Bool,
+                Equal | NotEqual | Greater | GreaterEqual | Less | LessEqual | Or | And => Type::Bool,
                 // Retains type of arguments
                 Plus | Minus | Times | Divide => {
                     let left = expression_type(state, &expr.left);
@@ -147,7 +147,7 @@ fn expression_to_push(
             // expr == false
             insts.append(&mut expression_to_push(state, expr, stack_plus));
             insts.push(llr::Instruction::Push(0));
-            insts.push(llr::Instruction::Equals);
+            insts.push(llr::Instruction::Equal);
             insts
         }
         // fn call leaves result on the stack which is exactly what we need
@@ -163,10 +163,10 @@ fn expression_to_push(
             let mut insts = vec![];
             // Special cases (most binary ops follow similar rules)
             match expr.op {
-                Times | GreaterEquals | LessEquals | And => (),
-                NotEquals => {
+                Times | GreaterEqual | LessEqual | And => (),
+                NotEqual => {
                     let mut as_equals = expr.clone();
-                    as_equals.op = Equals;
+                    as_equals.op = Equal;
                     let desugared = Expression::Not(Box::new(Expression::Binary(as_equals)));
                     insts.append(&mut expression_to_push(state, &desugared, stack_plus));
                 }
@@ -183,17 +183,17 @@ fn expression_to_push(
                 }
             }
             match expr.op {
-                Equals => insts.push(llr::Instruction::Equals),
+                Equal => insts.push(llr::Instruction::Equal),
                 // Arguments reversed previously
                 Greater => insts.push(llr::Instruction::Less),
                 Less => insts.push(llr::Instruction::Less),
-                GreaterEquals | LessEquals => {
+                GreaterEqual | LessEqual => {
                     match expr.op {
-                        LessEquals => {
+                        LessEqual => {
                             insts.append(&mut expression_to_push(state, &expr.left, stack_plus));
                             insts.append(&mut expression_to_push(state, &expr.right, stack_plus+1));
                         }
-                        GreaterEquals => {
+                        GreaterEqual => {
                             insts.append(&mut expression_to_push(state, &expr.right, stack_plus));
                             insts.append(&mut expression_to_push(state, &expr.left, stack_plus+1));
                         }
@@ -212,7 +212,7 @@ fn expression_to_push(
                     // Swap g to back
                     insts.push(llr::Instruction::Swap(stack_plus+2));
                     // Stack: > l r
-                    insts.push(llr::Instruction::Equals);
+                    insts.push(llr::Instruction::Equal);
                     // Stack: > =
                     // Or == Add
                     insts.push(llr::Instruction::Add);
@@ -240,7 +240,7 @@ fn expression_to_push(
                     };
                     insts.append(&mut lower_fn_call(state, &call, false))
                 }
-                NotEquals => (),
+                NotEqual => (),
                 Divide => unimplemented!(),
             };
             insts

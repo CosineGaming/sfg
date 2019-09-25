@@ -212,7 +212,7 @@ pub fn lex(text: &str) -> Vec<Token> {
                     }
                     Some('=') => {
                         lexer.rchars.pop();
-                        DivideEquals
+                        OpAssign(Box::new(Divide))
                     }
                     _ => {
                         // Division
@@ -242,13 +242,13 @@ pub fn lex(text: &str) -> Vec<Token> {
                 symbol_or_id
             }
             NextTokenType::AssignmentOrEquals =>
-            	lexer.reinterpret(Assignment, '=', Equals),
+            	lexer.reinterpret(Assignment, '=', Equal),
             NextTokenType::LessOrEquals =>
-            	lexer.reinterpret(Less, '=', LessEquals),
+            	lexer.reinterpret(Less, '=', LessEqual),
             NextTokenType::GreaterOrEquals =>
-            	lexer.reinterpret(Greater, '=', GreaterEquals),
+            	lexer.reinterpret(Greater, '=', GreaterEqual),
             NextTokenType::NotOrEquals =>
-            	lexer.reinterpret(Not, '=', NotEquals),
+            	lexer.reinterpret(Not, '=', NotEqual),
             NextTokenType::Or => match lexer.rchars.last() {
                 Some('|') => {
                     lexer.rchars.pop();
@@ -270,11 +270,11 @@ pub fn lex(text: &str) -> Vec<Token> {
                 Newline
             }
             NextTokenType::Plus =>
-                lexer.reinterpret(Plus, '=', PlusEquals),
+                lexer.reinterpret(Plus, '=', OpAssign(Box::new(Plus))),
             NextTokenType::Minus =>
-                lexer.reinterpret(Minus, '=', MinusEquals),
+                lexer.reinterpret(Minus, '=', OpAssign(Box::new(Minus))),
             NextTokenType::Times =>
-                lexer.reinterpret(Times, '=', TimesEquals),
+                lexer.reinterpret(Times, '=', OpAssign(Box::new(Times))),
             NextTokenType::LParen => LParen,
             NextTokenType::RParen => RParen,
             NextTokenType::Colon => Colon,

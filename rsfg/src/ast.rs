@@ -83,12 +83,12 @@ pub struct WhileLoop {
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum BinaryOp {
-    Equals,
-    NotEquals,
+    Equal,
+    NotEqual,
     Greater,
-    GreaterEquals,
+    GreaterEqual,
     Less,
-    LessEquals,
+    LessEqual,
     Or,
     And,
     Plus,

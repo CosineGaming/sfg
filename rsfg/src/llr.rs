@@ -39,7 +39,7 @@ pub enum Instruction {
     // Swaps n down the stack with the top
     Swap(u8),
     Return,
-    Equals,
+    Equal,
     Less,
     // Difference in INSTRUCTIONS, not in bytes!
     JumpZero(Label),
