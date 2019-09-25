@@ -141,13 +141,13 @@ impl Thread {
                 Self::set_fn(&mut self.ip, func);
             }
             Deser::Equals => {
-                let a = self.stack.pop();
-                let b = self.stack.pop();
+                let a = self.stack.pop().unwrap();
+                let b = self.stack.pop().unwrap();
                 self.stack.push((a == b) as i32);
             }
             Deser::Less => {
-                let a = self.stack.pop();
-                let b = self.stack.pop();
+                let a = self.stack.pop().unwrap();
+                let b = self.stack.pop().unwrap();
                 self.stack.push((b < a) as i32);
             }
             Deser::JumpZero => {
