@@ -110,19 +110,13 @@ fn parse_id(rtokens: &mut Tokens, type_required: bool) -> Result<TypedId> {
         TokenType::Identifier(name) => name,
         _ => panic!("identifier wasn't identifier (compiler bug)"),
     };
+    // Can't use expect_any! because not Some(got) has special semantics
     match rtokens.last() {
         Some(Token { kind: TokenType::Colon, .. }) => {
             rtokens.pop();
-            let id_type = match rtokens.pop() {
-                Some(Token { kind: TokenType::Type(id_type), .. }) => id_type,
-                Some(what) => {
-                    return Err(ParseError::Expected(
-                        vec![TokenType::Type(Type::Str), TokenType::Type(Type::Int)],
-                        what,
-                    ))
-                }
-                None => return Err(ParseError::EOF("identifier".to_string())),
-            };
+            let id_type = expect_any!("identifier type", rtokens.pop() => {
+                Type(id_type,Type::Infer) => id_type,
+            })?;
             return Ok(TypedId { name, id_type });
         }
         Some(got) => {
@@ -164,10 +158,9 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
         LParen => {
             rtokens.pop();
             let res = parse_expression(rtokens);
-            match pop_no_eof(rtokens, "parenthesized expression")? {
-                Token { kind: TokenType::RParen, .. } => res,
-                got => Err(ParseError::Expected(vec![TokenType::RParen], got)),
-            }
+            expect_any!("parenthesized expression", rtokens.pop() => {
+                RParen => res,
+            })?
         }
         // Not
         Not => {
@@ -187,12 +180,11 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
         // This minus, because we're parsing an expression, is part of an int literal
         Minus => {
             rtokens.pop();
-            match pop_no_eof(rtokens, "expression")? {
-                Token { kind: TokenType::IntLit(number), .. } => {
-                    Ok(Expression::Literal(Literal::Int(-1 * number)))
+            expect_any!("expression", rtokens.pop() => {
+                IntLit(number,0) => {
+                    Expression::Literal(Literal::Int(-1 * number))
                 }
-                got => Err(ParseError::Expected(vec![TokenType::IntLit(0)], got)),
-            }
+            })
         }
         // Builtin literals
         True => {
@@ -231,19 +223,12 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
 
 fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
     let first_token = rtokens.last();
-    let name = match first_token {
-        Some(Token { kind: TokenType::Identifier(_), .. }) => match rtokens.pop() {
+    let name = expect_any!("call", first_token => {
+        Identifier(_n,String::from("")) => match rtokens.pop() {
             Some(Token { kind: TokenType::Identifier(name), .. }) => name,
             _ => unreachable!(),
         },
-        Some(what) => {
-            return Err(ParseError::Expected(
-                vec![TokenType::Identifier("".to_string())],
-                what.clone(),
-            ))
-        }
-        None => return Err(ParseError::EOF("call".to_string())),
-    };
+    })?;
     // Arguments
     rb_try!(rtokens, expect_token(rtokens, TokenType::LParen, "fn call"));
     let mut arguments = vec![];
