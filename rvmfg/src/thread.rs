@@ -159,6 +159,7 @@ impl Thread {
             }
             Deser::Dup => {
                 let count = next(&self.code, &mut self.ip) as usize;
+                debug!("{:?}", count);
                 // -1 because 0 means last but len() means last+1
                 let stack_elem = *self.stack.get(self.stack.len() - count - 1).unwrap();
                 self.stack.push(stack_elem);

@@ -1,0 +1,12 @@
+fn main()
+	var x = 5
+	if true
+		// Shadowing
+		var x = 10
+		assert(x == 10)
+	assert(x == 5)
+	while x
+		// will fail stack-balance if loop scopes don't work
+		var y = 2
+		x -= 1
+

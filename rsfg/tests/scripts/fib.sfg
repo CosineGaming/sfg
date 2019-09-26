@@ -2,14 +2,11 @@
 fn main()
 	var a = 1
 	var b = 1
-	var temp = 0
 	// How many FURTHER fibs to do
 	// TODO: for loop
 	var n = 42
 	while n
-		// TODO: var temp fails here because there's only function scope,
-		// so it gets reserved each loop
-		temp = a + b
+		var temp = a + b
 		a = b
 		b = temp
 		n -= 1

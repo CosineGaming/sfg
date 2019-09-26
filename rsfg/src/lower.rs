@@ -12,9 +12,8 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
             Literal::Int(_) => Type::Int,
             Literal::Bool(_) => Type::Bool,
         },
-        Expression::Identifier(id) => match state.locals.get(&id.name) {
-            Some(id_type) => *id_type,
-            None => panic!("unknown local variable {}", id.name),
+        Expression::Identifier(id) => match stack_search(state, &id.name) {
+            (_, t) => t,
         }
         Expression::Not(_) => Type::Bool,
         Expression::FnCall(func) => {
@@ -73,15 +72,17 @@ fn i_as_u(what: i32) -> u32 {
     unsafe { std::mem::transmute::<i32, u32>(what) }
 }
 
+type ScopeStack = Vec<IndexMap<String, Type>>;
+
 /// requires mutable reference to llr's strings so strings that come up can be added
 struct LowerState<'a> {
     fn_map: IndexMap<String, &'a ASTNode>,
-    locals: IndexMap<String, Type>, // String / Index / Type
+    locals: ScopeStack, // String / Index / Type
     strings: &'a mut Vec<String>,
     next_label: usize,
 }
 impl<'a> LowerState<'a> {
-    fn new(ast: &'a AST, strings: &'a mut Vec<String>, next_label_global: usize) -> Self {
+    fn new(ast: &'a AST, strings: &'a mut Vec<String>) -> Self {
         // IndexMap maintains indices of fns
         let mut fn_map = IndexMap::new();
         // Add all functions to the map
@@ -100,7 +101,7 @@ impl<'a> LowerState<'a> {
             };
             fn_map.insert(name, node);
         }
-        Self { fn_map, locals: IndexMap::new(), strings: strings, next_label: next_label_global }
+        Self { fn_map, locals: vec![], strings: strings, next_label: 0 }
     }
     fn get_label(&mut self) -> usize {
         self.next_label += 1;
@@ -119,7 +120,10 @@ fn lower_loop(
     insts.push(llr::Instruction::LabelMark(begin));
     insts.append(&mut expression_to_push(state, &loop_data.condition, 0));
     insts.push(llr::Instruction::JumpZero(end));
-    insts.append(&mut lower_statements(state, &loop_data.statements, parent_signature));
+    lower_scope_begin(state);
+        insts.append(&mut lower_statements(state, &loop_data.statements, parent_signature));
+    // Immediately all go out of scope
+    insts.append(&mut lower_scope_end(state));
     // Jump back to conditional, regardless
     // Lacking a Jump command, we push zero and then JumpZero
     insts.push(llr::Instruction::Push(0));
@@ -248,7 +252,7 @@ fn expression_to_push(
     }
 }
 
-fn lower_panic(state: &mut LowerState, call: &FnCall) -> Vec<llr::Instruction> {
+fn lower_panic(call: &FnCall) -> Vec<llr::Instruction> {
     let mut insts = vec![];
     let (line, col) = match (call.arguments[0].clone(), call.arguments[1].clone()) {
         (Expression::Literal(Literal::Int(l)), Expression::Literal(Literal::Int(c))) => (l,c),
@@ -291,7 +295,7 @@ fn lower_fn_call(
     let (index, node) = match state.fn_map.get_full(&*call.name) {
         Some((i, _, func)) => (i, func),
         None => match &call.name[..] {
-            "panic" => return lower_panic(state, call),
+            "panic" => return lower_panic(call),
             "assert" => return lower_assert(state, call),
             _ => panic!("could not find function {}", call.name),
         },
@@ -353,12 +357,30 @@ fn lower_fn_call(
     instructions
 }
 
+/// These must match up exactly!!! Except return, maybe that's different not sure
+fn lower_scope_begin(state: &mut LowerState) {
+    state.locals.push(IndexMap::new());
+}
+fn lower_scope_end(state: &mut LowerState) -> Vec<llr::Instruction> {
+    // This pops every local
+    // TODO: a proper stack machine will consume locals when last used
+    // in an expression, which would make this obsolete
+    // Actually i'm not sure that's true, what if final use is in if statement?
+    // Something about single-assignment form
+    let mut insts = vec![];
+    for _local in state.locals.pop().unwrap() {
+        debug!("{:?}", _local);
+        insts.push(llr::Instruction::Pop);
+    }
+    insts
+}
+
 fn lower_return(
     state: &mut LowerState,
     expr: &Option<Expression>,
     signature: &Signature,
 ) -> Vec<llr::Instruction> {
-    let num_locals = state.locals.len();
+    let num_locals = state.locals.last().unwrap().len();
     // Typecheck return value
     // None == None -> return == void
     assert_eq!(expr.as_ref().map(|x| expression_type(state, x)), signature.return_type);
@@ -368,22 +390,41 @@ fn lower_return(
         // We want to preserve value from coming pops by moving it to the bottom
         insts.push(llr::Instruction::Swap(num_locals as u8))
     }
-    // This pops every local
-    // TODO: a proper stack machine will consume locals when last used
-    // in an expression, which would make this obsolete
-    for _local in &state.locals {
-        insts.push(llr::Instruction::Pop);
+    // Return kills all scopes down to function
+    // CHECK: when we implement globals, this'll have to have -1 trickery
+    for scope in &state.locals {
+        for _local in scope {
+            insts.push(llr::Instruction::Pop);
+        }
     }
+    // We DON'T pop the *internal state scopes* because return may be mid-function
+    // (non-lexical). Instead the popping occurs at the end of the function
+    // lowering
     // Return only deals with the instruction pointer
     insts.push(llr::Instruction::Return);
     insts
 }
 
-fn stack_index(state: &mut LowerState, name: &str) -> u8 {
-    match state.locals.get_full(name) {
-        Some((i, _, _)) => (state.locals.len() - i - 1) as u8,
-        None => panic!("unknown local variable {}", name),
+fn stack_search(state: &mut LowerState, name: &str) -> (u8, Type) {
+    // We use shadowing so search in opposite order
+    let mut more_local_total = 0;
+    for scope in state.locals.iter().rev() {
+        match scope.get_full(name) {
+            Some((i, _, id_type)) => {
+                let i = more_local_total + scope.len() - i - 1;
+                return (i as u8, *id_type);
+            }
+            None => {
+                more_local_total += scope.len();
+            },
+        }
     }
+    // None found
+    panic!("unknown local variable {}", name);
+}
+fn stack_index(state: &mut LowerState, name: &str) -> u8 {
+    let (i, _) = stack_search(state, name);
+    i
 }
 
 fn lower_statement(
@@ -396,28 +437,30 @@ fn lower_statement(
         Statement::Return(expr) => lower_return(state, expr, signature),
         Statement::If(if_stmt) => {
             assert_eq!(expression_type(state, &if_stmt.condition), Type::Bool, "if statement requires bool");
-            let mut push_condition = expression_to_push(state, &if_stmt.condition, 0);
-            let mut if_block = lower_statements(state, &if_stmt.statements, signature);
-            let mut else_block = lower_statements(state, &if_stmt.else_statements, signature);
-            let mut lowered = vec![];
-            lowered.append(&mut push_condition);
-            let else_start = state.get_label();
-            lowered.push(llr::Instruction::JumpZero(else_start));
-            lowered.append(&mut if_block);
-            // CHECK: does creating a label you might not use, fuck things up? So far, no
-            let else_end = state.get_label();
-            // Don't bother with jump if no statements in else
-            if if_stmt.else_statements.len() != 0 {
-                // if we executed if, don't execute else (jump to end of else)
-                // TODO: unconditional jump, rather than push zero jmp0
-                lowered.push(llr::Instruction::Push(0));
-                lowered.push(llr::Instruction::JumpZero(else_end));
-            }
-            lowered.push(llr::Instruction::LabelMark(else_start));
-            if if_stmt.else_statements.len() != 0 {
-                lowered.append(&mut else_block);
-                lowered.push(llr::Instruction::LabelMark(else_end));
-            }
+            lower_scope_begin(state);
+                let mut push_condition = expression_to_push(state, &if_stmt.condition, 0);
+                let mut if_block = lower_statements(state, &if_stmt.statements, signature);
+                let mut else_block = lower_statements(state, &if_stmt.else_statements, signature);
+                let mut lowered = vec![];
+                lowered.append(&mut push_condition);
+                let else_start = state.get_label();
+                lowered.push(llr::Instruction::JumpZero(else_start));
+                lowered.append(&mut if_block);
+                // CHECK: does creating a label you might not use, fuck things up? So far, no
+                let else_end = state.get_label();
+                // Don't bother with jump if no statements in else
+                if if_stmt.else_statements.len() != 0 {
+                    // if we executed if, don't execute else (jump to end of else)
+                    // TODO: unconditional jump, rather than push zero jmp0
+                    lowered.push(llr::Instruction::Push(0));
+                    lowered.push(llr::Instruction::JumpZero(else_end));
+                }
+                lowered.push(llr::Instruction::LabelMark(else_start));
+                if if_stmt.else_statements.len() != 0 {
+                    lowered.append(&mut else_block);
+                    lowered.push(llr::Instruction::LabelMark(else_end));
+                }
+            lowered.append(&mut lower_scope_end(state));
             lowered
         }
         Statement::WhileLoop(loop_data) => lower_loop(state, loop_data, signature),
@@ -436,8 +479,9 @@ fn lower_statement(
         Statement::Declaration(decl) => {
             // Declaration is just a push where we change locals
             let rvalue_type = expression_type(state, &decl.rvalue);
-            state.locals.insert(decl.lvalue.clone(), rvalue_type);
-            expression_to_push(state, &decl.rvalue, 0)
+            let rv = expression_to_push(state, &decl.rvalue, 0);
+            state.locals.last_mut().unwrap().insert(decl.lvalue.clone(), rvalue_type);
+            rv
         }
     }
 }
@@ -456,9 +500,6 @@ fn lower_statements(
 }
 
 fn lower_fn_statements(state: &mut LowerState, func: &Fn) -> Vec<llr::Instruction> {
-    // We can't keep track of the stack perfectly, but we can assume
-    // the stack is clean and then look at what we expect to be there
-    //let mut locals = IndexMap::new();
     let mut instructions = Vec::<llr::Instruction>::new();
     instructions.append(&mut lower_statements(state, &func.statements, &func.signature));
     let last_statement_return = instructions.last() == Some(&llr::Instruction::Return);
@@ -487,29 +528,31 @@ fn lower_signature(signature: &Signature) -> llr::Signature {
 }
 
 fn lower_fn(state: &mut LowerState, func: &Fn) -> llr::Fn {
-    for param in &func.signature.parameters {
-        state.locals.insert(param.name.clone(), param.id_type);
-    }
-    llr::Fn {
-        instructions: lower_fn_statements(state, func),
-        signature: lower_signature(&func.signature),
-    }
+    lower_scope_begin(state);
+        for param in &func.signature.parameters {
+            state.locals.last_mut().unwrap().insert(param.name.clone(), param.id_type);
+        }
+        let rv = llr::Fn {
+            instructions: lower_fn_statements(state, func),
+            signature: lower_signature(&func.signature),
+        };
+    // fn return doesn't pop locals
+    state.locals.pop();
+    rv
 }
 
 pub fn lower(ast: AST) -> llr::LLR {
     let mut out = llr::LLR::new();
-    // We need to maintain globally unique state of next label
-    let mut next_label_global = 0;
+    let mut state = LowerState::new(&ast, &mut out.strings);
     // Find all function calls and set their ID to the map's id
+    // (And also their instructions lol)
     for node in ast.iter() {
         match node {
             ASTNode::Fn(func) => {
                 // We generate state for each function to keep locals scoped
                 // This might be cleaner if we used a real scoping system
-                let mut state = LowerState::new(&ast, &mut out.strings, next_label_global);
                 let out_f = lower_fn(&mut state, &func);
                 out.fns.push(out_f);
-                next_label_global = state.next_label;
             }
             ASTNode::ExternFn(func) => {
                 let out_s = lower_signature(&func.signature);
@@ -536,8 +579,8 @@ mod test {
         for func in fns {
             for inst in func.instructions {
                 match inst {
-                    Instruction::Push(_) => balance += 8,
-                    Instruction::Pop => balance -= 8,
+                    Instruction::Push(_) => balance += 1,
+                    Instruction::Pop => balance -= 1,
                     _ => (),
                 }
             }
