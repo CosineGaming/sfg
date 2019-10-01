@@ -68,13 +68,13 @@ pub fn deser_strong(what: u8) -> Deser {
     }
 }
 
-pub fn next(code: &Vec<u8>, ip: &mut usize) -> u8 {
+pub fn next(code: &[u8], ip: &mut usize) -> u8 {
     let rv = code[*ip];
     *ip += 1;
     rv
 }
 
-pub fn read_u32(code: &Vec<u8>, ip: &mut usize) -> u32 {
+pub fn read_u32(code: &[u8], ip: &mut usize) -> u32 {
     use std::mem::transmute;
     let mut four: [u8; 4] = Default::default();
     four.copy_from_slice(&code[*ip..*ip + 4]);
@@ -82,7 +82,7 @@ pub fn read_u32(code: &Vec<u8>, ip: &mut usize) -> u32 {
     *ip += 4;
     rv
 }
-pub fn read_i32(code: &Vec<u8>, ip: &mut usize) -> i32 {
+pub fn read_i32(code: &[u8], ip: &mut usize) -> i32 {
     use std::mem::transmute;
     let mut four: [u8; 4] = Default::default();
     four.copy_from_slice(&code[*ip..*ip + 4]);
@@ -90,13 +90,13 @@ pub fn read_i32(code: &Vec<u8>, ip: &mut usize) -> i32 {
     *ip += 4;
     rv
 }
-pub fn read_i8(code: &Vec<u8>, ip: &mut usize) -> i8 {
+pub fn read_i8(code: &[u8], ip: &mut usize) -> i8 {
     use std::mem::transmute;
     let as_u8 = next(code, ip);
     unsafe { transmute(as_u8) }
 }
 
-pub fn read_to_zero(code: &Vec<u8>, mut ip: &mut usize) -> Vec<u8> {
+pub fn read_to_zero(code: &[u8], mut ip: &mut usize) -> Vec<u8> {
     let mut rv = Vec::new();
     loop {
         let b = next(code, &mut ip);
@@ -108,7 +108,7 @@ pub fn read_to_zero(code: &Vec<u8>, mut ip: &mut usize) -> Vec<u8> {
     rv
 }
 
-pub fn read_string(code: &Vec<u8>, mut ip: &mut usize) -> String {
+pub fn read_string(code: &[u8], mut ip: &mut usize) -> String {
     let bytes = read_to_zero(&code, &mut ip);
     match String::from_utf8(bytes) {
         Ok(string) => string,
@@ -117,7 +117,7 @@ pub fn read_string(code: &Vec<u8>, mut ip: &mut usize) -> String {
 }
 
 /// Returns (name, function)
-pub fn read_fn_header(code: &Vec<u8>, mut ip: &mut usize, is_extern: bool) -> (String, Fn) {
+pub fn read_fn_header(code: &[u8], mut ip: &mut usize, is_extern: bool) -> (String, Fn) {
     let return_type_u8 = next(code, &mut ip);
     let return_type = match deser_strong(return_type_u8) {
         Deser::Type(t) => Some(t),

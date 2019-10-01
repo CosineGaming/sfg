@@ -49,44 +49,29 @@ impl Fn {
 impl Thread {
     pub fn new(code: Vec<u8>) -> Self {
         let mut ip = 0;
-        if next(&code, &mut ip) != 'b' as u8
-            || next(&code, &mut ip) != 'c' as u8
-            || next(&code, &mut ip) != 'f' as u8
-            || next(&code, &mut ip) != 'g' as u8
+        if next(&code, &mut ip) != b'b'
+            || next(&code, &mut ip) != b'c'
+            || next(&code, &mut ip) != b'f'
+            || next(&code, &mut ip) != b'g'
         {
             panic!("expected bcfg");
         }
         let mut fns = IndexMap::new();
         let mut strings = Vec::new();
-        loop {
-            match deser(code[ip]) {
-                Some(Deser::FnHeader) => {
-                    ip += 1;
-                    let (name, func) = read_fn_header(&code, &mut ip, false);
-                    fns.insert(name, func);
-                }
-                _ => break,
-            }
+        while let Some(Deser::FnHeader) = deser(code[ip]) {
+            ip += 1;
+            let (name, func) = read_fn_header(&code, &mut ip, false);
+            fns.insert(name, func);
         }
-        loop {
-            match deser(code[ip]) {
-                Some(Deser::ExternFnHeader) => {
-                    ip += 1;
-                    let (name, func) = read_fn_header(&code, &mut ip, true);
-                    fns.insert(name, func);
-                }
-                _ => break,
-            }
+        while let Some(Deser::ExternFnHeader) = deser(code[ip]) {
+            ip += 1;
+            let (name, func) = read_fn_header(&code, &mut ip, true);
+            fns.insert(name, func);
         }
-        loop {
-            match deser(code[ip]) {
-                Some(Deser::StringLit) => {
-                    ip += 1;
-                    let string = read_string(&code, &mut ip);
-                    strings.push(string);
-                }
-                _ => break,
-            }
+        while let Some(Deser::StringLit) = deser(code[ip]) {
+            ip += 1;
+            let string = read_string(&code, &mut ip);
+            strings.push(string);
         }
         Self {
             stack: Vec::with_capacity(INIT_STACK_SIZE),
@@ -161,7 +146,7 @@ impl Thread {
                 let count = next(&self.code, &mut self.ip) as usize;
                 debug!("{:?}", count);
                 // -1 because 0 means last but len() means last+1
-                let stack_elem = *self.stack.get(self.stack.len() - count - 1).unwrap();
+                let stack_elem = self.stack[self.stack.len() - count - 1];
                 self.stack.push(stack_elem);
             }
             Deser::Swap => {
@@ -169,9 +154,7 @@ impl Thread {
                 // -1 because 0 means last but len() means last+1
                 let down_i = self.stack.len() - 1 - count;
                 let up_i = self.stack.len() - 1;
-                let down = self.stack[down_i];
-                self.stack[down_i] = self.stack[up_i];
-                self.stack[up_i] = down;
+                self.stack.swap(down_i, up_i);
             }
             Deser::Panic => {
                 let line = read_u32(&self.code, &mut self.ip);
@@ -231,6 +214,11 @@ impl Thread {
             }
         }
     }
+    // I can't believe this works
+    // I have no idea how this works
+    // Do not ask me how this works
+    // Owned string necessary for evil pointer arithmetic
+    #[allow(clippy::ptr_arg)]
     pub fn push_string(&mut self, string: &String) {
         let as_number = string as *const String as i32;
         self.stack.push(as_number);

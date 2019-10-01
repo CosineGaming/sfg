@@ -82,6 +82,7 @@ struct LowerState<'a> {
     next_label: usize,
 }
 impl<'a> LowerState<'a> {
+    #[allow(clippy::ptr_arg)]
     fn new(ast: &'a AST, strings: &'a mut Vec<String>) -> Self {
         // IndexMap maintains indices of fns
         let mut fn_map = IndexMap::new();
@@ -101,7 +102,7 @@ impl<'a> LowerState<'a> {
             };
             fn_map.insert(name, node);
         }
-        Self { fn_map, locals: vec![], strings: strings, next_label: 0 }
+        Self { fn_map, locals: vec![], strings, next_label: 0 }
     }
     fn get_label(&mut self) -> usize {
         self.next_label += 1;
@@ -338,20 +339,20 @@ fn lower_fn_call(
     }
     // Generate lowered call
     let fn_call = llr::FnCall { index, arg_count: call.arguments.len() as u8 };
-    let call = match is_extern {
-        false => llr::Instruction::FnCall(fn_call),
-        true => llr::Instruction::ExternFnCall(fn_call),
+    let call = if is_extern {
+        llr::Instruction::ExternFnCall(fn_call)
+    } else {
+        llr::Instruction::FnCall(fn_call)
     };
     instructions.push(call);
     if is_statement {
         // Return value is unused if so it needs to be popped for balance
         // TODO: Support >32-bit returns
-        match signature.return_type {
-            Some(rt) => match type_size(rt) {
+        if let Some(rt) = signature.return_type {
+            match type_size(rt) {
                 32 => instructions.push(llr::Instruction::Pop),
                 _ => panic!("non-u32 return types unsupported"),
-            },
-            None => (),
+            }
         }
     }
     instructions
@@ -449,14 +450,14 @@ fn lower_statement(
                 // CHECK: does creating a label you might not use, fuck things up? So far, no
                 let else_end = state.get_label();
                 // Don't bother with jump if no statements in else
-                if if_stmt.else_statements.len() != 0 {
+                if !if_stmt.else_statements.is_empty() {
                     // if we executed if, don't execute else (jump to end of else)
                     // TODO: unconditional jump, rather than push zero jmp0
                     lowered.push(llr::Instruction::Push(0));
                     lowered.push(llr::Instruction::JumpZero(else_end));
                 }
                 lowered.push(llr::Instruction::LabelMark(else_start));
-                if if_stmt.else_statements.len() != 0 {
+                if !if_stmt.else_statements.is_empty() {
                     lowered.append(&mut else_block);
                     lowered.push(llr::Instruction::LabelMark(else_end));
                 }
@@ -488,7 +489,7 @@ fn lower_statement(
 
 fn lower_statements(
     state: &mut LowerState,
-    statements: &Vec<Statement>,
+    statements: &[Statement],
     parent_signature: &Signature,
 ) -> Vec<llr::Instruction> {
     let mut insts = vec![];
@@ -522,7 +523,7 @@ fn lower_signature(signature: &Signature) -> llr::Signature {
     }
     llr::Signature {
         name: signature.name.clone(),
-        parameters: parameters,
+        parameters,
         return_type: signature.return_type,
     }
 }

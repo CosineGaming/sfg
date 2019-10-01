@@ -63,6 +63,7 @@ struct LabeledCode {
     labels: Labels,
 }
 
+#[allow(clippy::for_kv_map)]
 fn append_labeled(base: &mut LabeledCode, mut new: LabeledCode) {
     for (_, location) in &mut new.labels.marks {
         *location += base.code.len();

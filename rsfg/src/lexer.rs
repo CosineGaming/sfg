@@ -124,19 +124,15 @@ pub fn lex(text: &str) -> Vec<Token> {
             }
             NextTokenType::SymbolOrId(c) => {
                 let mut text = c.to_string();
-                loop {
-                    let x = match lexer.rchars.last() {
-                        Some(x) => *x,
-                        None => break, // End of ID is fine
-                    };
-                    if is_id(x) {
-                        text.push(x);
+                while let Some(x) = lexer.rchars.last() {
+                    if is_id(*x) {
+                        text.push(*x);
                     } else {
                         break;
                     }
                     lexer.rchars.pop();
                 }
-                let symbol_or_id = match text.as_ref() {
+                match text.as_ref() {
                     "fn" => Fn,
                     // These names clash, it sucks
                     "int" => TokenType::Type(crate::Type::Int),
@@ -150,8 +146,7 @@ pub fn lex(text: &str) -> Vec<Token> {
                     "while" => While,
                     "var" => Declare,
                     _ => Identifier(text),
-                };
-                symbol_or_id
+                }
             }
             NextTokenType::Space(c) => {
                 match lexer.tokens.last() {
@@ -162,17 +157,12 @@ pub fn lex(text: &str) -> Vec<Token> {
                         } else {
                             // Figure out how many spaces we're using
                             let mut count = 1;
-                            loop {
-                                match lexer.rchars.last() {
-                                    Some(' ') => {
-                                        lexer.rchars.pop();
-                                        count += 1;
-                                        if lexer.spaces_count != 0 && count == lexer.spaces_count {
-                                            break;
-                                        }
-                                    }
-                                    _ => break, // Ending on whitespace is fine
-                                };
+                            while let Some(' ') = lexer.rchars.last() {
+                                lexer.rchars.pop();
+                                count += 1;
+                                if lexer.spaces_count != 0 && count == lexer.spaces_count {
+                                    break;
+                                }
                             }
                             if lexer.spaces_count == 0 {
                                 lexer.spaces_count = count;
@@ -223,23 +213,18 @@ pub fn lex(text: &str) -> Vec<Token> {
             NextTokenType::ExternFnOrExternCall => {
                 // Don't include the @
                 let mut text = String::new();
-                loop {
-                    let x = match lexer.rchars.last() {
-                        Some(x) => *x,
-                        None => break, // End of ID is fine
-                    };
-                    if is_id(x) {
-                        text.push(x);
+                while let Some(x) = lexer.rchars.last() {
+                    if is_id(*x) {
+                        text.push(*x);
                     } else {
                         break;
                     }
                     lexer.rchars.pop();
                 }
-                let symbol_or_id = match text.as_ref() {
+                match text.as_ref() {
                     "fn" => ExternFn,
                     _ => ExternFnCall(text),
-                };
-                symbol_or_id
+                }
             }
             NextTokenType::AssignmentOrEquals =>
             	lexer.reinterpret(Assignment, '=', Equal),
@@ -296,7 +281,7 @@ pub fn lex(text: &str) -> Vec<Token> {
                 panic!("lexer doesn't know what to do with character {}", c);
             }
         };
-        lexer.tokens.push(Token { kind: token.clone(), line: line, col: col });
+        lexer.tokens.push(Token { kind: token.clone(), line, col });
     }
     lexer.tokens
 }

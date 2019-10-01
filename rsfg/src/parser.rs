@@ -24,7 +24,7 @@ impl std::fmt::Display for ParseError {
                 )
             }
             CouldNotConstruct(errs) => {
-                let error_strs: Vec<String> = errs.iter().map(|e| e.to_string()).collect();
+                let error_strs: Vec<String> = errs.iter().map(Self::to_string).collect();
                 let error_str = error_strs.join("\n\n");
                 write!(f, "could not construct any possible variant expected here. the following errors were returned:\n\n{}", error_str)
             }
@@ -45,7 +45,7 @@ macro_rules! rb {
         let saved_tokens = $tokens.clone();
         // Rollback on any error, regardless of intended use
         let res = $call;
-        if let Err(_) = res {
+        if res.is_err() {
             *$tokens = saved_tokens;
         }
         res
@@ -101,7 +101,7 @@ fn expect_token(rtokens: &mut Tokens, what: TokenType, during: &str) -> Result<T
                 Err(ParseError::Expected(vec![what], token))
             }
         }
-        None => return Err(ParseError::EOF(during.to_string())),
+        None => Err(ParseError::EOF(during.to_string())),
     }
 }
 
@@ -186,7 +186,7 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
             rtokens.pop();
             expect_any!("expression", rtokens.pop() => {
                 IntLit(number,0) => {
-                    Expression::Literal(Literal::Int(-1 * number))
+                    Expression::Literal(Literal::Int(-number))
                 }
             })
         }
@@ -205,8 +205,7 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
             // It can be a call...
             let call_res =
                 rb!(rtokens, parse_call(rtokens).and_then(|x| Ok(Expression::FnCall(x))));
-            // This is kinda messy, i wish i could short circuit it more like rb_ok_or
-            if let Err(_) = call_res {
+            if call_res.is_err() {
                 rtokens.pop();
                 // Otherwise just reference the identifier
                 Ok(Expression::Identifier(TypedId { name: name.clone(), id_type: Type::Infer }))
@@ -430,7 +429,7 @@ fn parse_signature(rtokens: &mut Tokens) -> Result<Signature> {
 /// Strips empty/tab/comment lines, does nothing if no empty lines, rolls back on error state
 fn strip_white_lines(rtokens: &mut Tokens) {
     loop {
-        match rb!(rtokens, {
+        if rb!(rtokens, {
             // Consider the following program:
             // fn main()
             //     return 5
@@ -462,12 +461,11 @@ fn strip_white_lines(rtokens: &mut Tokens) {
                 // Not tab or newline, we've come to our end (will rollback our non-changes)
                 _ => Err(())
             }
-        }) {
-            // May be more empty lines ahead
-            Ok(()) => (),
+        }).is_err() {
             // Already cleaned up with rb!, and we found the end of empty lines
-            Err(()) => break,
+            break;
         }
+        // Otherwise may be more empty lines ahead, continue
     }
 }
 
@@ -499,7 +497,7 @@ fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Result<Vec<
             continue;
         }
         // If we can't satisfy the indent, return immediately with the statements we've collected
-        if let Err(_) = safe_expect_indent(rtokens, expect_tabs) {
+        if safe_expect_indent(rtokens, expect_tabs).is_err() {
             return Ok(statements);
         }
         statements.push(rb_try!(rtokens, parse_statement(rtokens, expect_tabs)));
@@ -571,11 +569,11 @@ pub fn parse(mut tokens: Vec<Token>) -> AST {
 
 #[derive(Clone, Copy)]
 struct NoPop<'a, T: Clone> {
-    vec: &'a Vec<T>,
+    vec: &'a [T],
     sp: usize,
 }
 impl<'a, T: Clone> NoPop<'a, T> {
-    fn new(vec: &'a Vec<T>) -> Self {
+    fn new(vec: &'a [T]) -> Self {
         Self { vec, sp: vec.len() }
     }
     fn pop(&mut self) -> Option<T> {
