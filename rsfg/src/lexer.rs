@@ -181,7 +181,7 @@ pub fn lex(text: &str) -> Vec<Token> {
                 let mut string = c.to_string();
                 loop {
                     match lexer.rchars.last() {
-                        Some('0'...'9') => string.push(lexer.rchars.pop().unwrap()),
+                        Some('0'..='9') => string.push(lexer.rchars.pop().unwrap()),
                         Some('.') | Some('f') => panic!("floats not yet implemented"), // TODO
                         _ => break,
                     }
@@ -277,7 +277,6 @@ pub fn lex(text: &str) -> Vec<Token> {
                 }
             }
             NextTokenType::Unknown(c) => {
-                // TODO: How to make error show these automatically like rust?
                 panic!("lexer doesn't know what to do with character {}", c);
             }
         };

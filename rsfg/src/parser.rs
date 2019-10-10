@@ -360,7 +360,6 @@ fn parse_assignment(rtokens: &mut Tokens) -> Result<Assignment> {
         Assignment => {
             Assignment { lvalue: name, rvalue: rhs }
         }
-        // TODO: Weird ID fanagle with following redundant match is ugly, switch to one match
         OpAssign(ref _op, Box::new(TokenType::Identifier(String::from("any binary operator")))) => {
             let dummy_op_token = match op {
                 Some(Token { kind: TokenType::OpAssign(right), line, col }) => Token {

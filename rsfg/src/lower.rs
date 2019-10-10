@@ -46,15 +46,6 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
     }
 }
 
-fn type_size(id_type: Type) -> u8 {
-    use Type::*;
-    match id_type {
-        // TODO: 8-bit types? like bool?
-        Int | Str | Bool => 32,
-        Infer => panic!("type not yet inferred by size check"),
-    }
-}
-
 // Some(true) is like (Int, Int) OR (Int, Infer)
 // Some(false) is like (Int, String)
 // None is (Infer, Infer)
@@ -347,12 +338,8 @@ fn lower_fn_call(
     instructions.push(call);
     if is_statement {
         // Return value is unused if so it needs to be popped for balance
-        // TODO: Support >32-bit returns
-        if let Some(rt) = signature.return_type {
-            match type_size(rt) {
-                32 => instructions.push(llr::Instruction::Pop),
-                _ => panic!("non-u32 return types unsupported"),
-            }
+        if signature.return_type.is_some() {
+            instructions.push(llr::Instruction::Pop);
         }
     }
     instructions
@@ -364,7 +351,7 @@ fn lower_scope_begin(state: &mut LowerState) {
 }
 fn lower_scope_end(state: &mut LowerState) -> Vec<llr::Instruction> {
     // This pops every local
-    // TODO: a proper stack machine will consume locals when last used
+    // a proper stack machine will consume locals when last used
     // in an expression, which would make this obsolete
     // Actually i'm not sure that's true, what if final use is in if statement?
     // Something about single-assignment form

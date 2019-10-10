@@ -7,8 +7,8 @@ use rsfg::compile;
 use rvmfg::{call, Thread};
 
 // Log needs to be initialized once in the async mess that is cargo test
-use std::sync::{Once, ONCE_INIT};
-static LOGGER_INIT: Once = ONCE_INIT;
+use std::sync::Once;
+static LOGGER_INIT: Once = Once::new();
 
 fn ensure_log_init() {
     LOGGER_INIT.call_once(|| env_logger::builder()
