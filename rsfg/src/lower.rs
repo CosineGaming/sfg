@@ -8,16 +8,30 @@ use indexmap::IndexMap;
 pub enum LowerError {
 	// TODO: figure out how to mark positions / spans in AST
     MismatchedType(Type, Type),
-    ArgumentCount(String, u32, u32),
+    MismatchedReturn(Option<Type>, Option<Type>),
+    ArgumentCount(String, usize, usize),
     NonLiteral(&'static str),
     UnknownFn(String),
     UnknownIdent(String),
 }
 impl std::fmt::Display for LowerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<std::fmt::Result> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use LowerError::*;
         match self {
             MismatchedType(a, b) => write!(f, "mismatched type, expected {:?}, got {:?}", a, b),
+            MismatchedReturn(a, b) => {
+	            write!(f, "expected ")?;
+	            match a {
+		            Some(t) => write!(f, "return with type {:?}", t)?,
+		            None => write!(f, "void or no return")?,
+	            };
+	            write!(f, ", got ")?;
+	            match b {
+		            Some(t) => write!(f, "explicit return with type {:?}", t)?,
+		            None => write!(f, "void or no return")?,
+	            };
+	            Ok(())
+            }
             ArgumentCount(name, a, b) =>
             	write!(f, "function {} expected {} arguments, got {}", name, a, b),
             NonLiteral(name) => write!(f, "literal value required for {}", name),
@@ -31,22 +45,26 @@ impl std::error::Error for LowerError {}
 
 type Result<T> = std::result::Result<T, LowerError>;
 
+// A helper that doesn't require state useful for panic lower
+fn literal_type(lit: &Literal) -> Type {
+    match lit {
+        Literal::String(_) => Type::Str,
+        Literal::Int(_) => Type::Int,
+        Literal::Bool(_) => Type::Bool,
+    }
+}
 // As much as it pains me to require fn_map, we need it to determine type of FnCall
 fn expression_type(state: &mut LowerState, expr: &Expression) -> Result<Type> {
-    match expr {
-        Expression::Literal(lit) => match lit {
-            Literal::String(_) => Type::Str,
-            Literal::Int(_) => Type::Int,
-            Literal::Bool(_) => Type::Bool,
-        },
-        Expression::Identifier(id) => match stack_search(state, &id.name) {
+    Ok(match expr {
+		Expression::Literal(lit) => literal_type(lit),
+        Expression::Identifier(id) => match stack_search(state, &id.name)? {
             (_, t) => t,
         }
         Expression::Not(_) => Type::Bool,
         Expression::FnCall(func) => {
             let node = match state.fn_map.get(&*func.name) {
                 Some(func) => func,
-                None => return Err(LowerError::UnknownFn(func.name)),
+                None => return Err(LowerError::UnknownFn(func.name.clone())),
             };
             let return_type = match node {
                 ASTNode::Fn(f) => &f.signature.return_type,
@@ -63,8 +81,8 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Result<Type> {
                 Equal | NotEqual | Greater | GreaterEqual | Less | LessEqual | Or | And => Type::Bool,
                 // Retains type of arguments
                 Plus | Minus | Times | Divide => {
-                    let left = expression_type(state, &expr.left);
-                    let right = expression_type(state, &expr.right);
+                    let left = expression_type(state, &expr.left)?;
+                    let right = expression_type(state, &expr.right)?;
                     if left != right {
 	                    return Err(LowerError::MismatchedType(left, right));
                     }
@@ -72,13 +90,13 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Result<Type> {
                 }
             }
         }
-    }
+    })
 }
 
 // Some(true) is like (Int, Int) OR (Int, Infer)
 // Some(false) is like (Int, String)
 // None is (Infer, Infer)
-fn types_match(a: Type, b: Type) -> Result<Option<bool>> {
+fn types_match(a: Type, b: Type) -> Option<bool> {
     if a == Type::Infer && b == Type::Infer {
         None
     } else if a == b {
@@ -88,7 +106,7 @@ fn types_match(a: Type, b: Type) -> Result<Option<bool>> {
     }
 }
 
-fn i_as_u(what: i32) -> Result<u32> {
+fn i_as_u(what: i32) -> u32 {
     unsafe { std::mem::transmute::<i32, u32>(what) }
 }
 
@@ -103,7 +121,7 @@ struct LowerState<'a> {
 }
 impl<'a> LowerState<'a> {
     #[allow(clippy::ptr_arg)]
-    fn new(ast: &'a AST, strings: &'a mut Vec<String>) -> Result<Self> {
+    fn new(ast: &'a AST, strings: &'a mut Vec<String>) -> Self {
         // IndexMap maintains indices of fns
         let mut fn_map = IndexMap::new();
         // Add all functions to the map
@@ -124,7 +142,7 @@ impl<'a> LowerState<'a> {
         }
         Self { fn_map, locals: vec![], strings, next_label: 0 }
     }
-    fn get_label(&mut self) -> Result<usize> {
+    fn get_label(&mut self) -> usize {
         self.next_label += 1;
         self.next_label
     }
@@ -139,18 +157,18 @@ fn lower_loop(
     let begin = state.get_label();
     let end = state.get_label();
     insts.push(llr::Instruction::LabelMark(begin));
-    insts.append(&mut expression_to_push(state, &loop_data.condition, 0));
+    insts.append(&mut expression_to_push(state, &loop_data.condition, 0)?);
     insts.push(llr::Instruction::JumpZero(end));
     lower_scope_begin(state);
-        insts.append(&mut lower_statements(state, &loop_data.statements, parent_signature));
+        insts.append(&mut lower_statements(state, &loop_data.statements, parent_signature)?);
     // Immediately all go out of scope
-    insts.append(&mut lower_scope_end(state));
+    insts.append(&mut lower_scope_end(state)?);
     // Jump back to conditional, regardless
     // Lacking a Jump command, we push zero and then JumpZero
     insts.push(llr::Instruction::Push(0));
     insts.push(llr::Instruction::JumpZero(begin));
     insts.push(llr::Instruction::LabelMark(end));
-    insts
+    Ok(insts)
 }
 
 /// stack_plus: Parsing dup requires knowing how much extra we've added to the stack
@@ -160,7 +178,7 @@ fn expression_to_push(
     stack_plus: u8,
 ) -> Result<Vec<llr::Instruction>> {
     let LowerState { strings, .. } = state;
-    match expr {
+    Ok(match expr {
         Expression::Literal(Literal::String(string)) => {
             strings.push(string.to_string());
             vec![llr::Instruction::Push((strings.len() - 1) as u32)]
@@ -170,16 +188,16 @@ fn expression_to_push(
         Expression::Not(expr) => {
             let mut insts = vec![];
             // expr == false
-            insts.append(&mut expression_to_push(state, expr, stack_plus));
+            insts.append(&mut expression_to_push(state, expr, stack_plus)?);
             insts.push(llr::Instruction::Push(0));
             insts.push(llr::Instruction::Equal);
             insts
         }
         // fn call leaves result on the stack which is exactly what we need
-        Expression::FnCall(call) => lower_fn_call(state, call, false),
+        Expression::FnCall(call) => lower_fn_call(state, call, false)?,
         Expression::Identifier(var) => {
             let mut insts = vec![];
-            let rindex = stack_index(state, &var.name) + stack_plus;
+            let rindex = stack_index(state, &var.name)? + stack_plus;
             insts.push(llr::Instruction::Dup(rindex));
             insts
         }
@@ -193,18 +211,18 @@ fn expression_to_push(
                     let mut as_equals = expr.clone();
                     as_equals.op = Equal;
                     let desugared = Expression::Not(Box::new(Expression::Binary(as_equals)));
-                    insts.append(&mut expression_to_push(state, &desugared, stack_plus));
+                    insts.append(&mut expression_to_push(state, &desugared, stack_plus)?);
                 }
                 // Right, left, op-to-follow
                 // r l < == l r >
                 Greater => {
-                    insts.append(&mut expression_to_push(state, &expr.right, stack_plus));
-                    insts.append(&mut expression_to_push(state, &expr.left, stack_plus+1));
+                    insts.append(&mut expression_to_push(state, &expr.right, stack_plus)?);
+                    insts.append(&mut expression_to_push(state, &expr.left, stack_plus+1)?);
                 }
                 // Left, right, op-to-follow
                 _ => {
-                    insts.append(&mut expression_to_push(state, &expr.left, stack_plus));
-                    insts.append(&mut expression_to_push(state, &expr.right, stack_plus+1));
+                    insts.append(&mut expression_to_push(state, &expr.left, stack_plus)?);
+                    insts.append(&mut expression_to_push(state, &expr.right, stack_plus+1)?);
                 }
             }
             match expr.op {
@@ -215,12 +233,12 @@ fn expression_to_push(
                 GreaterEqual | LessEqual => {
                     match expr.op {
                         LessEqual => {
-                            insts.append(&mut expression_to_push(state, &expr.left, stack_plus));
-                            insts.append(&mut expression_to_push(state, &expr.right, stack_plus+1));
+                            insts.append(&mut expression_to_push(state, &expr.left, stack_plus)?);
+                            insts.append(&mut expression_to_push(state, &expr.right, stack_plus+1)?);
                         }
                         GreaterEqual => {
-                            insts.append(&mut expression_to_push(state, &expr.right, stack_plus));
-                            insts.append(&mut expression_to_push(state, &expr.left, stack_plus+1));
+                            insts.append(&mut expression_to_push(state, &expr.right, stack_plus)?);
+                            insts.append(&mut expression_to_push(state, &expr.left, stack_plus+1)?);
                         }
                         _ => unreachable!(),
                     };
@@ -254,7 +272,7 @@ fn expression_to_push(
                         name: "internal_times".to_string(),
                         arguments: vec![expr.left.clone(), expr.right.clone()],
                     };
-                    insts.append(&mut lower_fn_call(state, &call, false))
+                    insts.append(&mut lower_fn_call(state, &call, false)?)
                 }
                 Or => insts.push(llr::Instruction::Add),
                 And => {
@@ -263,14 +281,14 @@ fn expression_to_push(
                         name: "internal_and".to_string(),
                         arguments: vec![expr.left.clone(), expr.right.clone()],
                     };
-                    insts.append(&mut lower_fn_call(state, &call, false))
+                    insts.append(&mut lower_fn_call(state, &call, false)?)
                 }
                 NotEqual => (),
                 Divide => unimplemented!(),
             };
             insts
         }
-    }
+    })
 }
 
 fn lower_panic(call: &FnCall) -> Result<Vec<llr::Instruction>> {
@@ -280,14 +298,14 @@ fn lower_panic(call: &FnCall) -> Result<Vec<llr::Instruction>> {
     let (line, col) = match arg1 {
 	    Expression::Literal(Literal::Int(l)) => match arg2 {
 	        Expression::Literal(Literal::Int(c)) => (l,c),
-	        Expression::Literal(got) => return Err(LowerError::MismatchedType(arg2, got)),
-	        got => return Err(LowerError::NonLiteral("panic"))
+	        Expression::Literal(got) => return Err(LowerError::MismatchedType(Type::Int, literal_type(&got))),
+	        _ => return Err(LowerError::NonLiteral("panic"))
 	    }
-	    Expression::Literal(got) => return Err(LowerError::MismatchedType(arg1, got)),
-        got => return Err(LowerError::NonLiteral("panic")),
+	    Expression::Literal(got) => return Err(LowerError::MismatchedType(Type::Int, literal_type(&got))),
+        _ => return Err(LowerError::NonLiteral("panic")),
     };
     insts.push(llr::Instruction::Panic(line as u32, col as u32));
-    insts
+    Ok(insts)
 }
 
 fn lower_assert(state: &mut LowerState, call: &FnCall) -> Result<Vec<llr::Instruction>> {
@@ -316,16 +334,16 @@ fn lower_assert(state: &mut LowerState, call: &FnCall) -> Result<Vec<llr::Instru
 }
 
 fn lower_fn_call(
-    state: &mut LowerState,
-    call: &FnCall,
-    is_statement: bool,
-) -> Result<Vec<llr::Instruction>> {
+	state: &mut LowerState,
+	call: &FnCall,
+	is_statement: bool)
+-> Result<Vec<llr::Instruction>> {
     let (index, node) = match state.fn_map.get_full(&*call.name) {
         Some((i, _, func)) => (i, func),
         None => match &call.name[..] {
             "panic" => return lower_panic(call),
             "assert" => return lower_assert(state, call),
-            _ => return Err(LowerError::UnknownFn(call.name)),
+            _ => return Err(LowerError::UnknownFn(call.name.clone())),
         },
     };
     // Typecheck
@@ -343,20 +361,20 @@ fn lower_fn_call(
     };
     let params = &signature.parameters;
     if call.arguments.len() != params.len() {
-	    return Err(LowerError::ArgumentCount(call.name, params.len(), call.arguments.len()));
+	    return Err(LowerError::ArgumentCount(call.name.clone(), params.len(), call.arguments.len()));
     }
     let mut instructions = vec![];
     // Typecheck all arguments calls with their found IDs
     for (i, arg) in call.arguments.iter().enumerate() {
         let param = &params[i];
-        let given_type = expression_type(state, arg);
+        let given_type = expression_type(state, arg)?;
         if types_match(given_type, param.id_type) == Some(false) {
             return Err(LowerError::MismatchedType(param.id_type, given_type));
         }
         // Otherwise our types are just fine
         // Now we just have to evaluate it
         // The number of arguments we've pushed already is i which is also stack_plus
-        let mut push = expression_to_push(state, arg, i as u8);
+        let mut push = expression_to_push(state, arg, i as u8)?;
         instructions.append(&mut push);
     }
     // Generate lowered call
@@ -373,7 +391,7 @@ fn lower_fn_call(
             instructions.push(llr::Instruction::Pop);
         }
     }
-    instructions
+    Ok(instructions)
 }
 
 /// These must match up exactly!!! Except return, maybe that's different not sure
@@ -391,7 +409,7 @@ fn lower_scope_end(state: &mut LowerState) -> Result<Vec<llr::Instruction>> {
         debug!("{:?}", _local);
         insts.push(llr::Instruction::Pop);
     }
-    insts
+    Ok(insts)
 }
 
 fn lower_return(
@@ -401,14 +419,21 @@ fn lower_return(
 ) -> Result<Vec<llr::Instruction>> {
     let num_locals = state.locals.last().unwrap().len();
     // Typecheck return value
-    // None == None -> Result<return == void
-    let given_type = expr.as_ref().map(|x| expression_type(state, x));
-    if given_type != return_type {
-	    return Err(LowerError::MismatchedType(return_type, given_type));
+    // None == None -> return == void
+    match (signature.return_type, expr) {
+	    (Some(_), None) => return Err(LowerError::MismatchedReturn(signature.return_type, None)),
+	    (a, Some(b)) => {
+		    let b_type = expression_type(state, b)?;
+		    if a != Some(b_type) {
+			    return Err(LowerError::MismatchedReturn(a, Some(b_type)));
+		    }
+		    // otherwise we're good
+	    }
+	    (None, None) => ()
     }
     let mut insts = vec![];
     if let Some(expr) = expr {
-        insts.append(&mut expression_to_push(state, &expr, 0));
+        insts.append(&mut expression_to_push(state, &expr, 0)?);
         // We want to preserve value from coming pops by moving it to the bottom
         insts.push(llr::Instruction::Swap(num_locals as u8))
     }
@@ -424,7 +449,7 @@ fn lower_return(
     // lowering
     // Return only deals with the instruction pointer
     insts.push(llr::Instruction::Return);
-    insts
+    Ok(insts)
 }
 
 fn stack_search(state: &mut LowerState, name: &str) -> Result<(u8, Type)> {
@@ -434,7 +459,7 @@ fn stack_search(state: &mut LowerState, name: &str) -> Result<(u8, Type)> {
         match scope.get_full(name) {
             Some((i, _, id_type)) => {
                 let i = more_local_total + scope.len() - i - 1;
-                return (i as u8, *id_type);
+                return Ok((i as u8, *id_type));
             }
             None => {
                 more_local_total += scope.len();
@@ -442,11 +467,11 @@ fn stack_search(state: &mut LowerState, name: &str) -> Result<(u8, Type)> {
         }
     }
     // None found
-    Err(LowerError::UnknownIdent(name));
+    Err(LowerError::UnknownIdent(name.to_string()))
 }
 fn stack_index(state: &mut LowerState, name: &str) -> Result<u8> {
-    let (i, _) = stack_search(state, name);
-    i
+    let (i, _) = stack_search(state, name)?;
+    Ok(i)
 }
 
 fn lower_statement(
@@ -454,18 +479,18 @@ fn lower_statement(
     statement: &Statement,
     signature: &Signature,
 ) -> Result<Vec<llr::Instruction>> {
-    match statement {
-        Statement::FnCall(call) => lower_fn_call(state, call, true),
-        Statement::Return(expr) => lower_return(state, expr, signature),
+    Ok(match statement {
+        Statement::FnCall(call) => lower_fn_call(state, call, true)?,
+        Statement::Return(expr) => lower_return(state, expr, signature)?,
         Statement::If(if_stmt) => {
-	        let cond_type = expression_type(state, &if_stmt.condition);
+	        let cond_type = expression_type(state, &if_stmt.condition)?;
 	        if cond_type != Type::Bool {
 		        return Err(LowerError::MismatchedType(Type::Bool, cond_type));
 	        }
             lower_scope_begin(state);
-                let mut push_condition = expression_to_push(state, &if_stmt.condition, 0);
-                let mut if_block = lower_statements(state, &if_stmt.statements, signature);
-                let mut else_block = lower_statements(state, &if_stmt.else_statements, signature);
+                let mut push_condition = expression_to_push(state, &if_stmt.condition, 0)?;
+                let mut if_block = lower_statements(state, &if_stmt.statements, signature)?;
+                let mut else_block = lower_statements(state, &if_stmt.else_statements, signature)?;
                 let mut lowered = vec![];
                 lowered.append(&mut push_condition);
                 let else_start = state.get_label();
@@ -485,16 +510,16 @@ fn lower_statement(
                     lowered.append(&mut else_block);
                     lowered.push(llr::Instruction::LabelMark(else_end));
                 }
-            lowered.append(&mut lower_scope_end(state));
+            lowered.append(&mut lower_scope_end(state)?);
             lowered
         }
-        Statement::WhileLoop(loop_data) => lower_loop(state, loop_data, signature),
+        Statement::WhileLoop(loop_data) => lower_loop(state, loop_data, signature)?,
         Statement::Assignment(assign) => {
             let mut insts = vec![];
             // Compile rvalue first in case it depends on lvalue
-            insts.append(&mut expression_to_push(state, &assign.rvalue, 0));
+            insts.append(&mut expression_to_push(state, &assign.rvalue, 0)?);
             // + 1 is to account for rvalue sitting on top
-            let rindex = stack_index(state, &assign.lvalue) + 1;
+            let rindex = stack_index(state, &assign.lvalue)? + 1;
             // Swap the old value to the top, new value is in old spot
             insts.push(llr::Instruction::Swap(rindex));
             // Pop old value off, never to be seen again
@@ -503,12 +528,12 @@ fn lower_statement(
         }
         Statement::Declaration(decl) => {
             // Declaration is just a push where we change locals
-            let rvalue_type = expression_type(state, &decl.rvalue);
-            let rv = expression_to_push(state, &decl.rvalue, 0);
+            let rvalue_type = expression_type(state, &decl.rvalue)?;
+            let rv = expression_to_push(state, &decl.rvalue, 0)?;
             state.locals.last_mut().unwrap().insert(decl.lvalue.clone(), rvalue_type);
             rv
         }
-    }
+    })
 }
 
 fn lower_statements(
@@ -519,14 +544,14 @@ fn lower_statements(
     let mut insts = vec![];
     // Lower every statement
     for statement in statements.iter() {
-        insts.append(&mut lower_statement(state, statement, &parent_signature));
+        insts.append(&mut lower_statement(state, statement, &parent_signature)?);
     }
     Ok(insts)
 }
 
 fn lower_fn_statements(state: &mut LowerState, func: &Fn) -> Result<Vec<llr::Instruction>> {
     let mut instructions = Vec::<llr::Instruction>::new();
-    instructions.append(&mut lower_statements(state, &func.statements, &func.signature));
+    instructions.append(&mut lower_statements(state, &func.statements, &func.signature)?);
     let last_statement_return = instructions.last() == Some(&llr::Instruction::Return);
     // Add implied returns
     // If the final command was a proper return, no need to clean it up
@@ -534,7 +559,7 @@ fn lower_fn_statements(state: &mut LowerState, func: &Fn) -> Result<Vec<llr::Ins
         // If the function is empty or didn't end in return we need to add one
         // We can add the implicit void return but not implicit typed return
         // However the error will be handlede properly by lower_return by passing the signature
-        instructions.append(&mut lower_return(state, &None, &func.signature));
+        instructions.append(&mut lower_return(state, &None, &func.signature)?);
     }
     Ok(instructions)
 }
@@ -558,8 +583,8 @@ fn lower_fn(state: &mut LowerState, func: &Fn) -> Result<llr::Fn> {
             state.locals.last_mut().unwrap().insert(param.name.clone(), param.id_type);
         }
         let rv = llr::Fn {
-            instructions: lower_fn_statements(state, func),
-            signature: lower_signature(&func.signature),
+            instructions: lower_fn_statements(state, func)?,
+            signature: lower_signature(&func.signature)?,
         };
     // fn return doesn't pop locals
     state.locals.pop();
@@ -576,11 +601,11 @@ pub fn lower(ast: AST) -> Result<llr::LLR> {
             ASTNode::Fn(func) => {
                 // We generate state for each function to keep locals scoped
                 // This might be cleaner if we used a real scoping system
-                let out_f = lower_fn(&mut state, &func);
+                let out_f = lower_fn(&mut state, &func)?;
                 out.fns.push(out_f);
             }
             ASTNode::ExternFn(func) => {
-                let out_s = lower_signature(&func.signature);
+                let out_s = lower_signature(&func.signature)?;
                 out.extern_fns.push(out_s);
             }
         }
@@ -598,7 +623,7 @@ mod test {
             .expect("could not load given file");
         let lexed = lex(&script_string);
         let parsed = parse(lexed).expect("unexpected parse error");
-        let lowered = lower(parsed);
+        let lowered = lower(parsed).expect("unexpected lower error");
         let fns = lowered.fns;
         let mut balance: isize = 0;
         for func in fns {
