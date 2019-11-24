@@ -4,8 +4,35 @@
 use crate::{ast::*, llr, Type};
 use indexmap::IndexMap;
 
+#[derive(Debug)]
+pub enum LowerError {
+	// TODO: figure out how to mark positions / spans in AST
+    MismatchedType(Type, Type),
+    ArgumentCount(String, u32, u32),
+    NonLiteral(&'static str),
+    UnknownFn(String),
+    UnknownIdent(String),
+}
+impl std::fmt::Display for LowerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<std::fmt::Result> {
+        use LowerError::*;
+        match self {
+            MismatchedType(a, b) => write!(f, "mismatched type, expected {:?}, got {:?}", a, b),
+            ArgumentCount(name, a, b) =>
+            	write!(f, "function {} expected {} arguments, got {}", name, a, b),
+            NonLiteral(name) => write!(f, "literal value required for {}", name),
+            UnknownFn(name) => write!(f, "called unknown function {}", name),
+            UnknownIdent(name) => write!(f, "referenced unknown identifier {}", name),
+        }
+    }
+}
+// All relevant details in Display and Debug
+impl std::error::Error for LowerError {}
+
+type Result<T> = std::result::Result<T, LowerError>;
+
 // As much as it pains me to require fn_map, we need it to determine type of FnCall
-fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
+fn expression_type(state: &mut LowerState, expr: &Expression) -> Result<Type> {
     match expr {
         Expression::Literal(lit) => match lit {
             Literal::String(_) => Type::Str,
@@ -19,7 +46,7 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
         Expression::FnCall(func) => {
             let node = match state.fn_map.get(&*func.name) {
                 Some(func) => func,
-                None => panic!("could not find function {}", func.name),
+                None => return Err(LowerError::UnknownFn(func.name)),
             };
             let return_type = match node {
                 ASTNode::Fn(f) => &f.signature.return_type,
@@ -27,7 +54,7 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
             };
             match return_type {
                 Some(what) => *what,
-                None => panic!("ERROR: function used as expression is void"),
+                None => unreachable!("function lowered as expression is void"),
             }
         }
         Expression::Binary(expr) => {
@@ -38,7 +65,9 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
                 Plus | Minus | Times | Divide => {
                     let left = expression_type(state, &expr.left);
                     let right = expression_type(state, &expr.right);
-                    assert_eq!(left, right, "Commutative operation between different types");
+                    if left != right {
+	                    return Err(LowerError::MismatchedType(left, right));
+                    }
                     left
                 }
             }
@@ -49,7 +78,7 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
 // Some(true) is like (Int, Int) OR (Int, Infer)
 // Some(false) is like (Int, String)
 // None is (Infer, Infer)
-fn types_match(a: Type, b: Type) -> Option<bool> {
+fn types_match(a: Type, b: Type) -> Result<Option<bool>> {
     if a == Type::Infer && b == Type::Infer {
         None
     } else if a == b {
@@ -59,7 +88,7 @@ fn types_match(a: Type, b: Type) -> Option<bool> {
     }
 }
 
-fn i_as_u(what: i32) -> u32 {
+fn i_as_u(what: i32) -> Result<u32> {
     unsafe { std::mem::transmute::<i32, u32>(what) }
 }
 
@@ -74,7 +103,7 @@ struct LowerState<'a> {
 }
 impl<'a> LowerState<'a> {
     #[allow(clippy::ptr_arg)]
-    fn new(ast: &'a AST, strings: &'a mut Vec<String>) -> Self {
+    fn new(ast: &'a AST, strings: &'a mut Vec<String>) -> Result<Self> {
         // IndexMap maintains indices of fns
         let mut fn_map = IndexMap::new();
         // Add all functions to the map
@@ -95,7 +124,7 @@ impl<'a> LowerState<'a> {
         }
         Self { fn_map, locals: vec![], strings, next_label: 0 }
     }
-    fn get_label(&mut self) -> usize {
+    fn get_label(&mut self) -> Result<usize> {
         self.next_label += 1;
         self.next_label
     }
@@ -105,7 +134,7 @@ fn lower_loop(
     state: &mut LowerState,
     loop_data: &WhileLoop,
     parent_signature: &Signature,
-) -> Vec<llr::Instruction> {
+) -> Result<Vec<llr::Instruction>> {
     let mut insts = vec![];
     let begin = state.get_label();
     let end = state.get_label();
@@ -129,7 +158,7 @@ fn expression_to_push(
     state: &mut LowerState,
     expr: &Expression,
     stack_plus: u8,
-) -> Vec<llr::Instruction> {
+) -> Result<Vec<llr::Instruction>> {
     let LowerState { strings, .. } = state;
     match expr {
         Expression::Literal(Literal::String(string)) => {
@@ -244,17 +273,24 @@ fn expression_to_push(
     }
 }
 
-fn lower_panic(call: &FnCall) -> Vec<llr::Instruction> {
+fn lower_panic(call: &FnCall) -> Result<Vec<llr::Instruction>> {
     let mut insts = vec![];
-    let (line, col) = match (call.arguments[0].clone(), call.arguments[1].clone()) {
-        (Expression::Literal(Literal::Int(l)), Expression::Literal(Literal::Int(c))) => (l,c),
-        got => panic!("Panic expected line + col as Int, got {:?}", got),
+    let arg1 = call.arguments[0].clone();
+    let arg2 = call.arguments[1].clone();
+    let (line, col) = match arg1 {
+	    Expression::Literal(Literal::Int(l)) => match arg2 {
+	        Expression::Literal(Literal::Int(c)) => (l,c),
+	        Expression::Literal(got) => return Err(LowerError::MismatchedType(arg2, got)),
+	        got => return Err(LowerError::NonLiteral("panic"))
+	    }
+	    Expression::Literal(got) => return Err(LowerError::MismatchedType(arg1, got)),
+        got => return Err(LowerError::NonLiteral("panic")),
     };
     insts.push(llr::Instruction::Panic(line as u32, col as u32));
     insts
 }
 
-fn lower_assert(state: &mut LowerState, call: &FnCall) -> Vec<llr::Instruction> {
+fn lower_assert(state: &mut LowerState, call: &FnCall) -> Result<Vec<llr::Instruction>> {
     let condition = call.arguments[0].clone();
     let line = call.arguments[1].clone();
     let col = call.arguments[2].clone();
@@ -283,13 +319,13 @@ fn lower_fn_call(
     state: &mut LowerState,
     call: &FnCall,
     is_statement: bool,
-) -> Vec<llr::Instruction> {
+) -> Result<Vec<llr::Instruction>> {
     let (index, node) = match state.fn_map.get_full(&*call.name) {
         Some((i, _, func)) => (i, func),
         None => match &call.name[..] {
             "panic" => return lower_panic(call),
             "assert" => return lower_assert(state, call),
-            _ => panic!("could not find function {}", call.name),
+            _ => return Err(LowerError::UnknownFn(call.name)),
         },
     };
     // Typecheck
@@ -306,21 +342,16 @@ fn lower_fn_call(
         }
     };
     let params = &signature.parameters;
-    assert_eq!(
-        call.arguments.len(),
-        params.len(),
-        "{} expected {} arguments, got {}",
-        call.name,
-        params.len(),
-        call.arguments.len()
-    );
+    if call.arguments.len() != params.len() {
+	    return Err(LowerError::ArgumentCount(call.name, params.len(), call.arguments.len()));
+    }
     let mut instructions = vec![];
     // Typecheck all arguments calls with their found IDs
     for (i, arg) in call.arguments.iter().enumerate() {
         let param = &params[i];
         let given_type = expression_type(state, arg);
         if types_match(given_type, param.id_type) == Some(false) {
-            panic!("expected type {:?} but got {:?}", param.id_type, given_type);
+            return Err(LowerError::MismatchedType(param.id_type, given_type));
         }
         // Otherwise our types are just fine
         // Now we just have to evaluate it
@@ -349,7 +380,7 @@ fn lower_fn_call(
 fn lower_scope_begin(state: &mut LowerState) {
     state.locals.push(IndexMap::new());
 }
-fn lower_scope_end(state: &mut LowerState) -> Vec<llr::Instruction> {
+fn lower_scope_end(state: &mut LowerState) -> Result<Vec<llr::Instruction>> {
     // This pops every local
     // a proper stack machine will consume locals when last used
     // in an expression, which would make this obsolete
@@ -367,11 +398,14 @@ fn lower_return(
     state: &mut LowerState,
     expr: &Option<Expression>,
     signature: &Signature,
-) -> Vec<llr::Instruction> {
+) -> Result<Vec<llr::Instruction>> {
     let num_locals = state.locals.last().unwrap().len();
     // Typecheck return value
-    // None == None -> return == void
-    assert_eq!(expr.as_ref().map(|x| expression_type(state, x)), signature.return_type);
+    // None == None -> Result<return == void
+    let given_type = expr.as_ref().map(|x| expression_type(state, x));
+    if given_type != return_type {
+	    return Err(LowerError::MismatchedType(return_type, given_type));
+    }
     let mut insts = vec![];
     if let Some(expr) = expr {
         insts.append(&mut expression_to_push(state, &expr, 0));
@@ -393,7 +427,7 @@ fn lower_return(
     insts
 }
 
-fn stack_search(state: &mut LowerState, name: &str) -> (u8, Type) {
+fn stack_search(state: &mut LowerState, name: &str) -> Result<(u8, Type)> {
     // We use shadowing so search in opposite order
     let mut more_local_total = 0;
     for scope in state.locals.iter().rev() {
@@ -408,9 +442,9 @@ fn stack_search(state: &mut LowerState, name: &str) -> (u8, Type) {
         }
     }
     // None found
-    panic!("unknown local variable {}", name);
+    Err(LowerError::UnknownIdent(name));
 }
-fn stack_index(state: &mut LowerState, name: &str) -> u8 {
+fn stack_index(state: &mut LowerState, name: &str) -> Result<u8> {
     let (i, _) = stack_search(state, name);
     i
 }
@@ -419,12 +453,15 @@ fn lower_statement(
     state: &mut LowerState,
     statement: &Statement,
     signature: &Signature,
-) -> Vec<llr::Instruction> {
+) -> Result<Vec<llr::Instruction>> {
     match statement {
         Statement::FnCall(call) => lower_fn_call(state, call, true),
         Statement::Return(expr) => lower_return(state, expr, signature),
         Statement::If(if_stmt) => {
-            assert_eq!(expression_type(state, &if_stmt.condition), Type::Bool, "if statement requires bool");
+	        let cond_type = expression_type(state, &if_stmt.condition);
+	        if cond_type != Type::Bool {
+		        return Err(LowerError::MismatchedType(Type::Bool, cond_type));
+	        }
             lower_scope_begin(state);
                 let mut push_condition = expression_to_push(state, &if_stmt.condition, 0);
                 let mut if_block = lower_statements(state, &if_stmt.statements, signature);
@@ -478,16 +515,16 @@ fn lower_statements(
     state: &mut LowerState,
     statements: &[Statement],
     parent_signature: &Signature,
-) -> Vec<llr::Instruction> {
+) -> Result<Vec<llr::Instruction>> {
     let mut insts = vec![];
     // Lower every statement
     for statement in statements.iter() {
         insts.append(&mut lower_statement(state, statement, &parent_signature));
     }
-    insts
+    Ok(insts)
 }
 
-fn lower_fn_statements(state: &mut LowerState, func: &Fn) -> Vec<llr::Instruction> {
+fn lower_fn_statements(state: &mut LowerState, func: &Fn) -> Result<Vec<llr::Instruction>> {
     let mut instructions = Vec::<llr::Instruction>::new();
     instructions.append(&mut lower_statements(state, &func.statements, &func.signature));
     let last_statement_return = instructions.last() == Some(&llr::Instruction::Return);
@@ -499,23 +536,23 @@ fn lower_fn_statements(state: &mut LowerState, func: &Fn) -> Vec<llr::Instructio
         // However the error will be handlede properly by lower_return by passing the signature
         instructions.append(&mut lower_return(state, &None, &func.signature));
     }
-    instructions
+    Ok(instructions)
 }
 
-fn lower_signature(signature: &Signature) -> llr::Signature {
+fn lower_signature(signature: &Signature) -> Result<llr::Signature> {
     // Lower parameters
     let mut parameters = vec![];
     for param in &signature.parameters {
         parameters.push(param.id_type);
     }
-    llr::Signature {
+    Ok(llr::Signature {
         name: signature.name.clone(),
         parameters,
         return_type: signature.return_type,
-    }
+    })
 }
 
-fn lower_fn(state: &mut LowerState, func: &Fn) -> llr::Fn {
+fn lower_fn(state: &mut LowerState, func: &Fn) -> Result<llr::Fn> {
     lower_scope_begin(state);
         for param in &func.signature.parameters {
             state.locals.last_mut().unwrap().insert(param.name.clone(), param.id_type);
@@ -526,10 +563,10 @@ fn lower_fn(state: &mut LowerState, func: &Fn) -> llr::Fn {
         };
     // fn return doesn't pop locals
     state.locals.pop();
-    rv
+    Ok(rv)
 }
 
-pub fn lower(ast: AST) -> llr::LLR {
+pub fn lower(ast: AST) -> Result<llr::LLR> {
     let mut out = llr::LLR::new();
     let mut state = LowerState::new(&ast, &mut out.strings);
     // Find all function calls and set their ID to the map's id
@@ -548,7 +585,7 @@ pub fn lower(ast: AST) -> llr::LLR {
             }
         }
     }
-    out
+    Ok(out)
 }
 
 mod test {

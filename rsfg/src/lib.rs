@@ -66,15 +66,9 @@ pub enum Type {
 
 // TODO: add an actual import system so that we don't use this
 // "#include-but-worse" hack for the stdlib
-pub fn compile(text: &str, stdlib: &str) -> Vec<u8> {
+pub fn compile(text: &str, stdlib: &str) -> Result<Vec<u8>, CompileError> {
     let full_text = format!("{}\n{}", text, stdlib);
-    let parse = parser::parse(lexer::lex(&full_text));
-    let ast = match parse {
-	    Ok(ast) => ast,
-	    Err(err) => {
-		    println!("{}", err);
-		    panic!("test failed on parse error");
-	    }
-    };
-    codegen::gen(lower::lower(ast))
+    let ast = parser::parse(lexer::lex(&full_text))?;
+    Ok(codegen::gen(lower::lower(ast)))
 }
+
