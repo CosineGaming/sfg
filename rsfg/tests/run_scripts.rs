@@ -3,7 +3,13 @@ use rsfg::compile;
 
 fn compile_file(filename: &str) -> Vec<u8> {
     let script_string = std::fs::read_to_string(filename).expect("could not load given file");
-    compile(&script_string, "").expect("error compiling test")
+    match compile(&script_string, "") {
+	    Ok(c) => c,
+	    Err(e) => {
+		    println!("{}", e);
+		    panic!("file test failed to compile");
+	    }
+    }
 }
 
 fn assert_hex(a: Vec<u8>, b: Vec<u8>) {

@@ -14,11 +14,11 @@ fn main() {
     let stdlib = get_stdlib();
     let result = compile(&script_string, &stdlib);
     let compiled = match result {
-       Ok(c) => c,
-       Err(err) => {
-           println!("{}", err);
-           std::process::exit(1);
-       }
+	    Ok(c) => c,
+	    Err(err) => {
+		    println!("{}", err);
+		    std::process::exit(1);
+	    }
     };
     let out = script_path.with_extension("bcfg");
     std::fs::write(out, compiled).expect("couldn't output compiled file");
