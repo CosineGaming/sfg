@@ -1,0 +1,13 @@
+fn main()
+	var no_round = 1f
+	no_round += 1f
+	no_round += 1f
+	assert(no_round == 3.)
+	var x = 1.0
+	x += 0.2
+	x += 0.2
+	x += 0.2
+	x += 0.2
+	x += 0.2
+	assert(x == 2.0)
+

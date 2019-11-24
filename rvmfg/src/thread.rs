@@ -46,6 +46,19 @@ impl Fn {
     }
 }
 
+fn i_as_f(what: i32) -> f32 {
+    unsafe { std::mem::transmute(what) }
+}
+fn f_as_i(what: f32) -> i32 {
+    unsafe { std::mem::transmute(what) }
+}
+fn pop_f(stack: &mut Vec<i32>) -> f32 {
+	i_as_f(stack.pop().unwrap())
+}
+fn push_f(stack: &mut Vec<i32>, f: f32) {
+	stack.push(f_as_i(f))
+}
+
 impl Thread {
     pub fn new(code: Vec<u8>) -> Self {
         let mut ip = 0;
@@ -172,6 +185,16 @@ impl Thread {
                 let b = self.stack.pop().unwrap();
                 // The stack is placed in makes-sense order, we reverse
                 self.stack.push(b - a);
+            }
+            Deser::FAdd => {
+                let a = pop_f(&mut self.stack);
+                let b = pop_f(&mut self.stack);
+                push_f(&mut self.stack, a + b);
+            }
+            Deser::FSub => {
+                let a = pop_f(&mut self.stack);
+                let b = pop_f(&mut self.stack);
+                push_f(&mut self.stack, b - a);
             }
             Deser::Return => {
                 self.ip = match self.call_stack.pop() {

@@ -138,6 +138,7 @@ pub fn lex(text: &str) -> Vec<Token> {
                     "int" => TokenType::Type(crate::Type::Int),
                     "str" => TokenType::Type(crate::Type::Str),
                     "bool" => TokenType::Type(crate::Type::Bool),
+                    "float" => TokenType::Type(crate::Type::Float),
                     "true" => True,
                     "false" => False,
                     "return" => Return,
@@ -178,17 +179,47 @@ pub fn lex(text: &str) -> Vec<Token> {
                 }
             }
             NextTokenType::Digit(c) => {
-                let mut string = c.to_string();
+	            enum NumberLitString {
+		            Int(String),
+		            Float(String),
+	            };
+                let mut string = NumberLitString::Int(c.to_string());
                 loop {
                     match lexer.rchars.last() {
-                        Some('0'..='9') => string.push(lexer.rchars.pop().unwrap()),
-                        Some('.') | Some('f') => panic!("floats not yet implemented"), // TODO
+                        Some('0'..='9') => match string {
+	                        NumberLitString::Int(ref mut s)
+	                        | NumberLitString::Float(ref mut s)
+	                        => s.push(lexer.rchars.pop().unwrap())
+                        }
+                        Some('.') => match string {
+	                        NumberLitString::Int(mut s)
+	                        | NumberLitString::Float(mut s)
+	                        => {
+		                        s.push(lexer.rchars.pop().unwrap());
+		                        string = NumberLitString::Float(s);
+	                        }
+                        }
+                        Some('f') => match string {
+	                        NumberLitString::Int(s)
+	                        | NumberLitString::Float(s)
+	                        => {
+		                        // ignore the f
+		                        lexer.rchars.pop();
+		                        string = NumberLitString::Float(s);
+	                        }
+                        }
                         _ => break,
                     }
                 }
-                match string.parse() {
-                    Ok(number) => IntLit(number),
-                    Err(err) => panic!("{}", err),
+                match string {
+	                NumberLitString::Int(s) => match s.parse() {
+	                    Ok(number) => IntLit(number),
+	                    Err(err) => panic!("{}", err),
+	                }
+	                NumberLitString::Float(s) => match s.parse() {
+	                    Ok(number) => FloatLit(number),
+	                    Err(err) => panic!("{}", err),
+	                }
                 }
             }
             NextTokenType::CommentOrDivision => {
@@ -314,12 +345,15 @@ mod test {
     }
     #[test]
     fn digit() {
-        let lexed = lex(r#"578 980"#);
+        let lexed = lex(r#"578 980 4.2 6f 0.0001"#);
         assert_eq!(
             lexed,
             vec![
                 Token { kind: IntLit(578), line: 1, col: 1 },
-                Token { kind: IntLit(980), line: 1, col: 5 }
+                Token { kind: IntLit(980), line: 1, col: 5 },
+                Token { kind: FloatLit(4.2), line: 1, col: 9 },
+                Token { kind: FloatLit(6.0), line: 1, col: 13 },
+                Token { kind: FloatLit(0.0001), line: 1, col: 16 },
             ]
         );
     }

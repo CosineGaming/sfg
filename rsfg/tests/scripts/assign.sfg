@@ -9,4 +9,7 @@ fn main()
 	assert(x == 14)
 	x -= 2
 	assert(x == 12)
+	if true
+		x -= 2
+	assert(x == 10)
 

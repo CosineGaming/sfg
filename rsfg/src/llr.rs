@@ -46,6 +46,8 @@ pub enum Instruction {
     Dup(u8),
     Add,
     Sub,
+    FAdd,
+    FSub,
     Panic(u32, u32),
     LabelMark(Label),
 }

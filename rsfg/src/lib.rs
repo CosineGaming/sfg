@@ -16,6 +16,7 @@ pub enum TokenType {
     Tab,
     StringLit(String),
     IntLit(i32),
+    FloatLit(f32),
     Type(Type),
     Fn,
     ExternFn,
@@ -61,6 +62,7 @@ pub enum Type {
     Int,
     Bool,
     Str,
+    Float,
     Infer,
 }
 

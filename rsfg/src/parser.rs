@@ -181,12 +181,19 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
             rtokens.pop();
             Ok(Expression::Literal(Literal::Int(*number)))
         }
+        FloatLit(number,0.0) => {
+            rtokens.pop();
+            Ok(Expression::Literal(Literal::Float(*number)))
+        }
         // This minus, because we're parsing an expression, is part of an int literal
         Minus => {
             rtokens.pop();
             expect_any!("expression", rtokens.pop() => {
                 IntLit(number,0) => {
                     Expression::Literal(Literal::Int(-number))
+                }
+                FloatLit(number,0.0) => {
+                    Expression::Literal(Literal::Float(-number))
                 }
             })
         }

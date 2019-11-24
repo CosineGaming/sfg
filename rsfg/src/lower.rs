@@ -4,13 +4,13 @@
 use crate::{ast::*, llr, Type};
 use indexmap::IndexMap;
 
-// As much as it pains me to require fn_map, we need it to determine type of FnCall
 fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
     match expr {
         Expression::Literal(lit) => match lit {
             Literal::String(_) => Type::Str,
             Literal::Int(_) => Type::Int,
             Literal::Bool(_) => Type::Bool,
+            Literal::Float(_) => Type::Float,
         },
         Expression::Identifier(id) => match stack_search(state, &id.name) {
             (_, t) => t,
@@ -32,15 +32,26 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Type {
         }
         Expression::Binary(expr) => {
             use BinaryOp::*;
-            match expr.op {
-                Equal | NotEqual | Greater | GreaterEqual | Less | LessEqual | Or | And => Type::Bool,
-                // Retains type of arguments
-                Plus | Minus | Times | Divide => {
-                    let left = expression_type(state, &expr.left);
-                    let right = expression_type(state, &expr.right);
-                    assert_eq!(left, right, "Commutative operation between different types");
-                    left
-                }
+            let left = expression_type(state, &expr.left);
+            let right = expression_type(state, &expr.right);
+            assert_eq!(left, right, "Commutative operation {:?} between different types", expr.op);
+            let deciding = match left {
+	            Type::Infer => right,
+	            _ => left
+            };
+            match deciding {
+	            Type::Bool => match expr.op {
+		            And | Or | Equal | NotEqual => Type::Bool,
+		            _ => panic!("no operation {:?} for bool", expr.op),
+	            }
+	            Type::Int | Type::Float => match expr.op {
+	                Equal | NotEqual | Greater | GreaterEqual | Less | LessEqual => Type::Bool,
+	                Plus | Minus | Times => deciding,
+	                Divide => panic!("divide unsupported"),
+	                And | Or => panic!("no operation {:?} for {:?}", expr.op, deciding),
+	            }
+	            Type::Str => panic!("no operation {:?} for str", expr.op),
+	            Type::Infer => panic!("binary op {:?} between two inferring types", expr.op),
             }
         }
     }
@@ -61,6 +72,9 @@ fn types_match(a: Type, b: Type) -> Option<bool> {
 
 fn i_as_u(what: i32) -> u32 {
     unsafe { std::mem::transmute::<i32, u32>(what) }
+}
+fn f_as_u(what: f32) -> u32 {
+    unsafe { std::mem::transmute::<f32, u32>(what) }
 }
 
 type ScopeStack = Vec<IndexMap<String, Type>>;
@@ -127,17 +141,18 @@ fn lower_loop(
 /// stack_plus: Parsing dup requires knowing how much extra we've added to the stack
 fn expression_to_push(
     state: &mut LowerState,
-    expr: &Expression,
+    expression: &Expression,
     stack_plus: u8,
 ) -> Vec<llr::Instruction> {
     let LowerState { strings, .. } = state;
-    match expr {
+    match expression {
         Expression::Literal(Literal::String(string)) => {
             strings.push(string.to_string());
             vec![llr::Instruction::Push((strings.len() - 1) as u32)]
         }
         Expression::Literal(Literal::Int(int)) => vec![llr::Instruction::Push(i_as_u(*int))],
         Expression::Literal(Literal::Bool(val)) => vec![llr::Instruction::Push(i_as_u(*val as i32))],
+        Expression::Literal(Literal::Float(val)) => vec![llr::Instruction::Push(f_as_u(*val))],
         Expression::Not(expr) => {
             let mut insts = vec![];
             // expr == false
@@ -157,6 +172,7 @@ fn expression_to_push(
         Expression::Binary(expr) => {
             use BinaryOp::*;
             let mut insts = vec![];
+            let left_type = expression_type(state, &expr.left);
             // Special cases (most binary ops follow similar rules)
             match expr.op {
                 Times | GreaterEqual | LessEqual | And => (),
@@ -164,6 +180,13 @@ fn expression_to_push(
                     let mut as_equals = expr.clone();
                     as_equals.op = Equal;
                     let desugared = Expression::Not(Box::new(Expression::Binary(as_equals)));
+                    insts.append(&mut expression_to_push(state, &desugared, stack_plus));
+                }
+                Equal if left_type == Type::Float => {
+                    let desugared = Expression::FnCall(FnCall {
+				        name: "epsilon_eq".to_string(),
+				        arguments: vec![expr.left.clone(), expr.right.clone()],
+				    });
                     insts.append(&mut expression_to_push(state, &desugared, stack_plus));
                 }
                 // Right, left, op-to-follow
@@ -179,7 +202,11 @@ fn expression_to_push(
                 }
             }
             match expr.op {
-                Equal => insts.push(llr::Instruction::Equal),
+                Equal => match left_type {
+	                Type::Int | Type::Bool => insts.push(llr::Instruction::Equal),
+	                Type::Float => (),
+	                _ => panic!("equality between non-comparable {:?}", left_type)
+                }
                 // Arguments reversed previously
                 Greater => insts.push(llr::Instruction::Less),
                 Less => insts.push(llr::Instruction::Less),
@@ -213,8 +240,16 @@ fn expression_to_push(
                     // Or == Add
                     insts.push(llr::Instruction::Add);
                 }
-                Plus => insts.push(llr::Instruction::Add),
-                Minus => insts.push(llr::Instruction::Sub),
+                Plus => match left_type {
+	                Type::Int => insts.push(llr::Instruction::Add),
+	                Type::Float => insts.push(llr::Instruction::FAdd),
+	                _ => panic!("non-numeric add"),
+                }
+                Minus => match left_type {
+	                Type::Int => insts.push(llr::Instruction::Sub),
+	                Type::Float => insts.push(llr::Instruction::FSub),
+	                _ => panic!("non-numeric subtract"),
+                }
                 Times => {
                     // Translate 4*5 to internal_times(4,5)
                     // This might be cleaner in a "sugar" / parser-side change

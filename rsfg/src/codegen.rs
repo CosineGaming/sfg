@@ -21,11 +21,11 @@ fn serialize(what: Serializable) -> u8 {
         S::Type(Int) => 0x10,
         S::Type(Str) => 0x11,
         S::Type(Bool) => 0x12,
+        S::Type(Float) => 0x13,
         S::Type(Infer) => panic!("type not yet inferred by printing"),
         // Other 2x
         S::Void => 0x21,
         // Instructions 3x
-        // If we have to use 4x I want to do some deep thinking
         S::Instruction(I::Push(_)) => 0x30,
         S::Instruction(I::ExternFnCall(_)) => 0x31,
         S::StringLit => 0x32,
@@ -42,6 +42,9 @@ fn serialize(what: Serializable) -> u8 {
         S::Instruction(I::Sub) => 0x3d,
         S::Instruction(I::Swap(_)) => 0x3e,
         S::Instruction(I::Less) => 0x3f,
+        // Float/?? 4x
+        S::Instruction(I::FAdd) => 0x4c,
+        S::Instruction(I::FSub) => 0x4d,
         // This should never be actually kept in the end
         S::Placeholder => 0x50,
         // Should never be serialized. TODO: type this better?
@@ -144,7 +147,7 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
                 code.push(serialize(Serializable::Placeholder));
             }
             // As simple as serializing the instruction
-            Return | Pop | Equal | Add | Sub | Less => {}
+            Return | Pop | Equal | Add | Sub | Less | FAdd | FSub => {}
         }
     }
     LabeledCode { code, labels }

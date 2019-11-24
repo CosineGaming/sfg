@@ -28,5 +28,15 @@ fn internal_and(left: bool, right: bool) bool
 		return true
 	return false
 
+fn epsilon_eq(left: float, right: float) bool
+	left -= right
+	return abs(left) < 0.0001
+
+// for now float only, overloading???
+fn abs(what: float) float
+	if what < 0
+		what *= -1.0
+	return what
+
 @fn log(what: str)
 

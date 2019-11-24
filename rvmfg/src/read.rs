@@ -14,6 +14,8 @@ pub enum Deser {
     Add,
     Dup,
     Equals,
+    FAdd,
+    FSub,
     Less,
     ExternFnCall,
     ExternFnHeader,
@@ -58,6 +60,9 @@ pub fn deser(what: u8) -> Option<Deser> {
         0x3d => Some(D::Sub),
         0x3e => Some(D::Swap),
         0x3f => Some(D::Less),
+        // Float/?? 4x
+        0x4c => Some(D::FAdd),
+        0x4d => Some(D::FSub),
         _ => None,
     }
 }
