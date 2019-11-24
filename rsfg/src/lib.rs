@@ -68,5 +68,13 @@ pub enum Type {
 // "#include-but-worse" hack for the stdlib
 pub fn compile(text: &str, stdlib: &str) -> Vec<u8> {
     let full_text = format!("{}\n{}", text, stdlib);
-    codegen::gen(lower::lower(parser::parse(lexer::lex(&full_text))))
+    let parse = parser::parse(lexer::lex(&full_text));
+    let ast = match parse {
+	    Ok(ast) => ast,
+	    Err(err) => {
+		    println!("{}", err);
+		    panic!("test failed on parse error");
+	    }
+    };
+    codegen::gen(lower::lower(ast))
 }

@@ -3,7 +3,7 @@
 use crate::{ast::*, Token, TokenType, Type};
 
 #[derive(Debug)]
-enum ParseError {
+pub enum ParseError {
     // Expected, got
     Expected(Vec<TokenType>, Token),
     CouldNotConstruct(Vec<ParseError>),
@@ -517,7 +517,7 @@ fn parse_extern_fn(rtokens: &mut Tokens) -> Result<ExternFn> {
     Ok(ExternFn { signature })
 }
 
-pub fn parse(mut tokens: Vec<Token>) -> AST {
+pub fn parse(mut tokens: Vec<Token>) -> Result<AST> {
     tokens.reverse();
     // This is just for clarity
     let mut rtokens = NoPop::new(&tokens);
@@ -529,41 +529,15 @@ pub fn parse(mut tokens: Vec<Token>) -> AST {
             Some(t) => t,
             None => break,
         };
-        match expect_any!("global space", Some(t) => {
+        expect_any!("global space", Some(t) => {
             // Parse a function
-            Fn => {
-                match parse_fn(&mut rtokens) {
-                    Ok(func) => ast.push(ASTNode::Fn(func)),
-                    Err(err) => {
-                        println!("USER ERROR: {}", err);
-                        panic!();
-                    }
-                }
-            }
-            ExternFn => {
-                match parse_extern_fn(&mut rtokens) {
-                    Ok(func) => ast.push(ASTNode::ExternFn(func)),
-                    Err(err) => {
-                        println!("USER ERROR: {}", err);
-                        panic!();
-                    }
-                }
-            }
-            Newline => {
-                rtokens.pop();
-            }
-            Tab => {
-                rtokens.pop();
-            }
-        }) {
-            Ok(()) => (),
-            Err(err) => {
-                println!("USER ERROR: {}", err);
-                panic!(err);
-            }
-        }
+            Fn => ast.push(ASTNode::Fn(parse_fn(&mut rtokens)?)),
+            ExternFn => ast.push(ASTNode::ExternFn(parse_extern_fn(&mut rtokens)?)),
+            Newline => {rtokens.pop();}
+            Tab => {rtokens.pop();}
+        })?
     }
-    ast
+    Ok(ast)
 }
 
 #[derive(Clone, Copy)]
@@ -617,7 +591,7 @@ mod test {
             .iter()
             .map(|t| Token { kind: t.clone(), line: 0, col: 0 })
             .collect(),
-        );
+        ).expect("test program parse error");
         assert_eq!(
             ast,
             vec![ASTNode::Fn(crate::ast::Fn {
@@ -643,7 +617,7 @@ mod test {
                 .iter()
                 .map(|t| Token { kind: t.clone(), line: 0, col: 0 })
                 .collect(),
-        );
+        ).expect("test program parse error");
         if let ASTNode::Fn(func) = &ast[0] {
             assert_eq!(func.statements, vec![Statement::Return(None),]);
         } else {

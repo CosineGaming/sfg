@@ -560,7 +560,7 @@ mod test {
         let script_string = std::fs::read_to_string("tests/scripts/non-branching.sfg")
             .expect("could not load given file");
         let lexed = lex(&script_string);
-        let parsed = parse(lexed);
+        let parsed = parse(lexed).expect("unexpected parse error");
         let lowered = lower(parsed);
         let fns = lowered.fns;
         let mut balance: isize = 0;

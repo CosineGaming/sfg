@@ -22,7 +22,7 @@ fn main()
 	// While loops
 	// implicit != 0
 	while x
-		x = x - 1
+		x -= 1
 	assert(x == 0)
 
 // Note types are required in function signature
