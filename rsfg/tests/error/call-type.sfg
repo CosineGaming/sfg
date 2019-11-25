@@ -1,0 +1,6 @@
+fn main()
+	thing(5)
+
+fn thing(a: str)
+	log(a)
+

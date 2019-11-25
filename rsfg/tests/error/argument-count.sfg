@@ -1,0 +1,8 @@
+fn main()
+	too_many(1, 2)
+	too_few(1)
+
+fn too_many(i: str) // also tests mismatch type on different #
+
+fn too_few(a: int, b: int)
+

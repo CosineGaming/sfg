@@ -1,0 +1,13 @@
+fn main()
+
+fn explicit_return() int
+	return "wrong type"
+
+fn fail_to_return() int
+
+fn return_void() int
+	return
+
+fn return_in_void()
+	return "should not have payload"
+

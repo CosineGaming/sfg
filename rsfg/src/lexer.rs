@@ -1,6 +1,6 @@
 // Hello, welcome to my lexer. Please like and subscribe
 
-use crate::{Token, TokenType};
+use crate::{Token, TokenType, Span};
 
 // A-Z or 0-9
 fn is_id(c: char) -> bool {
@@ -101,19 +101,22 @@ impl<'src> Lexer<'src> {
             },
         }
     }
+
+    fn update_col(&mut self) {
+        // The number of characters removed is the number that were parsed
+        self.col += self.col_begin - self.rchars.len();
+        // Yes, this happens *after*. The *start* of a token (col) is the *end* of all previous
+        self.col_begin = self.rchars.len();
+    }
 }
 
 pub fn lex(text: &str) -> Vec<Token> {
     use TokenType::*;
     let mut lexer = Lexer::new(text);
     loop {
-        // The number of characters removed is the number that were parsed
-        lexer.col += lexer.col_begin - lexer.rchars.len();
-        // Yes, this happens *after*. The *start* of a token (col) is the *end* of all previous
-        lexer.col_begin = lexer.rchars.len();
+        lexer.update_col();
         // Set these now so Newline is on the right line
-        let line = lexer.line;
-        let col = lexer.col;
+        let lo = (lexer.line, lexer.col);
         let token = match lexer.next_symbol_type() {
             NextTokenType::EOF => {
                 // This is the end of the file, which is OK, as we are not in the middle
@@ -309,16 +312,24 @@ pub fn lex(text: &str) -> Vec<Token> {
                 panic!("lexer doesn't know what to do with character {}", c);
             }
         };
-        lexer.tokens.push(Token { kind: token.clone(), line, col });
+        // Update col again for proper hi reading
+        lexer.update_col();
+        let hi = if lexer.col == 1 { // newline fix (hacky)
+	        lo
+        } else {
+			(lexer.line, lexer.col-1) // -1 inclusive span
+        };
+        lexer.tokens.push(Token {
+	        kind: token.clone(),
+	        span: Span { hi, lo },
+        });
     }
     lexer.tokens
 }
 
 #[cfg(test)]
 mod test {
-    use super::lex;
-    use super::Token;
-    use super::TokenType::*;
+    use super::{lex, Token, TokenType::*, Span};
     #[test]
     fn hello_world() {
         use super::TokenType;
@@ -347,11 +358,11 @@ mod test {
         assert_eq!(
             lexed,
             vec![
-                Token { kind: IntLit(578), line: 1, col: 1 },
-                Token { kind: IntLit(980), line: 1, col: 5 },
-                Token { kind: FloatLit(4.2), line: 1, col: 9 },
-                Token { kind: FloatLit(6.0), line: 1, col: 13 },
-                Token { kind: FloatLit(0.0001), line: 1, col: 16 },
+                Token { kind: IntLit(578), span: Span { lo: (1,1), hi: (1,3) } },
+                Token { kind: IntLit(980), span: Span { lo: (1,5), hi: (1,7) } },
+                Token { kind: FloatLit(4.2), span: Span { lo: (1,9), hi: (1,11) } },
+                Token { kind: FloatLit(6.0), span: Span { lo: (1,13), hi: (1,14) } },
+                Token { kind: FloatLit(0.0001), span: Span { lo: (1,16), hi: (1,21) } },
             ]
         );
     }
@@ -361,10 +372,10 @@ mod test {
         assert_eq!(
             lexed,
             vec![
-                Token { kind: Newline, line: 1, col: 1 },
-                Token { kind: Tab, line: 2, col: 1 },
-                Token { kind: Tab, line: 2, col: 2 },
-                Token { kind: IntLit(5), line: 2, col: 3 },
+                Token { kind: Newline, span: Span { lo: (1,1), hi: (1,1) } },
+                Token { kind: Tab, span: Span { lo: (2,1), hi: (2,1) } },
+                Token { kind: Tab, span: Span { lo: (2,2), hi: (2,2) } },
+                Token { kind: IntLit(5), span: Span { lo: (2,3), hi: (2,3) } },
             ]
         );
     }
