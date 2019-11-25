@@ -1,6 +1,6 @@
 extern crate rsfg;
 extern crate docopt;
-use rsfg::{compile_or_print, compile, CompileError};
+use rsfg::{compile, CompileError};
 use rvmfg::{Thread, call};
 use std::path::Path;
 use docopt::Docopt;
@@ -66,22 +66,32 @@ fn main() {
 fn update_tests() {
 	// TODO: Actually write the tests this tests (and deduplicate)
 	use std::io::*;
-    for entry in std::fs::read_dir("tests/error").unwrap() {
+    for entry in std::fs::read_dir("tests/scripts/error").unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
         if path.is_file() && path.extension() == Some(&std::ffi::OsString::from("sfg")) {
             let pathstr = path.to_string_lossy();
 		    let out_path = path.with_extension("stderr");
-            println!("TESTING: {}", pathstr);
+            println!("COMPILING: {}", pathstr);
             let err = compile_file(&path).expect_err("compiled ok. fix?");
             let out = format!("{}", err);
             let mut old_str = String::new();
+            let mut differs = true;
             if out_path.is_file() {
 	            let old = std::fs::read_to_string(out_path.clone()).unwrap();
-	            old_str = format!("OLD STDERR:\n{}\n", old);
+	            if old == out {
+		            differs = false;
+	            } else {
+		            old_str = format!("OLD STDERR:\n{}\n", old);
+	            }
             }
-            // TODO: output old as well
-            println!("OUTPUT:\n{}\n{}save Y/n?", out, old_str);
+            println!("OUTPUT:\n{}", out);
+            if differs {
+	            println!("{}save Y/n?", old_str);
+            } else {
+	            println!("SAVED OUTPUT IS THE SAME. CONTINUING.");
+	            continue;
+            }
             let do_write = loop {
 	            let mut input = String::new();
 	            stdin().read_line(&mut input).unwrap();
