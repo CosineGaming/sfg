@@ -240,7 +240,6 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
             }
         }
     })??;
-    println!("{:?}", left);
     // Then we try to parse a binary expression with it
     rb_ok_or!(
         rtokens,

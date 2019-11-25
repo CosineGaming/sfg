@@ -152,7 +152,7 @@ pub fn compile_or_print(text: &str, stdlib: &str) -> Vec<u8> {
     match compile(text, stdlib) {
 	    Ok(c) => c,
 	    Err(err) => {
-		    println!("{}", err);
+		    eprintln!("{}", err);
 		    std::process::exit(1);
 	    }
     }

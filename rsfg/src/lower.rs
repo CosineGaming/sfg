@@ -159,6 +159,7 @@ fn lower_loop(
     let begin = state.get_label();
     let end = state.get_label();
     insts.push(llr::Instruction::LabelMark(begin));
+    // TODO: allow multiple errors / avoid early return / recover
     insts.append(&mut expression_to_push(state, &loop_data.condition, 0)?);
     insts.push(llr::Instruction::JumpZero(end));
     lower_scope_begin(state);
@@ -379,9 +380,9 @@ fn lower_fn_call(
         let given_type = expression_type(state, arg)?;
         if types_match(Some(given_type), param.id_type) == Some(false) {
             return Err(LowerError::MismatchedType(
-	            given_type,
-	            signature.span,
 	            param.id_type.expect("type definitely given for mismatch"),
+	            param.span,
+	            given_type,
 	            arg.full_span()));
         }
         // Otherwise our types are just fine
