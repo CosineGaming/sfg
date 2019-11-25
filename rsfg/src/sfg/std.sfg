@@ -34,8 +34,8 @@ fn epsilon_eq(left: float, right: float) bool
 
 // for now float only, overloading???
 fn abs(what: float) float
-	if what < 0.0
-		what *= -1.0
+	if what < 0f
+		what = 0f - what
 	return what
 
 @fn log(what: str)

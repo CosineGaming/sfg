@@ -93,9 +93,17 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Result<Type> {
 		            And | Or | Equal | NotEqual => Type::Bool,
 		            _ => return fail,
 	            }
-	            Type::Int | Type::Float => match expr.op {
+	            Type::Int => match expr.op {
 	                Equal | NotEqual | Greater | GreaterEqual | Less | LessEqual => Type::Bool,
 	                Plus | Minus | Times => left,
+	                Divide => unimplemented!("divide"),
+	                And | Or => return fail,
+	            }
+	            Type::Float => match expr.op {
+	                Equal | NotEqual | Greater | GreaterEqual | Less | LessEqual => Type::Bool,
+	                Plus | Minus => left,
+		            // TODO: add greater / less
+	                Times => return fail,
 	                Divide => unimplemented!("divide"),
 	                And | Or => return fail,
 	            }

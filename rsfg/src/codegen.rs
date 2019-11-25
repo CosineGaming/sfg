@@ -44,6 +44,7 @@ fn serialize(what: Serializable) -> u8 {
         // Float/?? 4x
         S::Instruction(I::FAdd) => 0x4c,
         S::Instruction(I::FSub) => 0x4d,
+        S::Instruction(I::FLess) => 0x4f,
         // This should never be actually kept in the end
         S::Placeholder => 0x50,
         // Should never be serialized. TODO: type this better?
@@ -146,7 +147,7 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
                 code.push(serialize(Serializable::Placeholder));
             }
             // As simple as serializing the instruction
-            Return | Pop | Equal | Add | Sub | Less | FAdd | FSub => {}
+            Return | Pop | Equal | Add | Sub | Less | FAdd | FSub | FLess => {}
         }
     }
     LabeledCode { code, labels }

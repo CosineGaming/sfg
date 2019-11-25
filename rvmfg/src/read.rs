@@ -7,6 +7,7 @@ pub enum Type {
     Str,
     Int,
     Bool,
+    Float,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -15,6 +16,7 @@ pub enum Deser {
     Dup,
     Equals,
     FAdd,
+    FLess,
     FSub,
     Less,
     ExternFnCall,
@@ -41,6 +43,7 @@ pub fn deser(what: u8) -> Option<Deser> {
         0x10 => Some(D::Type(Int)),
         0x11 => Some(D::Type(Str)),
         0x12 => Some(D::Type(Bool)),
+        0x13 => Some(D::Type(Float)),
         // Other 2x
         0x21 => Some(D::Void),
         // Instructions 3x
@@ -63,6 +66,7 @@ pub fn deser(what: u8) -> Option<Deser> {
         // Float/?? 4x
         0x4c => Some(D::FAdd),
         0x4d => Some(D::FSub),
+        0x4f => Some(D::FLess),
         _ => None,
     }
 }

@@ -48,6 +48,7 @@ pub enum Instruction {
     Sub,
     FAdd,
     FSub,
+    FLess,
     Panic(u32, u32),
     LabelMark(Label),
 }

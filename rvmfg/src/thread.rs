@@ -196,6 +196,11 @@ impl Thread {
                 let b = pop_f(&mut self.stack);
                 push_f(&mut self.stack, b - a);
             }
+            Deser::FLess => {
+                let a = pop_f(&mut self.stack);
+                let b = pop_f(&mut self.stack);
+                self.stack.push((b < a) as i32);
+            }
             Deser::Return => {
                 self.ip = match self.call_stack.pop() {
                     Some(ip) => ip,
