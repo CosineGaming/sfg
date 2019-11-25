@@ -51,15 +51,11 @@ type Result<T> = std::result::Result<T, LowerError>;
 
 // A helper that doesn't require state useful for panic lower
 fn literal_type(lit: &Literal) -> Type {
-    match lit {
-        Literal::String(_) => Type::Str,
-        Literal::Int(_) => Type::Int,
-        Literal::Bool(_) => Type::Bool,
     match lit.data {
         LiteralData::String(_) => Type::Str,
         LiteralData::Int(_) => Type::Int,
         LiteralData::Bool(_) => Type::Bool,
-        Literal::Float(_) => Type::Float,
+        LiteralData::Float(_) => Type::Float,
     }
 }
 // As much as it pains me to require fn_map, we need it to determine type of FnCall
@@ -91,7 +87,7 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Result<Type> {
             if left != right {
 	            return Err(LowerError::MismatchedType(left, expr.left.full_span(), right, expr.right.full_span()));
             }
-            let fail = Err(LowerError::NoOperation(expr.op.clone(), left, expr.full_span()));
+            let fail = Err(LowerError::NoOperation(expr.op.clone(), left, expr.span));
             match left {
 	            Type::Bool => match expr.op {
 		            And | Or | Equal | NotEqual => Type::Bool,
@@ -104,7 +100,6 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Result<Type> {
 	                And | Or => return fail,
 	            }
 	            Type::Str => return fail,
-	            Type::Infer => return fail,
             }
         }
     })
@@ -199,7 +194,7 @@ fn expression_to_push(
     stack_plus: u8,
 ) -> Result<Vec<llr::Instruction>> {
     let LowerState { strings, .. } = state;
-    Ok(match expr {
+    Ok(match expression {
         Expression::Literal(lit) => match lit.data {
 	        LiteralData::String(ref string) => {
 	            strings.push(string.to_string());
@@ -207,7 +202,7 @@ fn expression_to_push(
 	        }
 	        LiteralData::Int(int) => vec![llr::Instruction::Push(i_as_u(int))],
 	        LiteralData::Bool(val) => vec![llr::Instruction::Push(i_as_u(val as i32))],
-	        LiteralData::Float(val) => vec![llr::Instruction::Push(f_as_u(*val))],
+	        LiteralData::Float(val) => vec![llr::Instruction::Push(f_as_u(val))],
         }
         Expression::Not(expr) => {
             let mut insts = vec![];
@@ -240,9 +235,13 @@ fn expression_to_push(
                 }
                 Equal if left_type == Type::Float => {
                     let desugared = Expression::FnCall(FnCall {
-				        name: "epsilon_eq".to_string(),
+				        name: Id {
+					        name: "epsilon_eq".to_string(),
+					        id_type: None,
+					        span: expr.span
+					    },
 				        arguments: vec![expr.left.clone(), expr.right.clone()],
-				        span: expr.full_span(),
+				        span: expr.span,
 				    });
                     insts.append(&mut expression_to_push(state, &desugared, stack_plus)?);
                 }
@@ -258,7 +257,7 @@ fn expression_to_push(
                     insts.append(&mut expression_to_push(state, &expr.right, stack_plus+1)?);
                 }
             }
-            let type_error = Err(LowerError::NoOperation(expr.op.clone(), left_type));
+            let type_error = Err(LowerError::NoOperation(expr.op.clone(), left_type, expr.span));
             match expr.op {
                 Equal => match left_type {
 	                Type::Int | Type::Bool => insts.push(llr::Instruction::Equal),

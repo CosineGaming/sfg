@@ -75,7 +75,7 @@ pub struct Token {
 }
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "{:?} at {}:{}", self.kind, self.line, self.col)
+		write!(f, "{:?} at {}", self.kind, self.span)
     }
 }
 
@@ -134,6 +134,7 @@ impl std::fmt::Display for Type {
             Int => write!(f, "int"),
             Bool => write!(f, "bool"),
             Str => write!(f, "str"),
+            Float => write!(f, "float"),
         }
     }
 }
