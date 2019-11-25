@@ -221,7 +221,6 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
             }
         }
     })??;
-    println!("{:?}", left);
     // Then we try to parse a binary expression with it
     rb_ok_or!(
         rtokens,
@@ -299,7 +298,6 @@ fn parse_return(rtokens: &mut Tokens) -> Result<Option<Expression>> {
 }
 
 fn parse_if(rtokens: &mut Tokens, tabs: usize) -> Result<If> {
-    debug!("if");
     rb_try!(rtokens, expect_token(rtokens, TokenType::If, "if statement"));
     let condition = rb_try!(rtokens, parse_expression(rtokens));
     let statements = rb_try!(rtokens, parse_indented_block(rtokens, tabs + 1));
@@ -328,7 +326,6 @@ fn parse_if(rtokens: &mut Tokens, tabs: usize) -> Result<If> {
                     }
                     Err(_) => {
                         // There's no else, but there was tab. rollback tab eating with an error
-                        debug!("indent, but not else");
                         Err(())
                     }
                 }
@@ -448,7 +445,6 @@ fn strip_white_lines(rtokens: &mut Tokens) {
             match rtokens.last() {
                 // If there's an extra tab, get ALL the extra tabs
                 Some(Token { kind: TokenType::Tab, .. }) => {
-                    debug!("PARSER: extra tab found");
                     while let Some(Token { kind: TokenType::Tab, .. }) = rtokens.last() {
                         rtokens.pop();
                     }

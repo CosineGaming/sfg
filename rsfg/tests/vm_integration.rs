@@ -25,7 +25,13 @@ fn get_stdlib() -> String {
 
 fn compile_file(filename: &str) -> Vec<u8> {
     let script_string = std::fs::read_to_string(filename).expect("could not load given file");
-    compile(&script_string, &get_stdlib())
+    match compile(&script_string, &get_stdlib()) {
+	    Ok(c) => c,
+	    Err(e) => {
+		    println!("{}", e);
+		    panic!("file test failed to compile");
+	    }
+    }
 }
 
 fn call_main(filename: &str) {

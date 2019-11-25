@@ -10,6 +10,24 @@ mod lexer;
 mod lower;
 mod parser;
 
+#[derive(Debug)]
+pub enum CompileError {
+	Parse(parser::ParseError),
+	Lower(lower::LowerError),
+}
+impl std::fmt::Display for CompileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use CompileError::*;
+        match self {
+            Parse(err) => write!(f, "{}", err),
+            Lower(err) => write!(f, "{}", err),
+        }
+    }
+}
+// All relevant details in Display and Debug
+impl std::error::Error for CompileError {}
+type Result<T> = std::result::Result<T, CompileError>;
+
 #[derive(PartialEq, Clone, Debug)]
 pub enum TokenType {
     Identifier(String),
@@ -56,6 +74,11 @@ pub struct Token {
     line: usize,
     col: usize,
 }
+impl std::fmt::Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		write!(f, "{:?} at {}:{}", self.kind, self.line, self.col)
+    }
+}
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Type {
@@ -68,15 +91,18 @@ pub enum Type {
 
 // TODO: add an actual import system so that we don't use this
 // "#include-but-worse" hack for the stdlib
-pub fn compile(text: &str, stdlib: &str) -> Vec<u8> {
+pub fn compile(text: &str, stdlib: &str) -> Result<Vec<u8>> {
     let full_text = format!("{}\n{}", text, stdlib);
-    let parse = parser::parse(lexer::lex(&full_text));
-    let ast = match parse {
+    let result = parser::parse(lexer::lex(&full_text));
+    let ast = match result {
 	    Ok(ast) => ast,
-	    Err(err) => {
-		    println!("{}", err);
-		    panic!("test failed on parse error");
-	    }
+	    Err(err) => return Err(CompileError::Parse(err)),
     };
-    codegen::gen(lower::lower(ast))
+    let result = lower::lower(ast);
+    let llr = match result {
+	    Ok(llr) => llr,
+	    Err(err) => return Err(CompileError::Lower(err)),
+    };
+    Ok(codegen::gen(llr))
 }
+

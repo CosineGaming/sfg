@@ -107,8 +107,6 @@ pub fn lex(text: &str) -> Vec<Token> {
     use TokenType::*;
     let mut lexer = Lexer::new(text);
     loop {
-        // Printing entire lexer state including program and tokens slows tests down like 1000x
-        debug!("LEXER: {}:{} - spaces: {}", lexer.line, lexer.col, lexer.spaces_count);
         // The number of characters removed is the number that were parsed
         lexer.col += lexer.col_begin - lexer.rchars.len();
         // Yes, this happens *after*. The *start* of a token (col) is the *end* of all previous

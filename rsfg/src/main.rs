@@ -12,7 +12,14 @@ fn main() {
     let script_path = Path::new(&script_filename);
     let script_string = std::fs::read_to_string(script_path).expect("could not load given file");
     let stdlib = get_stdlib();
-    let compiled = compile(&script_string, &stdlib);
+    let result = compile(&script_string, &stdlib);
+    let compiled = match result {
+	    Ok(c) => c,
+	    Err(err) => {
+		    println!("{}", err);
+		    std::process::exit(1);
+	    }
+    };
     let out = script_path.with_extension("bcfg");
-    std::fs::write(out, compiled.clone()).expect("couldn't output compiled file");
+    std::fs::write(out, compiled).expect("couldn't output compiled file");
 }
