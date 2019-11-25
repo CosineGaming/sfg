@@ -81,6 +81,18 @@ pub enum Type {
     Str,
     Infer,
 }
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use Type::*;
+        match self {
+            Int => write!(f, "int"),
+            Bool => write!(f, "bool"),
+            Str => write!(f, "str"),
+            Float => write!(f, "float"),
+            Infer => write!(f, "inferred type"),
+        }
+    }
+}
 
 // TODO: add an actual import system so that we don't use this
 // "#include-but-worse" hack for the stdlib
