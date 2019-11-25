@@ -36,7 +36,7 @@ fn serialize(what: Serializable) -> u8 {
         S::Instruction(I::Equal) => 0x38,
         S::Instruction(I::JumpZero(_)) => 0x39,
         S::Instruction(I::Dup(_)) => 0x3a,
-        S::Instruction(I::Panic(_,_)) => 0x3b,
+        S::Instruction(I::Panic(_, _)) => 0x3b,
         S::Instruction(I::Add) => 0x3c,
         S::Instruction(I::Sub) => 0x3d,
         S::Instruction(I::Swap(_)) => 0x3e,
@@ -203,7 +203,7 @@ pub fn gen(tree: LLR) -> Vec<u8> {
     // fn headers have a code_loc (4 bytes) but externs don't
     code_loc += 4 * fn_headers.len();
     code_loc += fn_headers.len() + extern_fn_headers.len(); // Instructions
-    // Add strings headers
+                                                            // Add strings headers
     for string in &tree.strings {
         code_loc += string.len() + 2; // for the instruction and the \0 at end of string
     }

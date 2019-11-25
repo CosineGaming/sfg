@@ -10,4 +10,7 @@ fn main()
 	x += 0.2
 	x += 0.2
 	assert(x == 2.0)
+	var y = 1.0
+	assert(y < 2.0)
+	assert(y > 0.0)
 

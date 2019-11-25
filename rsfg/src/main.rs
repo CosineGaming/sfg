@@ -1,11 +1,11 @@
-extern crate rsfg;
 extern crate docopt;
-use rsfg::{compile, CompileError};
-use rvmfg::{Thread, call};
-use std::path::Path;
+extern crate rsfg;
 use docopt::Docopt;
+use rsfg::{compile, CompileError};
+use rvmfg::{call, Thread};
+use std::path::Path;
 
-const USAGE: &'static str = "
+const USAGE: &str = "
 rsfg command line interface
 
 Usage: rsfg [options] <source> [dest]
@@ -27,89 +27,87 @@ fn compile_file(filename: &Path) -> Result<Vec<u8>, CompileError> {
 }
 
 fn main() {
-	let args = Docopt::new(USAGE)
-		.and_then(|d| d.parse())
-		.unwrap_or_else(|e| e.exit());
+    let args = Docopt::new(USAGE).and_then(|d| d.parse()).unwrap_or_else(|e| e.exit());
     let script_filename = args.get_str("<source>");
     #[cfg(debug_assertions)]
     {
-	    if args.get_bool("--update-tests") { // TODO deal with needing <source>
-		    update_tests();
-		    // TODO why doesn't it exit lollll
-		    std::process::exit(0);
-	    }
+        if args.get_bool("--update-tests") {
+            // TODO deal with needing <source>
+            update_tests();
+            // TODO why doesn't it exit lollll
+            std::process::exit(0);
+        }
     }
     let script_path = Path::new(&script_filename);
     let result = compile_file(script_path);
     let compiled = match result {
-	    Ok(c) => c,
-	    Err(err) => {
-		    eprintln!("{}", err);
-		    std::process::exit(1);
-	    }
+        Ok(c) => c,
+        Err(err) => {
+            eprintln!("{}", err);
+            std::process::exit(1);
+        }
     };
     if args.get_bool("--run") {
-	    let mut thread = Thread::new(compiled);
-	    call![thread.main()];
+        let mut thread = Thread::new(compiled);
+        call![thread.main()];
     } else {
-	    let out_path = args.get_str("[dest]"); // TODO i think this is broken
-	    let out = if out_path == "" {
-		    script_path.with_extension("bcfg")
-	    } else {
-		    Path::new(&out_path).to_path_buf()
-	    };
-	    std::fs::write(out, compiled).expect("couldn't output compiled file");
+        let out_path = args.get_str("[dest]"); // TODO i think this is broken
+        let out = if out_path == "" {
+            script_path.with_extension("bcfg")
+        } else {
+            Path::new(&out_path).to_path_buf()
+        };
+        std::fs::write(out, compiled).expect("couldn't output compiled file");
     }
 }
 
 #[cfg(debug_assertions)]
 fn update_tests() {
-	// TODO: Actually write the tests this tests (and deduplicate)
-	use std::io::*;
+    // TODO: Actually write the tests this tests (and deduplicate)
+    use std::io::*;
     for entry in std::fs::read_dir("tests/scripts/error").unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
         if path.is_file() && path.extension() == Some(&std::ffi::OsString::from("sfg")) {
             let pathstr = path.to_string_lossy();
-		    let out_path = path.with_extension("stderr");
+            let out_path = path.with_extension("stderr");
             println!("COMPILING: {}", pathstr);
             let err = compile_file(&path).expect_err("compiled ok. fix?");
             let out = format!("{}", err);
             let mut old_str = String::new();
             let mut differs = true;
             if out_path.is_file() {
-	            let old = std::fs::read_to_string(out_path.clone()).unwrap();
-	            if old == out {
-		            differs = false;
-	            } else {
-		            old_str = format!("OLD STDERR:\n{}\n", old);
-	            }
+                let old = std::fs::read_to_string(out_path.clone()).unwrap();
+                if old == out {
+                    differs = false;
+                } else {
+                    old_str = format!("OLD STDERR:\n{}\n", old);
+                }
             }
             println!("OUTPUT:\n{}", out);
             if differs {
-	            println!("{}save Y/n?", old_str);
+                println!("{}save Y/n?", old_str);
             } else {
-	            println!("SAVED OUTPUT IS THE SAME. CONTINUING.");
-	            continue;
+                println!("SAVED OUTPUT IS THE SAME. CONTINUING.");
+                continue;
             }
             let do_write = loop {
-	            let mut input = String::new();
-	            stdin().read_line(&mut input).unwrap();
-	            match input.trim() {
-		            "Y"|"y"|"" => break true,
-		            "N"|"n" => break false,
-		            _ => continue,
-	            };
+                let mut input = String::new();
+                stdin().read_line(&mut input).unwrap();
+                match input.trim() {
+                    "Y" | "y" | "" => break true,
+                    "N" | "n" => break false,
+                    _ => continue,
+                };
             };
             if do_write {
-	            println!("SAVING.");
+                println!("SAVING.");
                 let mut file = std::fs::File::create(out_path).unwrap();
                 file.write_all(out.as_bytes()).unwrap();
             } else {
-	            println!("PRESERVING OLD.");
+                println!("PRESERVING OLD.");
             }
         }
     }
     println!("NO MORE TESTS.");
 }
-

@@ -13,11 +13,11 @@ static LOGGER_INIT: Once = Once::new();
 fn compile_no_std_safe(filename: &str) -> Vec<u8> {
     let script_string = std::fs::read_to_string(filename).expect("could not load given file");
     match compile(&script_string, "") {
-	    Ok(c) => c,
-	    Err(e) => {
-		    println!("{}", e);
-		    panic!("file test failed to compile");
-	    }
+        Ok(c) => c,
+        Err(e) => {
+            println!("{}", e);
+            panic!("file test failed to compile");
+        }
     }
 }
 
@@ -27,8 +27,7 @@ fn assert_hex(a: Vec<u8>, b: Vec<u8>) {
 
 #[test]
 fn decompile() {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Debug);
+    env_logger::builder().filter_level(log::LevelFilter::Debug);
     let result = compile_no_std_safe("tests/scripts/decompile.sfg");
     assert_hex(
         result,
@@ -38,19 +37,19 @@ fn decompile() {
             // fn header
             0x33, // return type: void
             0x21, // parameter count
-            0, // "main"
+            0,    // "main"
             0x6d, 0x61, 0x69, 0x6e, // "\0"
-            0, // codeloc (4b)
+            0,    // codeloc (4b)
             0x1c, 0x00, 0x00, 0x00, // header for log:
             // extern fn header
             0x34, // return type: void
             0x21, // parameter count
-            1, // parameters:
+            1,    // parameters:
             // type: string
             0x11, // "log\0"
-            0x6c, 0x6f, 0x67, 0, // string lit
+            0x6c, 0x6f, 0x67, 0,    // string lit
             0x32, // "hi\0"
-            0x68, 0x69, 0, // push
+            0x68, 0x69, 0,    // push
             0x30, // 8
             0x08, 0x00, 0x00, 0x00, // push 8 again
             0x30, 0x08, 0x00, 0x00, 0x00, // equals
@@ -61,7 +60,7 @@ fn decompile() {
             // call log:
             // push string lit
             0x30, 0x00, 0x00, 0x00, // string index
-            0, // call extern log
+            0,    // call extern log
             0x31, // function index (4b)
             // 1 (0:main, 1:log)
             0x01, 0x00, 0x00, 0x00, // Return
@@ -71,11 +70,9 @@ fn decompile() {
 }
 
 fn ensure_log_init() {
-    LOGGER_INIT.call_once(|| env_logger::builder()
-        .filter_level(log::LevelFilter::Debug)
-        .is_test(true)
-        .init()
-    );
+    LOGGER_INIT.call_once(|| {
+        env_logger::builder().filter_level(log::LevelFilter::Debug).is_test(true).init()
+    });
 }
 
 fn get_stdlib() -> String {
@@ -89,12 +86,12 @@ fn compile_file(path: &Path) -> Result<Vec<u8>, CompileError> {
 }
 
 fn compile_safe(path: &Path) -> Vec<u8> {
-	match compile_file(path) {
-	    Ok(c) => c,
-	    Err(e) => {
-		    println!("{}", e);
-		    panic!("file test failed to compile");
-	    }
+    match compile_file(path) {
+        Ok(c) => c,
+        Err(e) => {
+            println!("{}", e);
+            panic!("file test failed to compile");
+        }
     }
 }
 
@@ -140,7 +137,7 @@ fn test_scripts() -> std::io::Result<()> {
 #[test]
 fn test_perf_tests() -> std::io::Result<()> {
     // No log to accurately test perf - TODO: actually may still log if ran after logging one
-	run_in_dir("tests/scripts/perf")
+    run_in_dir("tests/scripts/perf")
 }
 
 fn test_should_fail(entry: std::fs::DirEntry) {
@@ -194,10 +191,13 @@ fn test_errors() {
         if path.is_file() && path.extension() == Some(&std::ffi::OsString::from("sfg")) {
             let pathstr = path.to_string_lossy();
             println!("TESTING: {}", pathstr);
-		    let out_path = path.with_extension("stderr");
+            let out_path = path.with_extension("stderr");
             if !out_path.is_file() {
-	            panic!("no expected output for test at {}. to interactively populate:
-cargo run -- --update-tests GARBAGE", out_path.to_string_lossy());
+                panic!(
+                    "no expected output for test at {}. to interactively populate:
+cargo run -- --update-tests GARBAGE",
+                    out_path.to_string_lossy()
+                );
             }
             let err = compile_file(&path).expect_err("error example compiled without error");
             let err_str = format!("{}", err);
@@ -206,4 +206,3 @@ cargo run -- --update-tests GARBAGE", out_path.to_string_lossy());
         }
     }
 }
-

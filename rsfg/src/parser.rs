@@ -1,6 +1,6 @@
 // This is the parser. yay.
 
-use crate::{ast::*, Token, TokenType, Type, Span};
+use crate::{ast::*, Span, Token, TokenType, Type};
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -17,11 +17,7 @@ impl std::fmt::Display for ParseError {
                 let expected_strings: Vec<String> =
                     expected.iter().map(|e| format!("{:?}", e)).collect();
                 let expected_str = expected_strings.join(" or ");
-                write!(
-                    f,
-                    "expected {}, got {:?} at {}",
-                    expected_str, got.kind, got.span
-                )
+                write!(f, "expected {}, got {:?} at {}", expected_str, got.kind, got.span)
             }
             CouldNotConstruct(errs) => {
                 let error_strs: Vec<String> = errs.iter().map(Self::to_string).collect();
@@ -106,10 +102,10 @@ fn expect_token(rtokens: &mut Tokens, what: TokenType, during: &str) -> Result<T
 }
 
 fn parse_id(rtokens: &mut Tokens, type_required: bool) -> Result<Id> {
-	let token = pop_no_eof(rtokens, "identifier")?;
-	let id_span = token.span;
+    let token = pop_no_eof(rtokens, "identifier")?;
+    let id_span = token.span;
     expect_any!("identifier", Some(&token) => {
-	    Identifier(_, String::new()) => (),
+        Identifier(_, String::new()) => (),
     })?;
     let name = match token.kind {
         TokenType::Identifier(name) => name,
@@ -155,8 +151,8 @@ fn token_to_binary_op(token: Option<Token>) -> Result<BinaryOp> {
 }
 
 fn parse_binary(rtokens: &mut Tokens, left: Expression) -> Result<BinaryExpr> {
-	let token = rtokens.pop();
-	let span = token.as_ref().unwrap().span;
+    let token = rtokens.pop();
+    let span = token.as_ref().unwrap().span;
     let op = token_to_binary_op(token)?;
     let right = rb_try!(rtokens, parse_expression(rtokens));
     Ok(BinaryExpr { left, op, right, span })
@@ -183,23 +179,23 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
         StringLit(string,String::from("")) => {
             let t = rtokens.pop();
             Ok(Expression::Literal(Literal {
-	            data: LiteralData::String(string.clone()),
-	            span: t.unwrap().span,
-	        }))
+                data: LiteralData::String(string.clone()),
+                span: t.unwrap().span,
+            }))
         }
         IntLit(number,0) => {
             let t = rtokens.pop();
             Ok(Expression::Literal(Literal {
-	            data: LiteralData::Int(*number),
-	            span: t.unwrap().span,
-	        }))
+                data: LiteralData::Int(*number),
+                span: t.unwrap().span,
+            }))
         }
         FloatLit(number,0.0) => {
             let t = rtokens.pop();
             Ok(Expression::Literal(Literal {
-	            data: LiteralData::Float(*number),
-	            span: t.unwrap().span,
-	        }))
+                data: LiteralData::Float(*number),
+                span: t.unwrap().span,
+            }))
         }
         // This minus, because we're parsing an expression, is part of an int literal
         Minus => {
@@ -207,15 +203,15 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
             expect_any!("expression", rtokens.pop() => {
                 IntLit(number,0) => {
                     Expression::Literal(Literal {
-	                    data: LiteralData::Int(-number),
-	                    span: t.unwrap().span,
+                        data: LiteralData::Int(-number),
+                        span: t.unwrap().span,
                     })
                 }
                 FloatLit(number,0.0) => {
                     Expression::Literal(Literal {
-	                    data: LiteralData::Float(-number),
-	                    span: t.unwrap().span,
-	                })
+                        data: LiteralData::Float(-number),
+                        span: t.unwrap().span,
+                    })
                 }
             })
         }
@@ -223,15 +219,15 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
         True => {
             let t = rtokens.pop();
             Ok(Expression::Literal(Literal {
-	            data: LiteralData::Bool(true),
-	            span: t.unwrap().span,
+                data: LiteralData::Bool(true),
+                span: t.unwrap().span,
             }))
         }
         False => {
             let t = rtokens.pop();
             Ok(Expression::Literal(Literal {
-	            data: LiteralData::Bool(false),
-	            span: t.unwrap().span,
+                data: LiteralData::Bool(false),
+                span: t.unwrap().span,
             }))
         }
         // And finally identifiers
@@ -244,10 +240,10 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
                 let t = rtokens.pop();
                 // Otherwise just reference the identifier
                 Ok(Expression::Identifier(Id {
-	                name: name.clone(),
-	                id_type: None,
-		            span: t.unwrap().span
-		        }))
+                    name: name.clone(),
+                    id_type: None,
+                    span: t.unwrap().span
+                }))
             } else {
                 call_res
             }
@@ -268,8 +264,8 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
         Identifier(_n,String::from("")) => rtokens.pop().unwrap(),
     })?;
     let name = match token.kind {
-	    TokenType::Identifier(s) => s,
-	    _ => unreachable!(),
+        TokenType::Identifier(s) => s,
+        _ => unreachable!(),
     };
     // Arguments
     rb_try!(rtokens, expect_token(rtokens, TokenType::LParen, "fn call"));
@@ -294,29 +290,19 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
         "panic" | "assert" if arguments.len() <= 1 => {
             // Safe because we wouldn't be here without a token
             arguments.push(Expression::Literal(Literal {
-	            data: LiteralData::Int(first_token.unwrap().span.lo.0 as i32),
-	            // span immediatly following token
-	            span: Span {
-		            lo: token.span.hi,
-		            hi: token.span.hi,
-	            }
+                data: LiteralData::Int(first_token.unwrap().span.lo.0 as i32),
+                // span immediatly following token
+                span: Span { lo: token.span.hi, hi: token.span.hi },
             }));
             arguments.push(Expression::Literal(Literal {
-	            data: LiteralData::Int(first_token.unwrap().span.lo.1 as i32),
-	            span: Span {
-		            lo: token.span.hi,
-		            hi: token.span.hi,
-	            }
+                data: LiteralData::Int(first_token.unwrap().span.lo.1 as i32),
+                span: Span { lo: token.span.hi, hi: token.span.hi },
             }));
         }
         _ => (),
     }
     let total_span = Span::set(vec![token.span, final_span]);
-    Ok(FnCall {
-	    name: Id { name, id_type: None, span: token.span },
-	    arguments,
-	    span: total_span
-	})
+    Ok(FnCall { name: Id { name, id_type: None, span: token.span }, arguments, span: total_span })
 }
 
 fn parse_args(rtokens: &mut Tokens) -> Result<Vec<Id>> {
@@ -390,12 +376,8 @@ fn parse_if(rtokens: &mut Tokens, tabs: usize) -> Result<If> {
         }
     });
     match else_or_err {
-        Ok(else_statements) => {
-            Ok(If { condition, statements, else_statements, span })
-        }
-        Err(()) => {
-            Ok(If { condition, statements, else_statements: vec![], span })
-        }
+        Ok(else_statements) => Ok(If { condition, statements, else_statements, span }),
+        Err(()) => Ok(If { condition, statements, else_statements: vec![], span }),
     }
 }
 
@@ -407,19 +389,19 @@ fn parse_loop(rtokens: &mut Tokens, tabs: usize) -> Result<WhileLoop> {
 }
 
 fn parse_assignment(rtokens: &mut Tokens) -> Result<Assignment> {
-	let lvalue = parse_id(rtokens, false)?;
+    let lvalue = parse_id(rtokens, false)?;
     let op = rtokens.pop();
     let rvalue = parse_expression(rtokens)?;
     expect_any!("assignment", op => {
         Assignment => {
             Assignment {
-	            span: Span::set(vec![lvalue.span, rvalue.full_span()]),
-	            lvalue,
-	            rvalue,
-	        }
+                span: Span::set(vec![lvalue.span, rvalue.full_span()]),
+                lvalue,
+                rvalue,
+            }
         }
         OpAssign(ref _op, Box::new(TokenType::Identifier(String::from("any binary operator")))) => {
-	        let span = op.as_ref().unwrap().span;
+            let span = op.as_ref().unwrap().span;
             let dummy_op_token = match op {
                 Some(Token { kind: TokenType::OpAssign(right), span }) => Token {
                     kind: *right, span
@@ -483,11 +465,7 @@ fn parse_signature(rtokens: &mut Tokens) -> Result<Signature> {
     expect_any!("signature", rtokens.pop() => {
         Newline => (),
     })?;
-    let id = Id {
-	    name,
-	    id_type: return_type,
-	    span,
-    };
+    let id = Id { name, id_type: return_type, span };
     let span = Span::set(vec![span, final_span]);
     Ok(Signature { id, parameters, span })
 }
@@ -524,9 +502,11 @@ fn strip_white_lines(rtokens: &mut Tokens) {
                     Ok(())
                 }
                 // Not tab or newline, we've come to our end (will rollback our non-changes)
-                _ => Err(())
+                _ => Err(()),
             }
-        }).is_err() {
+        })
+        .is_err()
+        {
             // Already cleaned up with rb!, and we found the end of empty lines
             break;
         }
@@ -657,7 +637,8 @@ mod test {
             .iter()
             .map(|t| Token { kind: t.clone(), span: Span::new() })
             .collect(),
-        ).expect("test program parse error");
+        )
+        .expect("test program parse error");
         assert_eq!(
             ast,
             vec![ASTNode::Fn(crate::ast::Fn {
@@ -684,7 +665,8 @@ mod test {
                 .iter()
                 .map(|t| Token { kind: t.clone(), span: Span::new() })
                 .collect(),
-        ).expect("test program parse error");
+        )
+        .expect("test program parse error");
         if let ASTNode::Fn(func) = &ast[0] {
             assert_eq!(func.statements, vec![Statement::Return(None),]);
         } else {

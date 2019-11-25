@@ -1,4 +1,4 @@
-use super::{Type, Span};
+use super::{Span, Type};
 
 pub type AST = Vec<ASTNode>;
 
@@ -29,13 +29,9 @@ pub struct Id {
     pub span: Span,
 }
 impl Id {
-	pub fn fake(name: &'static str) -> Self {
-		Self {
-			name: name.to_string(),
-			id_type: None,
-			span: Span::new(),
-		}
-	}
+    pub fn fake(name: &'static str) -> Self {
+        Self { name: name.to_string(), id_type: None, span: Span::new() }
+    }
 }
 #[derive(PartialEq, Clone, Debug)]
 pub enum Statement {
@@ -59,8 +55,8 @@ pub enum Expression {
 }
 #[derive(PartialEq, Clone, Debug)]
 pub struct Literal {
-	pub data: LiteralData,
-	pub span: Span,
+    pub data: LiteralData,
+    pub span: Span,
 }
 #[derive(PartialEq, Clone, Debug)]
 pub enum LiteralData {
@@ -73,33 +69,33 @@ pub enum LiteralData {
 pub struct Assignment {
     pub lvalue: Id,
     pub rvalue: Expression,
-	pub span: Span,
+    pub span: Span,
 }
 #[derive(PartialEq, Clone, Debug)]
 pub struct FnCall {
     pub name: Id,
     pub arguments: Vec<Expression>,
-	pub span: Span,
+    pub span: Span,
 }
 #[derive(PartialEq, Clone, Debug)]
 pub struct BinaryExpr {
     pub left: Expression,
     pub op: BinaryOp,
     pub right: Expression,
-	pub span: Span,
+    pub span: Span,
 }
 #[derive(PartialEq, Clone, Debug)]
 pub struct If {
     pub condition: Expression,
     pub statements: Vec<Statement>,
     pub else_statements: Vec<Statement>,
-	pub span: Span,
+    pub span: Span,
 }
 #[derive(PartialEq, Clone, Debug)]
 pub struct WhileLoop {
     pub condition: Expression,
     pub statements: Vec<Statement>,
-	pub span: Span,
+    pub span: Span,
 }
 #[derive(PartialEq, Clone, Debug)]
 pub enum BinaryOp {
@@ -118,19 +114,20 @@ pub enum BinaryOp {
 }
 
 impl Expression {
-	pub fn full_span(&self) -> Span {
-		match self {
-		    Self::Literal(lit) => lit.span,
-		    Self::Identifier(id) => id.span,
-		    Self::Not(expr) => {
-			    warn!("unimplemented span on not to include ! symbol");
-			    expr.full_span()
-		    }
-		    // A FnCall can be an expression as well as a statement
-		    // A statement FnCall is lowered differently than an expression FnCall
-		    Self::FnCall(call) => call.span,
-		    Self::Binary(binary) => Span::set(vec![binary.left.full_span(), binary.right.full_span()]),
-		}
-	}
+    pub fn full_span(&self) -> Span {
+        match self {
+            Self::Literal(lit) => lit.span,
+            Self::Identifier(id) => id.span,
+            Self::Not(expr) => {
+                warn!("unimplemented span on not to include ! symbol");
+                expr.full_span()
+            }
+            // A FnCall can be an expression as well as a statement
+            // A statement FnCall is lowered differently than an expression FnCall
+            Self::FnCall(call) => call.span,
+            Self::Binary(binary) => {
+                Span::set(vec![binary.left.full_span(), binary.right.full_span()])
+            }
+        }
+    }
 }
-

@@ -1,12 +1,12 @@
 // Most static analysis occurs here. Lower the AST which matches syntax into
 // LLR which matches bytecode
 
-use crate::{ast::*, llr, Type, Span};
+use crate::{ast::*, llr, Span, Type};
 use indexmap::IndexMap;
 
 #[derive(Debug)]
 pub enum LowerError {
-	// TODO: figure out how to mark positions / spans in AST
+    // TODO: figure out how to mark positions / spans in AST
     MismatchedType(Type, Span, Type, Span),
     //CannotInfer(Id), // TODO??? idk
     MismatchedReturn(Id, Option<Type>, Span),
@@ -20,27 +20,35 @@ impl std::fmt::Display for LowerError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use LowerError::*;
         match self {
-            MismatchedType(a, a_s, b, b_s) => write!(f, "mismatched type, expected {} at {}, got {} at {}", a, a_s, b, b_s),
-            MismatchedReturn(needed, id_type, span) => {
-	            write!(f, "{} expected ", needed.name)?;
-	            match needed.id_type {
-		            Some(t) => write!(f, "return with type {}", t)?,
-		            None => write!(f, "void or no return")?,
-	            };
-	            write!(f, " (defined at {}), got ", needed.span)?;
-	            match id_type {
-		            Some(t) => write!(f, "explicit return with type {}", t)?,
-		            None => write!(f, "void or no return")?,
-	            };
-	            write!(f, " at {}", span)
+            MismatchedType(a, a_s, b, b_s) => {
+                write!(f, "mismatched type, expected {} at {}, got {} at {}", a, a_s, b, b_s)
             }
-            ArgumentCount(id, expected, given, span) =>
-            	write!(f, "function {} ({}) expected {} arguments, got {} at {}",
-	            	id.name, id.span, expected, given, span),
+            MismatchedReturn(needed, id_type, span) => {
+                write!(f, "{} expected ", needed.name)?;
+                match needed.id_type {
+                    Some(t) => write!(f, "return with type {}", t)?,
+                    None => write!(f, "void or no return")?,
+                };
+                write!(f, " (defined at {}), got ", needed.span)?;
+                match id_type {
+                    Some(t) => write!(f, "explicit return with type {}", t)?,
+                    None => write!(f, "void or no return")?,
+                };
+                write!(f, " at {}", span)
+            }
+            ArgumentCount(id, expected, given, span) => write!(
+                f,
+                "function {} ({}) expected {} arguments, got {} at {}",
+                id.name, id.span, expected, given, span
+            ),
             NonLiteral(name, span) => write!(f, "literal value required for {} at {}", name, span),
             UnknownFn(id) => write!(f, "called unknown function {} at {}", id.name, id.span),
-            UnknownIdent(id) => write!(f, "referenced unknown identifier {} at {}", id.name, id.span),
-            NoOperation(op, on_type, span) => write!(f, "no operation {:?} for {} at {}", op, on_type, span),
+            UnknownIdent(id) => {
+                write!(f, "referenced unknown identifier {} at {}", id.name, id.span)
+            }
+            NoOperation(op, on_type, span) => {
+                write!(f, "no operation {:?} for {} at {}", op, on_type, span)
+            }
         }
     }
 }
@@ -61,10 +69,10 @@ fn literal_type(lit: &Literal) -> Type {
 // As much as it pains me to require fn_map, we need it to determine type of FnCall
 fn expression_type(state: &mut LowerState, expr: &Expression) -> Result<Type> {
     Ok(match expr {
-		Expression::Literal(lit) => literal_type(lit),
+        Expression::Literal(lit) => literal_type(lit),
         Expression::Identifier(id) => match stack_search(state, id)? {
             (_, t) => t,
-        }
+        },
         Expression::Not(_) => Type::Bool,
         Expression::FnCall(func) => {
             let node = match state.fn_map.get(&func.name.name) {
@@ -85,29 +93,34 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> Result<Type> {
             let left = expression_type(state, &expr.left)?;
             let right = expression_type(state, &expr.right)?;
             if left != right {
-	            return Err(LowerError::MismatchedType(left, expr.left.full_span(), right, expr.right.full_span()));
+                return Err(LowerError::MismatchedType(
+                    left,
+                    expr.left.full_span(),
+                    right,
+                    expr.right.full_span(),
+                ));
             }
             let fail = Err(LowerError::NoOperation(expr.op.clone(), left, expr.span));
             match left {
-	            Type::Bool => match expr.op {
-		            And | Or | Equal | NotEqual => Type::Bool,
-		            _ => return fail,
-	            }
-	            Type::Int => match expr.op {
-	                Equal | NotEqual | Greater | GreaterEqual | Less | LessEqual => Type::Bool,
-	                Plus | Minus | Times => left,
-	                Divide => unimplemented!("divide"),
-	                And | Or => return fail,
-	            }
-	            Type::Float => match expr.op {
-	                Equal | NotEqual | Greater | GreaterEqual | Less | LessEqual => Type::Bool,
-	                Plus | Minus => left,
-		            // TODO: add greater / less
-	                Times => return fail,
-	                Divide => unimplemented!("divide"),
-	                And | Or => return fail,
-	            }
-	            Type::Str => return fail,
+                Type::Bool => match expr.op {
+                    And | Or | Equal | NotEqual => Type::Bool,
+                    _ => return fail,
+                },
+                Type::Int => match expr.op {
+                    Equal | NotEqual | Greater | GreaterEqual | Less | LessEqual => Type::Bool,
+                    Plus | Minus | Times => left,
+                    Divide => unimplemented!("divide"),
+                    And | Or => return fail,
+                },
+                Type::Float => match expr.op {
+                    Equal | NotEqual | Greater | GreaterEqual | Less | LessEqual => Type::Bool,
+                    Plus | Minus => left,
+                    // TODO: add greater / less
+                    Times => return fail,
+                    Divide => unimplemented!("divide"),
+                    And | Or => return fail,
+                },
+                Type::Str => return fail,
             }
         }
     })
@@ -184,7 +197,7 @@ fn lower_loop(
     insts.append(&mut expression_to_push(state, &loop_data.condition, 0)?);
     insts.push(llr::Instruction::JumpZero(end));
     lower_scope_begin(state);
-        insts.append(&mut lower_statements(state, &loop_data.statements, parent_signature)?);
+    insts.append(&mut lower_statements(state, &loop_data.statements, parent_signature)?);
     // Immediately all go out of scope
     insts.append(&mut lower_scope_end(state)?);
     // Jump back to conditional, regardless
@@ -204,14 +217,14 @@ fn expression_to_push(
     let LowerState { strings, .. } = state;
     Ok(match expression {
         Expression::Literal(lit) => match lit.data {
-	        LiteralData::String(ref string) => {
-	            strings.push(string.to_string());
-	            vec![llr::Instruction::Push((strings.len() - 1) as u32)]
-	        }
-	        LiteralData::Int(int) => vec![llr::Instruction::Push(i_as_u(int))],
-	        LiteralData::Bool(val) => vec![llr::Instruction::Push(i_as_u(val as i32))],
-	        LiteralData::Float(val) => vec![llr::Instruction::Push(f_as_u(val))],
-        }
+            LiteralData::String(ref string) => {
+                strings.push(string.to_string());
+                vec![llr::Instruction::Push((strings.len() - 1) as u32)]
+            }
+            LiteralData::Int(int) => vec![llr::Instruction::Push(i_as_u(int))],
+            LiteralData::Bool(val) => vec![llr::Instruction::Push(i_as_u(val as i32))],
+            LiteralData::Float(val) => vec![llr::Instruction::Push(f_as_u(val))],
+        },
         Expression::Not(expr) => {
             let mut insts = vec![];
             // expr == false
@@ -243,35 +256,31 @@ fn expression_to_push(
                 }
                 Equal if left_type == Type::Float => {
                     let desugared = Expression::FnCall(FnCall {
-				        name: Id {
-					        name: "epsilon_eq".to_string(),
-					        id_type: None,
-					        span: expr.span
-					    },
-				        arguments: vec![expr.left.clone(), expr.right.clone()],
-				        span: expr.span,
-				    });
+                        name: Id { name: "epsilon_eq".to_string(), id_type: None, span: expr.span },
+                        arguments: vec![expr.left.clone(), expr.right.clone()],
+                        span: expr.span,
+                    });
                     insts.append(&mut expression_to_push(state, &desugared, stack_plus)?);
                 }
                 // Right, left, op-to-follow
                 // r l < == l r >
                 Greater => {
                     insts.append(&mut expression_to_push(state, &expr.right, stack_plus)?);
-                    insts.append(&mut expression_to_push(state, &expr.left, stack_plus+1)?);
+                    insts.append(&mut expression_to_push(state, &expr.left, stack_plus + 1)?);
                 }
                 // Left, right, op-to-follow
                 _ => {
                     insts.append(&mut expression_to_push(state, &expr.left, stack_plus)?);
-                    insts.append(&mut expression_to_push(state, &expr.right, stack_plus+1)?);
+                    insts.append(&mut expression_to_push(state, &expr.right, stack_plus + 1)?);
                 }
             }
             let type_error = Err(LowerError::NoOperation(expr.op.clone(), left_type, expr.span));
             match expr.op {
                 Equal => match left_type {
-	                Type::Int | Type::Bool => insts.push(llr::Instruction::Equal),
-	                Type::Float => (),
-	                _ => return type_error,
-                }
+                    Type::Int | Type::Bool => insts.push(llr::Instruction::Equal),
+                    Type::Float => (),
+                    _ => return type_error,
+                },
                 // Arguments reversed previously
                 Greater => insts.push(llr::Instruction::Less),
                 Less => insts.push(llr::Instruction::Less),
@@ -279,26 +288,34 @@ fn expression_to_push(
                     match expr.op {
                         LessEqual => {
                             insts.append(&mut expression_to_push(state, &expr.left, stack_plus)?);
-                            insts.append(&mut expression_to_push(state, &expr.right, stack_plus+1)?);
+                            insts.append(&mut expression_to_push(
+                                state,
+                                &expr.right,
+                                stack_plus + 1,
+                            )?);
                         }
                         GreaterEqual => {
                             insts.append(&mut expression_to_push(state, &expr.right, stack_plus)?);
-                            insts.append(&mut expression_to_push(state, &expr.left, stack_plus+1)?);
+                            insts.append(&mut expression_to_push(
+                                state,
+                                &expr.left,
+                                stack_plus + 1,
+                            )?);
                         }
                         _ => unreachable!(),
                     };
                     // Stack: l r
                     // (if > then it's r l but assume < for now)
                     // Duplicate left
-                    insts.push(llr::Instruction::Dup(stack_plus+1));
+                    insts.push(llr::Instruction::Dup(stack_plus + 1));
                     // Stack: l r l
                     // Duplicate right (further forward now)
-                    insts.push(llr::Instruction::Dup(stack_plus+1));
+                    insts.push(llr::Instruction::Dup(stack_plus + 1));
                     // Stack: l r l r
                     insts.push(llr::Instruction::Less);
                     // Stack: l r <
                     // Swap g to back
-                    insts.push(llr::Instruction::Swap(stack_plus+2));
+                    insts.push(llr::Instruction::Swap(stack_plus + 2));
                     // Stack: > l r
                     insts.push(llr::Instruction::Equal);
                     // Stack: > =
@@ -306,15 +323,15 @@ fn expression_to_push(
                     insts.push(llr::Instruction::Add);
                 }
                 Plus => match left_type {
-	                Type::Int => insts.push(llr::Instruction::Add),
-	                Type::Float => insts.push(llr::Instruction::FAdd),
-	                _ => return type_error,
-                }
+                    Type::Int => insts.push(llr::Instruction::Add),
+                    Type::Float => insts.push(llr::Instruction::FAdd),
+                    _ => return type_error,
+                },
                 Minus => match left_type {
-	                Type::Int => insts.push(llr::Instruction::Sub),
-	                Type::Float => insts.push(llr::Instruction::FSub),
-	                _ => return type_error,
-                }
+                    Type::Int => insts.push(llr::Instruction::Sub),
+                    Type::Float => insts.push(llr::Instruction::FSub),
+                    _ => return type_error,
+                },
                 Times => {
                     // Translate 4*5 to internal_times(4,5)
                     // This might be cleaner in a "sugar" / parser-side change
@@ -347,19 +364,24 @@ fn expression_to_push(
 }
 
 fn read_literal_int(expr: Expression) -> Result<u32> {
-	match expr {
-		Expression::Literal(ref lit) => match lit.data {
-			LiteralData::Int(r) => Ok(r as u32),
-			_ => Err(LowerError::MismatchedType(Type::Int, Span::new(), literal_type(&lit), expr.full_span())),
-		}
-		_ => Err(LowerError::NonLiteral("panic", expr.full_span()))
-	}
+    match expr {
+        Expression::Literal(ref lit) => match lit.data {
+            LiteralData::Int(r) => Ok(r as u32),
+            _ => Err(LowerError::MismatchedType(
+                Type::Int,
+                Span::new(),
+                literal_type(&lit),
+                expr.full_span(),
+            )),
+        },
+        _ => Err(LowerError::NonLiteral("panic", expr.full_span())),
+    }
 }
 
 fn lower_panic(call: &FnCall) -> Result<Vec<llr::Instruction>> {
     let mut insts = vec![];
     let line = read_literal_int(call.arguments[0].clone())?;
-    let col  = read_literal_int(call.arguments[1].clone())?;
+    let col = read_literal_int(call.arguments[1].clone())?;
     insts.push(llr::Instruction::Panic(line as u32, col as u32));
     Ok(insts)
 }
@@ -383,19 +405,15 @@ fn lower_assert(state: &mut LowerState, call: &FnCall) -> Result<Vec<llr::Instru
         span: call.span,
     });
     // Completely arbitrary, but lower_statement expects it in case of return
-    let dummy_sig = Signature {
-        id: Id::fake(""),
-        parameters: vec![],
-        span: call.span,
-    };
+    let dummy_sig = Signature { id: Id::fake(""), parameters: vec![], span: call.span };
     lower_statement(state, &desugared, &dummy_sig)
 }
 
 fn lower_fn_call(
-	state: &mut LowerState,
-	call: &FnCall,
-	is_statement: bool)
--> Result<Vec<llr::Instruction>> {
+    state: &mut LowerState,
+    call: &FnCall,
+    is_statement: bool,
+) -> Result<Vec<llr::Instruction>> {
     let (index, node) = match state.fn_map.get_full(&call.name.name) {
         Some((i, _, func)) => (i, func),
         None => match &call.name.name[..] {
@@ -419,7 +437,12 @@ fn lower_fn_call(
     };
     let params = &signature.parameters;
     if call.arguments.len() != params.len() {
-	    return Err(LowerError::ArgumentCount(signature.id.clone(), params.len(), call.arguments.len(), call.span));
+        return Err(LowerError::ArgumentCount(
+            signature.id.clone(),
+            params.len(),
+            call.arguments.len(),
+            call.span,
+        ));
     }
     let mut instructions = vec![];
     // Typecheck all arguments calls with their found IDs
@@ -428,10 +451,11 @@ fn lower_fn_call(
         let given_type = expression_type(state, arg)?;
         if types_match(Some(given_type), param.id_type) == Some(false) {
             return Err(LowerError::MismatchedType(
-	            param.id_type.expect("type definitely given for mismatch"),
-	            param.span,
-	            given_type,
-	            arg.full_span()));
+                param.id_type.expect("type definitely given for mismatch"),
+                param.span,
+                given_type,
+                arg.full_span(),
+            ));
         }
         // Otherwise our types are just fine
         // Now we just have to evaluate it
@@ -483,15 +507,21 @@ fn lower_return(
     // Typecheck return value
     // None == None -> return == void
     match (signature.id.id_type, expr) {
-	    (Some(_), None) => return Err(LowerError::MismatchedReturn(signature.id.clone(), None, Span::new())),
-	    (a, Some(b)) => {
-		    let b_type = expression_type(state, b)?;
-		    if a != Some(b_type) {
-			    return Err(LowerError::MismatchedReturn(signature.id.clone(), Some(b_type), b.full_span()));
-		    }
-		    // otherwise we're good
-	    }
-	    (None, None) => ()
+        (Some(_), None) => {
+            return Err(LowerError::MismatchedReturn(signature.id.clone(), None, Span::new()))
+        }
+        (a, Some(b)) => {
+            let b_type = expression_type(state, b)?;
+            if a != Some(b_type) {
+                return Err(LowerError::MismatchedReturn(
+                    signature.id.clone(),
+                    Some(b_type),
+                    b.full_span(),
+                ));
+            }
+            // otherwise we're good
+        }
+        (None, None) => (),
     }
     let mut insts = vec![];
     if let Some(expr) = expr {
@@ -525,7 +555,7 @@ fn stack_search(state: &mut LowerState, name: &Id) -> Result<(u8, Type)> {
             }
             None => {
                 more_local_total += scope.len();
-            },
+            }
         }
     }
     // None found
@@ -545,33 +575,38 @@ fn lower_statement(
         Statement::FnCall(call) => lower_fn_call(state, call, true)?,
         Statement::Return(expr) => lower_return(state, expr, signature)?,
         Statement::If(if_stmt) => {
-	        let cond_type = expression_type(state, &if_stmt.condition)?;
-	        if cond_type != Type::Bool {
-		        return Err(LowerError::MismatchedType(Type::Bool, signature.span, cond_type, if_stmt.condition.full_span()));
-	        }
+            let cond_type = expression_type(state, &if_stmt.condition)?;
+            if cond_type != Type::Bool {
+                return Err(LowerError::MismatchedType(
+                    Type::Bool,
+                    signature.span,
+                    cond_type,
+                    if_stmt.condition.full_span(),
+                ));
+            }
             lower_scope_begin(state);
-                let mut push_condition = expression_to_push(state, &if_stmt.condition, 0)?;
-                let mut if_block = lower_statements(state, &if_stmt.statements, signature)?;
-                let mut else_block = lower_statements(state, &if_stmt.else_statements, signature)?;
-                let mut lowered = vec![];
-                lowered.append(&mut push_condition);
-                let else_start = state.get_label();
-                lowered.push(llr::Instruction::JumpZero(else_start));
-                lowered.append(&mut if_block);
-                // CHECK: does creating a label you might not use, fuck things up? So far, no
-                let else_end = state.get_label();
-                // Don't bother with jump if no statements in else
-                if !if_stmt.else_statements.is_empty() {
-                    // if we executed if, don't execute else (jump to end of else)
-                    // TODO: unconditional jump, rather than push zero jmp0
-                    lowered.push(llr::Instruction::Push(0));
-                    lowered.push(llr::Instruction::JumpZero(else_end));
-                }
-                lowered.push(llr::Instruction::LabelMark(else_start));
-                if !if_stmt.else_statements.is_empty() {
-                    lowered.append(&mut else_block);
-                    lowered.push(llr::Instruction::LabelMark(else_end));
-                }
+            let mut push_condition = expression_to_push(state, &if_stmt.condition, 0)?;
+            let mut if_block = lower_statements(state, &if_stmt.statements, signature)?;
+            let mut else_block = lower_statements(state, &if_stmt.else_statements, signature)?;
+            let mut lowered = vec![];
+            lowered.append(&mut push_condition);
+            let else_start = state.get_label();
+            lowered.push(llr::Instruction::JumpZero(else_start));
+            lowered.append(&mut if_block);
+            // CHECK: does creating a label you might not use, fuck things up? So far, no
+            let else_end = state.get_label();
+            // Don't bother with jump if no statements in else
+            if !if_stmt.else_statements.is_empty() {
+                // if we executed if, don't execute else (jump to end of else)
+                // TODO: unconditional jump, rather than push zero jmp0
+                lowered.push(llr::Instruction::Push(0));
+                lowered.push(llr::Instruction::JumpZero(else_end));
+            }
+            lowered.push(llr::Instruction::LabelMark(else_start));
+            if !if_stmt.else_statements.is_empty() {
+                lowered.append(&mut else_block);
+                lowered.push(llr::Instruction::LabelMark(else_end));
+            }
             lowered.append(&mut lower_scope_end(state)?);
             lowered
         }
@@ -641,13 +676,16 @@ fn lower_signature(signature: &Signature) -> Result<llr::Signature> {
 
 fn lower_fn(state: &mut LowerState, func: &Fn) -> Result<llr::Fn> {
     lower_scope_begin(state);
-        for param in &func.signature.parameters {
-            state.locals.last_mut().unwrap().insert(param.name.clone(), param.id_type.expect("untyped parameter let through parser"));
-        }
-        let rv = llr::Fn {
-            instructions: lower_fn_statements(state, func)?,
-            signature: lower_signature(&func.signature)?,
-        };
+    for param in &func.signature.parameters {
+        state.locals.last_mut().unwrap().insert(
+            param.name.clone(),
+            param.id_type.expect("untyped parameter let through parser"),
+        );
+    }
+    let rv = llr::Fn {
+        instructions: lower_fn_statements(state, func)?,
+        signature: lower_signature(&func.signature)?,
+    };
     // fn return doesn't pop locals
     state.locals.pop();
     Ok(rv)
@@ -684,8 +722,18 @@ mod test {
         let script_string = std::fs::read_to_string("tests/scripts/non-branching.sfg")
             .expect("could not load given file");
         let lexed = lex(&script_string);
-        let parsed = parse(lexed).map_err(|e| { println!("{}", e); panic!() }).unwrap();
-        let lowered = lower(parsed).map_err(|e| { println!("{}", e); panic!() }).unwrap();
+        let parsed = parse(lexed)
+            .map_err(|e| {
+                println!("{}", e);
+                panic!()
+            })
+            .unwrap();
+        let lowered = lower(parsed)
+            .map_err(|e| {
+                println!("{}", e);
+                panic!()
+            })
+            .unwrap();
         let fns = lowered.fns;
         let mut balance: isize = 0;
         for func in fns {

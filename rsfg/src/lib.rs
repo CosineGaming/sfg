@@ -4,16 +4,16 @@
 extern crate log;
 
 mod ast;
-mod llr;
 mod codegen;
 mod lexer;
+mod llr;
 mod lower;
 mod parser;
 
 #[derive(Debug)]
 pub enum CompileError {
-	Parse(parser::ParseError),
-	Lower(lower::LowerError),
+    Parse(parser::ParseError),
+    Lower(lower::LowerError),
 }
 impl std::fmt::Display for CompileError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -75,7 +75,7 @@ pub struct Token {
 }
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "{:?} at {}", self.kind, self.span)
+        write!(f, "{:?} at {}", self.kind, self.span)
     }
 }
 
@@ -87,44 +87,40 @@ pub enum Type {
     Float,
 }
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Default)]
 pub struct Span {
-	lo: (usize, usize),
-	hi: (usize, usize),
-	// TODO: file
+    lo: (usize, usize),
+    hi: (usize, usize),
+    // TODO: file
 }
 impl Span {
-	pub fn new() -> Self {
-		Self { hi: (0,0), lo: (0,0) }
-	}
-	pub fn set(mut spans: Vec<Span>) -> Span {
-		let first = spans.pop().expect("cannot form set of less than one span");
-		let mut lo = first.lo;
-		let mut hi = first.hi;
-		for span in spans {
-			// if lower, go lower
-			if span.lo.0 < lo.0 {
-				lo = span.lo;
-			} else if span.lo.0 == lo.0 && span.lo.1 < lo.1 {
-				lo = span.lo;
-			}
-			// if higher go higher
-			if span.hi.0 > hi.0 {
-				hi = span.hi;
-			} else if span.hi.0 == hi.0 && span.hi.1 > hi.1 {
-				hi = span.hi;
-			}
-		}
-		Span { lo, hi }
-	}
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn set(mut spans: Vec<Span>) -> Span {
+        let first = spans.pop().expect("cannot form set of less than one span");
+        let mut lo = first.lo;
+        let mut hi = first.hi;
+        for span in spans {
+            // if lower, go lower
+            if span.lo.0 < lo.0 || (span.lo.0 == lo.0 && span.lo.1 < lo.1) {
+                lo = span.lo;
+            }
+            // if higher go higher
+            if span.hi.0 > hi.0 || (span.hi.0 == hi.0 && span.hi.1 > hi.1) {
+                hi = span.hi;
+            }
+        }
+        Span { lo, hi }
+    }
 }
 impl std::fmt::Display for Span {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-	    if *self == Span::new() {
-		    write!(f, "internal")
-	    } else {
-		    write!(f, "{}:{}", self.lo.0, self.lo.1)
-	    }
+        if *self == Span::new() {
+            write!(f, "internal")
+        } else {
+            write!(f, "{}:{}", self.lo.0, self.lo.1)
+        }
     }
 }
 impl std::fmt::Display for Type {
@@ -145,46 +141,34 @@ pub fn compile(text: &str, stdlib: &str) -> Result<Vec<u8>> {
     let full_text = format!("{}\n{}", text, stdlib);
     let result = parser::parse(lexer::lex(&full_text));
     let ast = match result {
-	    Ok(ast) => ast,
-	    Err(err) => return Err(CompileError::Parse(err)),
+        Ok(ast) => ast,
+        Err(err) => return Err(CompileError::Parse(err)),
     };
     let result = lower::lower(ast);
     let llr = match result {
-	    Ok(llr) => llr,
-	    Err(err) => return Err(CompileError::Lower(err)),
+        Ok(llr) => llr,
+        Err(err) => return Err(CompileError::Lower(err)),
     };
     Ok(codegen::gen(llr))
 }
 
 pub fn compile_or_print(text: &str, stdlib: &str) -> Vec<u8> {
     match compile(text, stdlib) {
-	    Ok(c) => c,
-	    Err(err) => {
-		    eprintln!("{}", err);
-		    std::process::exit(1);
-	    }
+        Ok(c) => c,
+        Err(err) => {
+            eprintln!("{}", err);
+            std::process::exit(1);
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
-	use super::Span;
-	#[test]
-	fn test_span_set() {
-		let set = Span::set(vec![
-			Span {
-				lo: (4,4),
-				hi: (5,5),
-			},
-			Span {
-				lo: (4, 2),
-				hi: (4, 10),
-			},
-		]);
-		assert_eq!(set, Span {
-			lo: (4, 2),
-			hi: (5, 5),
-		});
-	}
+    use super::Span;
+    #[test]
+    fn test_span_set() {
+        let set =
+            Span::set(vec![Span { lo: (4, 4), hi: (5, 5) }, Span { lo: (4, 2), hi: (4, 10) }]);
+        assert_eq!(set, Span { lo: (4, 2), hi: (5, 5) });
+    }
 }
-
