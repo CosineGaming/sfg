@@ -1,4 +1,4 @@
-use super::Type;
+use super::{Type, Span};
 
 pub type AST = Vec<ASTNode>;
 
@@ -18,14 +18,24 @@ pub struct ExternFn {
 }
 #[derive(PartialEq, Eq, Debug)]
 pub struct Signature {
-    pub name: String,
-    pub parameters: Vec<TypedId>,
-    pub return_type: Option<Type>, // Can be void (None)
+    pub id: Id,
+    pub parameters: Vec<Id>,
+    pub span: Span,
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
-pub struct TypedId {
+pub struct Id {
     pub name: String,
-    pub id_type: Type,
+    pub id_type: Option<Type>,
+    pub span: Span,
+}
+impl Id {
+	pub fn fake(name: &'static str) -> Self {
+		Self {
+			name: name.to_string(),
+			id_type: None,
+			span: Span::new(),
+		}
+	}
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Statement {
@@ -40,7 +50,7 @@ pub enum Statement {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Expression {
     Literal(Literal),
-    Identifier(TypedId),
+    Identifier(Id),
     Not(Box<Expression>),
     // A FnCall can be an expression as well as a statement
     // A statement FnCall is lowered differently than an expression FnCall
@@ -48,7 +58,12 @@ pub enum Expression {
     Binary(Box<BinaryExpr>),
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
-pub enum Literal {
+pub struct Literal {
+	pub data: LiteralData,
+	pub span: Span,
+}
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub enum LiteralData {
     String(String),
     Int(i32),
     Bool(bool),
@@ -56,30 +71,35 @@ pub enum Literal {
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Assignment {
-    pub lvalue: String,
+    pub lvalue: Id,
     pub rvalue: Expression,
+	pub span: Span,
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct FnCall {
-    pub name: String,
+    pub name: Id,
     pub arguments: Vec<Expression>,
+	pub span: Span,
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct BinaryExpr {
     pub left: Expression,
     pub op: BinaryOp,
     pub right: Expression,
+	pub span: Span,
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct If {
     pub condition: Expression,
     pub statements: Vec<Statement>,
     pub else_statements: Vec<Statement>,
+	pub span: Span,
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct WhileLoop {
     pub condition: Expression,
     pub statements: Vec<Statement>,
+	pub span: Span,
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum BinaryOp {
@@ -96,3 +116,21 @@ pub enum BinaryOp {
     Times,
     Divide,
 }
+
+impl Expression {
+	pub fn full_span(&self) -> Span {
+		match self {
+		    Self::Literal(lit) => lit.span,
+		    Self::Identifier(id) => id.span,
+		    Self::Not(expr) => {
+			    warn!("unimplemented span on not to include ! symbol");
+			    expr.full_span()
+		    }
+		    // A FnCall can be an expression as well as a statement
+		    // A statement FnCall is lowered differently than an expression FnCall
+		    Self::FnCall(call) => call.span,
+		    Self::Binary(binary) => Span::set(vec![binary.left.full_span(), binary.right.full_span()]),
+		}
+	}
+}
+

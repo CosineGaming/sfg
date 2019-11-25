@@ -21,7 +21,6 @@ fn serialize(what: Serializable) -> u8 {
         S::Type(Int) => 0x10,
         S::Type(Str) => 0x11,
         S::Type(Bool) => 0x12,
-        S::Type(Infer) => panic!("type not yet inferred by printing"),
         // Other 2x
         S::Void => 0x21,
         // Instructions 3x

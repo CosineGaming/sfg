@@ -1,3 +1,5 @@
 // comment this out for true test
 // this helps me debug tests
 //make an error
+// make it valid program
+fn main()

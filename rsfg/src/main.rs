@@ -1,5 +1,5 @@
 extern crate rsfg;
-use rsfg::compile;
+use rsfg::compile_or_print;
 use std::path::Path;
 
 fn get_stdlib() -> String {
@@ -12,14 +12,7 @@ fn main() {
     let script_path = Path::new(&script_filename);
     let script_string = std::fs::read_to_string(script_path).expect("could not load given file");
     let stdlib = get_stdlib();
-    let result = compile(&script_string, &stdlib);
-    let compiled = match result {
-	    Ok(c) => c,
-	    Err(err) => {
-		    println!("{}", err);
-		    std::process::exit(1);
-	    }
-    };
+    let compiled = compile_or_print(&script_string, &stdlib);
     let out = script_path.with_extension("bcfg");
     std::fs::write(out, compiled).expect("couldn't output compiled file");
 }
