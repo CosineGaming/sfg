@@ -10,16 +10,18 @@ mod llr;
 mod lower;
 mod parser;
 
+use parser::fmt_vec;
+
 #[derive(Debug)]
 pub enum CompileError {
-    Parse(parser::ParseError),
+    Parse(Vec<parser::ParseError>),
     Lower(lower::LowerError),
 }
 impl std::fmt::Display for CompileError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use CompileError::*;
         match self {
-            Parse(err) => write!(f, "{}", err),
+            Parse(errs) => write!(f, "{}", fmt_vec(errs)),
             Lower(err) => write!(f, "{}", err),
         }
     }
@@ -66,6 +68,59 @@ pub enum TokenType {
     OpAssign(Box<TokenType>),
     True,
     False,
+}
+// TODO: is there a way to mix this with the lexer in healthier/DRYer way?
+impl std::fmt::Display for TokenType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use TokenType::*;
+        let s = match self {
+            Identifier(_) => "identifier",
+            Tab => "tab",
+            StringLit(_) => "string literal",
+            IntLit(_) => "int literal",
+            FloatLit(_) => "float literal",
+            Type(_) => "type",
+            Fn => "fn",
+            ExternFn => "extern fn",
+            ExternFnCall(_) => "extern fn call",
+            Return => "return",
+            Comma => ",",
+            Equal => "==",
+            Less => "<",
+            LessEqual => "<=",
+            Greater => ">",
+            GreaterEqual => ">=",
+            Not => "!",
+            NotEqual => "!=",
+            Or => "||",
+            And => "&&",
+            Colon => ":",
+            Newline => "newline",
+            LParen => "(",
+            RParen => ")",
+            If => "if",
+            Else => "else",
+            While => "while",
+            Declare => "var",
+            Assignment => "=",
+            Plus => "+",
+            Minus => "-",
+            Times => "*",
+            Divide => "/",
+            OpAssign(of) => match **of {
+                Plus => "+=",
+                Minus => "-=",
+                Times => "*=",
+                Divide => "/=",
+                // TODO: this is an ugly convention for "any"
+                False => "assignment",
+                _ => panic!("unsupported opassign stringified"),
+            }
+            True => "true",
+            False => "false",
+        };
+        write!(f, "{}", s)
+    }
 }
 
 #[derive(PartialEq, Clone, Debug)]

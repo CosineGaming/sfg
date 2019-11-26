@@ -1,0 +1,10 @@
+fn main()
+	first_error
+
+fn two()
+	second_error
+
+fn three()
+	if third_error
+		fourth_error
+

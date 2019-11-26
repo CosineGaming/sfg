@@ -47,7 +47,6 @@ fn serialize(what: Serializable) -> u8 {
         S::Instruction(I::FLess) => 0x4f,
         // This should never be actually kept in the end
         S::Placeholder => 0x50,
-        // Should never be serialized. TODO: type this better?
         S::Instruction(I::LabelMark(_)) => panic!("tried to serialize unresolved label"),
     };
     typier as u8
@@ -164,7 +163,6 @@ fn resolve_labels(labeled: &mut LabeledCode) {
             serialize(Serializable::Placeholder),
             "tried to write label to non-placeholder"
         );
-        // TODO: non-relative labels as well
         // Why do we add 1? because we've already popped location, so relative to the NEXT inst
         labeled.code[*location] = i8_as_u8((*refers as isize - (*location + 1) as isize) as i8);
     }

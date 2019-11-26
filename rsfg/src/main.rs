@@ -8,7 +8,8 @@ use std::path::Path;
 const USAGE: &str = "
 rsfg command line interface
 
-Usage: rsfg [options] <source> [dest]
+Usage: rsfg [--run] <source> [dest]
+       rsfg [--update-tests]
 
 Options:
     -r, --run       Use rvmfg virtual machine to immediately run code
@@ -27,6 +28,7 @@ fn compile_file(filename: &Path) -> Result<Vec<u8>, CompileError> {
 }
 
 fn main() {
+    env_logger::init();
     let args = Docopt::new(USAGE).and_then(|d| d.parse()).unwrap_or_else(|e| e.exit());
     let script_filename = args.get_str("<source>");
     #[cfg(debug_assertions)]
@@ -34,7 +36,6 @@ fn main() {
         if args.get_bool("--update-tests") {
             // TODO deal with needing <source>
             update_tests();
-            // TODO why doesn't it exit lollll
             std::process::exit(0);
         }
     }

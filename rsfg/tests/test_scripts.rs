@@ -10,6 +10,9 @@ use rvmfg::{call, Thread};
 use std::sync::Once;
 static LOGGER_INIT: Once = Once::new();
 
+// TODO: need a test of call![main("a string")] because i think it's broken
+// but capturing stdout and such is hard(?) so yeah
+
 fn compile_no_std_safe(filename: &str) -> Vec<u8> {
     let script_string = std::fs::read_to_string(filename).expect("could not load given file");
     match compile(&script_string, "") {

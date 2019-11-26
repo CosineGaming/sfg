@@ -713,7 +713,9 @@ pub fn lower(ast: AST) -> Result<llr::LLR> {
     Ok(out)
 }
 
+#[cfg(test)]
 mod test {
+    use crate::parser::fmt_vec;
     #[test]
     fn non_branching_stack_balance() {
         use super::lower;
@@ -724,7 +726,7 @@ mod test {
         let lexed = lex(&script_string);
         let parsed = parse(lexed)
             .map_err(|e| {
-                println!("{}", e);
+                println!("{}", fmt_vec(&e));
                 panic!()
             })
             .unwrap();
