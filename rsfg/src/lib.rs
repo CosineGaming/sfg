@@ -115,7 +115,7 @@ impl std::fmt::Display for TokenType {
                 // TODO: this is an ugly convention for "any"
                 False => "assignment",
                 _ => panic!("unsupported opassign stringified"),
-            }
+            },
             True => "true",
             False => "false",
         };

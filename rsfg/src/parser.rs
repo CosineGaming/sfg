@@ -33,34 +33,22 @@ impl ParseError {
     }
 }
 
+#[cfg(test)]
+fn dexpect<T>(res: Result<T>) -> T {
+    match res {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("{}", fmt_vec(&e));
+            panic!("unexpected parse error");
+        }
+    }
+}
+
 type Result<T> = std::result::Result<T, Vec<ParseError>>;
 
 static PANIC_ON_ERROR: bool = false;
 
-/// There is a different calling convention for a parse result because of token handling
-/// Rolls back tokens if try fails
-macro_rules! rb {
-    ( $tokens:ident, $call:expr ) => {{
-        // Allow rollback on error
-        let saved_tokens = $tokens.clone();
-        // Rollback on any error, regardless of intended use
-        let res = $call;
-        if res.is_err() {
-            *$tokens = saved_tokens;
-        }
-        res
-    }};
-}
-/// Combines rb with ok_or, which is a hypothetical macro
-/// ok_or returns result on ok, or on err continues on as normal
-macro_rules! rb_ok_or {
-    ( $tokens:ident, $call:expr ) => {
-        match rb!($tokens, $call) {
-            Ok(what) => return Ok(what),
-            Err(err) => err,
-        }
-    };
-}
+static IDENT: &str = "identifier";
 
 macro_rules! expect_any {
     ( $during:literal, $to_match:expr => { $($token_type:ident$(($subordinate:pat,$literal:expr))? => $expr:expr $(,)?)* } ) => {
@@ -74,13 +62,22 @@ macro_rules! expect_any {
                     $(
                         // This should be illegal, may be illegal, is hacky, but it's necessary
                         TokenType::$token_type
-                        $(($literal))?
+                        $(($literal.to_owned()))?
                     ),*
                 ], got.clone()).v())
             }
             None => Err(ParseError::EOF($during.to_string()).v())
         }
     }
+}
+
+macro_rules! known {
+    ( $what:expr, $known:ident ) => {
+        match $what {
+            TokenType::$known(val) => val,
+            _ => unreachable!(),
+        }
+    };
 }
 
 macro_rules! resolve1 {
@@ -157,21 +154,22 @@ fn parse_id(rtokens: &mut Tokens, type_required: bool) -> Result<Id> {
     let mut id_type = None;
     // Can't use expect_any! because not Some(got) has special semantics
     match rtokens.last() {
-        Some(Token { kind: TokenType::Colon, span }) => {
-            rtokens.pop();
+        Some(Token { kind: TokenType::Colon, .. }) => {
+            let t = rtokens.pop().unwrap();
             let mut certain_type = expect_any!("identifier type", rtokens.pop() => {
                 Type(id_type,Type::Int) => id_type,
             });
             resolve!(expected_id, certain_type);
             id_type = Some(certain_type);
-            id_span = Span::set(vec![*span, id_span]);
+            id_span = Span::set(vec![t.span, id_span]);
         }
         Some(got) => {
             if type_required {
                 let mut no_type: Result<()> = Err(ParseError::Expected(
                     vec![TokenType::Type(Type::Str), TokenType::Type(Type::Int)],
                     got.clone(),
-                ).v());
+                )
+                .v());
                 resolve!(expected_id, no_type);
             } else {
                 resolve!(expected_id);
@@ -233,25 +231,28 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
             Ok(Expression::Not(Box::new(not_of)))
         }
         // Literals
-        StringLit(string,String::from("")) => {
-            let t = rtokens.pop();
+        StringLit(_,String::from("")) => {
+            let t = rtokens.pop().unwrap();
+            let string = known!(t.kind, StringLit);
             Ok(Expression::Literal(Literal {
-                data: LiteralData::String(string.clone()),
-                span: t.unwrap().span,
+                data: LiteralData::String(string),
+                span: t.span,
             }))
         }
-        IntLit(number,0) => {
-            let t = rtokens.pop();
+        IntLit(_,0) => {
+            let t = rtokens.pop().unwrap();
+            let number = known!(t.kind, IntLit);
             Ok(Expression::Literal(Literal {
-                data: LiteralData::Int(*number),
-                span: t.unwrap().span,
+                data: LiteralData::Int(number),
+                span: t.span,
             }))
         }
-        FloatLit(number,0.0) => {
-            let t = rtokens.pop();
+        FloatLit(_,0.0) => {
+            let t = rtokens.pop().unwrap();
+            let number = known!(t.kind, FloatLit);
             Ok(Expression::Literal(Literal {
-                data: LiteralData::Float(*number),
-                span: t.unwrap().span,
+                data: LiteralData::Float(number),
+                span: t.span,
             }))
         }
         // This minus, because we're parsing an expression, is part of an int literal
@@ -288,37 +289,35 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
             }))
         }
         // And finally identifiers
-        Identifier(name,String::from("")) => {
+        Identifier(_,IDENT) => {
             // An identifier can start a call or just an identifier
-            // It can be a call...
-            let call_res =
-                rb!(rtokens, parse_call(rtokens).and_then(|x| Ok(Expression::FnCall(x))));
-            if call_res.is_err() {
-                let t = rtokens.pop();
+            match rtokens.n(1) {
+                Some(Token { kind: TokenType::LParen, .. }) => parse_call(rtokens).and_then(|x| Ok(Expression::FnCall(x))),
                 // Otherwise just reference the identifier
-                Ok(Expression::Identifier(Id {
-                    name: name.clone(),
-                    id_type: None,
-                    span: t.unwrap().span
-                }))
-            } else {
-                call_res
+                Some(_) => {
+                    let t = rtokens.pop().unwrap();
+                    let name = known!(t.kind, Identifier);
+                    Ok(Expression::Identifier(Id {
+                        name: name,
+                        id_type: None,
+                        span: t.span
+                    }))
+                }
+                None => return Err(ParseError::EOF("expression".to_string()).v()),
             }
         }
     })??;
     // Then we try to parse a binary expression with it
-    rb_ok_or!(
-        rtokens,
-        parse_binary(rtokens, left.clone()).and_then(|x| Ok(Expression::Binary(Box::new(x))))
-    );
-    // If not, it's just a unary one
-    Ok(left)
+    match token_to_binary_op(rtokens.last().and_then(|t| Some(t.clone()))) {
+        Ok(_) => Ok(Expression::Binary(Box::new(parse_binary(rtokens, left)?))),
+        // If not, it's just a unary one
+        Err(_) => Ok(left),
+    }
 }
 
 fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
-    let first_token = rtokens.last();
-    let mut token = expect_any!("call", first_token => {
-        Identifier(_n,String::from("")) => rtokens.pop().unwrap(),
+    let mut token = expect_any!("call", rtokens.last() => {
+        Identifier(_,IDENT) => rtokens.pop().unwrap(),
     });
     // Arguments
     let mut paren = expect_token(rtokens, TokenType::LParen, "fn call");
@@ -360,12 +359,12 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
         "panic" | "assert" if arguments.len() <= 1 => {
             // Safe because we wouldn't be here without a token
             arguments.push(Expression::Literal(Literal {
-                data: LiteralData::Int(first_token.unwrap().span.lo.0 as i32),
+                data: LiteralData::Int(token.span.lo.0 as i32),
                 // span immediatly following token
                 span: Span { lo: token.span.hi, hi: token.span.hi },
             }));
             arguments.push(Expression::Literal(Literal {
-                data: LiteralData::Int(first_token.unwrap().span.lo.1 as i32),
+                data: LiteralData::Int(token.span.lo.1 as i32),
                 span: Span { lo: token.span.hi, hi: token.span.hi },
             }));
         }
@@ -377,14 +376,14 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
 
 fn parse_args(rtokens: &mut Tokens) -> Result<Vec<Id>> {
     let mut args = vec![];
-    let mut paren = rb!(rtokens, expect_token(rtokens, TokenType::LParen, "fn parameters"));
+    let mut paren = expect_token(rtokens, TokenType::LParen, "fn parameters");
     let mut arg_errors = vec![];
     loop {
         // TODO: Why unreachable code warning here? Tests pass
         #[allow(unreachable_code)]
         arg_errors.push(expect_any!("parameters", rtokens.last() => {
             Identifier(__,String::from("")) => {
-                args.push(rb!(rtokens, parse_id(rtokens, true)));
+                args.push(parse_id(rtokens, true));
             }
             RParen => {
                 rtokens.pop();
@@ -404,7 +403,7 @@ fn parse_args(rtokens: &mut Tokens) -> Result<Vec<Id>> {
 
 fn parse_return(rtokens: &mut Tokens) -> Result<Option<Expression>> {
     // no valid return without return, no point delaying
-    rb!(rtokens, expect_token(rtokens, TokenType::Return, "return statement"))?;
+    expect_token(rtokens, TokenType::Return, "return statement")?;
     Ok(match parse_expression(rtokens) {
         Ok(expr) => Some(expr),
         Err(_) => None,
@@ -413,66 +412,52 @@ fn parse_return(rtokens: &mut Tokens) -> Result<Option<Expression>> {
 
 fn parse_if(rtokens: &mut Tokens, tabs: usize) -> Result<If> {
     // if is necessary
-    let span = rb!(rtokens, expect_token(rtokens, TokenType::If, "if statement"))?.span;
+    let span = expect_token(rtokens, TokenType::If, "if statement")?.span;
     let mut condition = parse_expression(rtokens);
     let statements = parse_indented_block(rtokens, tabs + 1);
     // Remember, rb! JUST rolls back on error, but doesn't necessarily return!
     // rb is still necessary to not eat up following non-else code and first tab
-    let else_or_err = rb!(rtokens, {
-        match safe_expect_indent(rtokens, tabs) {
-            Ok(()) => {
-                // Indent exists. Check for else (still optional)
-                let else_result = expect_token(rtokens, TokenType::Else, "if statement");
-                match else_result {
-                    Ok(_) => {
-                        debug!("there IS an else!");
-                        // expect_any! returns a result of whether we matched
-                        Ok(expect_any!("if-else", rtokens.last() => {
-                            If => {
-                                // else if
-                                let if_res = parse_if(rtokens, tabs);
-                                vec![if_res.and_then(|i| Ok(Statement::If(i)))]
-                            }
-                            Newline => {
-                                // else
-                                // 	stuff
-                                parse_indented_block(rtokens, tabs + 1)
-                            }
-                        }))
+    strip_white_lines(rtokens);
+    let mut else_statements = if check_indent(rtokens, tabs).is_ok() {
+        // we have an indent, check for else (still optional)
+        match expect_any!("if-else", rtokens.n(tabs) => {
+            Else => {
+                debug!("there IS an else!");
+                // delete tabs to catch up
+                expect_indent(rtokens, tabs).unwrap();
+                rtokens.pop(); // pop the else too
+                // expect_any! returns a result of whether we matched
+                // contained in Ok is a vec of results
+                expect_any!("if-else", rtokens.last() => {
+                    If => {
+                        // else if
+                        let if_res = parse_if(rtokens, tabs);
+                        vec![if_res.and_then(|i| Ok(Statement::If(i)))]
                     }
-                    Err(_) => {
-                        // There's no else, but there was tab. rollback tab eating with an error
-                        Err(())
+                    Newline => {
+                        // else
+                        // 	stuff
+                        parse_indented_block(rtokens, tabs + 1)
                     }
-                }
+                })
             }
-            Err(_) => {
-                // No indent exists. It's long since time to cede back (end if SURROUNDING block)
-                debug!("no indent at all");
-                Err(())
-            }
+        }) {
+            // convert Result<Vec<Result<>>> to Result<Vec<>>
+            Ok(else_statements) => else_statements.and_then(vec_to_res),
+            // indent but no else
+            Err(_) => Ok(vec![]),
         }
-    });
-    // else or err has either Ok(...) which means there is an else, or Err(()) which means none
-    match else_or_err {
-        Ok(else_statements) => {
-            // else_statements has either Ok(Vec<Result>), if condition parsed correctly
-            // or Err(Vec<parse_error>), a single parse error for mismatched token
-            // we want to convert that into either Ok(Vec<statements>) or Err(errors)
-            // if okay we use the vec_to_res reversal and return either value directly
-            let mut else_statements = else_statements.and_then(vec_to_res);
-            resolve!(condition, else_statements; statements);
-            Ok(If { condition, statements, else_statements, span })
-        }
-        Err(()) => {
-            resolve!(condition; statements);
-            Ok(If { condition, statements, else_statements: vec![], span })
-        }
-    }
+    } else {
+        // no indent
+        Ok(vec![])
+    };
+    resolve!(condition, else_statements; statements);
+    Ok(If { condition, statements, else_statements, span })
 }
 
 fn parse_loop(rtokens: &mut Tokens, tabs: usize) -> Result<WhileLoop> {
-    let mut span = expect_token(rtokens, TokenType::While, "while statement").and_then(|t| Ok(t.span));
+    let mut span =
+        expect_token(rtokens, TokenType::While, "while statement").and_then(|t| Ok(t.span));
     let mut condition = parse_expression(rtokens);
     let statements = parse_indented_block(rtokens, tabs + 1);
     resolve!(span, condition; statements);
@@ -523,7 +508,7 @@ fn parse_statement(rtokens: &mut Tokens, tabs: usize) -> Result<Statement> {
         While => Statement::WhileLoop(parse_loop(rtokens, tabs)?),
         Declare => Statement::Declaration(parse_declaration(rtokens)?),
         // only disambiguating is FnCall vs Assignment. we can use LR(2) for that
-        Identifier(_,String::new()) => expect_any!("after identifier", rtokens.n(2) => {
+        Identifier(_,String::new()) => expect_any!("after identifier", rtokens.n(1) => {
             LParen => Statement::FnCall(parse_call(rtokens)?),
             Assignment => Statement::Assignment(parse_assignment(rtokens)?),
             // TODO: lots of duplication going on here
@@ -563,62 +548,58 @@ fn parse_signature(rtokens: &mut Tokens) -> Result<Signature> {
 
 /// Strips empty/tab/comment lines, does nothing if no empty lines, rolls back on error state
 fn strip_white_lines(rtokens: &mut Tokens) {
+    // Consider the following program:
+    // fn main()
+    //     return 5
+    //     //if 5
+    //         //something else
+    // We want this commenting style to work, so we strip entirely empty lines
+    // For each line
     loop {
-        if rb!(rtokens, {
-            // Consider the following program:
-            // fn main()
-            //     return 5
-            //     //if 5
-            //         //something else
-            // We want this commenting style to work, so we must:
-            // - allow *at least* n tabs
-            // - allow a newline again with no statement
-            // To allow n tabs:
-            match rtokens.last() {
+        let mut count = 0;
+        // count whitespace and check if empty
+        let empty = loop {
+            match rtokens.n(count) {
                 // If there's an extra tab, get ALL the extra tabs
-                Some(Token { kind: TokenType::Tab, .. }) => {
-                    while let Some(Token { kind: TokenType::Tab, .. }) = rtokens.last() {
-                        rtokens.pop();
-                    }
-                    // And *demand* there's no expression (otherwise it's an unexpected indent)
-                    match expect_token(rtokens, TokenType::Newline, "unexpected indented block") {
-                        // There should be an easier way to destroy insides
-                        Ok(_) => Ok(()),
-                        Err(_) => Err(()),
-                    }
-                }
+                Some(Token { kind: TokenType::Tab, .. }) => count += 1,
                 // Otherwise, *allow* no expression
-                Some(Token { kind: TokenType::Newline, .. }) => {
-                    rtokens.pop();
-                    Ok(())
-                }
-                // Not tab or newline, we've come to our end (will rollback our non-changes)
-                _ => Err(()),
+                Some(Token { kind: TokenType::Newline, .. }) => break true,
+                // Not tab or newline, this line can't be stripped
+                _ => break false,
             }
-        })
-        .is_err()
-        {
-            // Already cleaned up with rb!, and we found the end of empty lines
+        };
+        if empty {
+            // = include newline
+            for _ in 0..=count {
+                rtokens.pop();
+            }
+        } else {
+            // no longer contiguous
             break;
         }
-        // Otherwise may be more empty lines ahead, continue
     }
 }
 
-/// If an indent of `tabs` count exists, then pop them all, and return Ok(())
-/// Otherwise, return Err(()) and RTOKENS IS IN ERROR STATE
-fn expect_indent(rtokens: &mut Tokens, tabs: usize) -> Result<()> {
-    for _ in 0..tabs {
-        expect_token(rtokens, TokenType::Tab, "indented block")?;
+/// Return Ok(()) if indent of `tabs` exists, otherwise Expected/EOF error
+fn check_indent(rtokens: &mut Tokens, tabs: usize) -> Result<()> {
+    for i in 0..tabs {
+        expect_any!("indent", rtokens.n(i) => {
+            Tab => (),
+        })?
     }
     Ok(())
 }
 
-/// Correctly strip all empty lines. Then expect the indent. Return Ok(()) on success
-/// If indent is incorrect, rollback check for indent, but NOT STRIPPING LINES
-fn safe_expect_indent(rtokens: &mut Tokens, tabs: usize) -> Result<()> {
+/// If an indent of `tabs` count exists, then pop them all, and return Ok(())
+/// Otherwise, do nothing and return Err
+fn expect_indent(rtokens: &mut Tokens, tabs: usize) -> Result<()> {
     strip_white_lines(rtokens);
-    rb!(rtokens, expect_indent(rtokens, tabs))
+    check_indent(rtokens, tabs)?;
+    // once we know we can, pop em right off
+    for _ in 0..tabs {
+        rtokens.pop();
+    }
+    Ok(())
 }
 
 fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Vec<Result<Statement>> {
@@ -630,7 +611,7 @@ fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Vec<Result<
             continue;
         }
         // If we can't satisfy the indent, return immediately with the statements we've collected
-        if safe_expect_indent(rtokens, expect_tabs).is_err() {
+        if expect_indent(rtokens, expect_tabs).is_err() {
             return statements;
         }
         let statement = parse_statement(rtokens, expect_tabs);
@@ -666,7 +647,7 @@ fn parse_extern_fn(rtokens: &mut Tokens) -> Result<ExternFn> {
 
 pub fn parse(mut tokens: Vec<Token>) -> Result<AST> {
     tokens.reverse();
-    let mut rtokens = NoPop::new(&tokens);
+    let mut rtokens = Tokens(tokens);
     let mut ast_res = vec![];
     // Every token
     loop {
@@ -695,35 +676,27 @@ pub fn parse(mut tokens: Vec<Token>) -> Result<AST> {
     Ok(ast)
 }
 
-#[derive(Clone, Copy)]
-struct NoPop<'a, T: Clone> {
-    vec: &'a [T],
-    sp: usize,
+struct Tokens(Vec<Token>);
+impl std::ops::Deref for Tokens {
+    type Target = Vec<Token>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
-impl<'a, T: Clone> NoPop<'a, T> {
-    fn new(vec: &'a [T]) -> Self {
-        Self { vec, sp: vec.len() }
+impl std::ops::DerefMut for Tokens {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
-    fn pop(&mut self) -> Option<T> {
-        if self.sp > 0 {
-            self.sp -= 1;
-            Some(self.vec[self.sp].clone())
-        } else {
+}
+impl Tokens {
+    fn n(&self, n: usize) -> Option<&Token> {
+        if self.0.len() <= n {
             None
-        }
-    }
-    fn last(&self) -> Option<&'a T> {
-        self.n(1)
-    }
-    fn n(&self, n: usize) -> Option<&'a T> {
-        if self.sp > 0 {
-            self.vec.get(self.sp - n)
         } else {
-            None
+            self.0.get(self.0.len() - n - 1)
         }
     }
 }
-type Tokens<'a> = NoPop<'a, Token>;
 
 #[cfg(test)]
 mod test {
@@ -734,7 +707,7 @@ mod test {
     // no one to call but ourselves
     fn recurse() {
         use super::TokenType::*;
-        let ast = parse(
+        let ast = dexpect(parse(
             vec![
                 Fn,
                 Identifier("main".to_string()),
@@ -749,8 +722,7 @@ mod test {
             .iter()
             .map(|t| Token { kind: t.clone(), span: Span::new() })
             .collect(),
-        )
-        .expect("test program parse error");
+        ));
         assert_eq!(
             ast,
             vec![ASTNode::Fn(crate::ast::Fn {
@@ -772,13 +744,12 @@ mod test {
         // The code is listed in order FnCall, then return
         // We need to test to make sure it can roll back properly
         use super::TokenType::*;
-        let ast = parse(
+        let ast = dexpect(parse(
             vec![Fn, Identifier("main".to_string()), LParen, RParen, Newline, Tab, Return]
                 .iter()
                 .map(|t| Token { kind: t.clone(), span: Span::new() })
                 .collect(),
-        )
-        .expect("test program parse error");
+        ));
         if let ASTNode::Fn(func) = &ast[0] {
             assert_eq!(func.statements, vec![Statement::Return(None),]);
         } else {
