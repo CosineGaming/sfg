@@ -1,0 +1,4 @@
+fn main()
+	var x = y
+	var rec = 2
+

@@ -1,0 +1,5 @@
+fn main()
+	one(5)
+
+fn one(x: str)
+

@@ -10,25 +10,48 @@ mod llr;
 mod lower;
 mod parser;
 
-use parser::fmt_vec;
-
 #[derive(Debug)]
 pub enum CompileError {
     Parse(Vec<parser::ParseError>),
-    Lower(lower::LowerError),
+    Lower(Vec<lower::LowerError>),
 }
 impl std::fmt::Display for CompileError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use CompileError::*;
         match self {
-            Parse(errs) => write!(f, "{}", fmt_vec(errs)),
-            Lower(err) => write!(f, "{}", err),
+            Parse(errs) => write!(f, "{}", fmt_vec_with(errs, "[ERROR] ")),
+            Lower(errs) => write!(f, "{}", fmt_vec_with(errs, "[ERROR] ")),
         }
     }
 }
 // All relevant details in Display and Debug
 impl std::error::Error for CompileError {}
 type Result<T> = std::result::Result<T, CompileError>;
+
+pub fn fmt_vec<T: std::fmt::Display>(vec: &[T]) -> String {
+    fmt_vec_with(vec, "")
+}
+pub fn fmt_vec_with<T: std::fmt::Display>(vec: &[T], with: &str) -> String {
+    vec.iter().map(|e| format!("{}{}", with, e)).collect::<Vec<String>>().join("\n")
+}
+
+fn vec_errs_to_res<T, E>(
+    vec: Vec<std::result::Result<T, Vec<E>>>,
+) -> std::result::Result<Vec<T>, Vec<E>> {
+    let mut oks = vec![];
+    let mut errs = vec![];
+    for mut entry in vec {
+        match entry {
+            Ok(o) => oks.push(o),
+            Err(ref mut e) => errs.append(e),
+        }
+    }
+    if !errs.is_empty() {
+        Err(errs)
+    } else {
+        Ok(oks)
+    }
+}
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum TokenType {

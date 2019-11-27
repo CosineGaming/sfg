@@ -7,7 +7,7 @@
 
 // We're racing to hello world so there's a lot commented out
 
-use super::Type;
+use crate::{fmt_vec, Type};
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct LLR {
@@ -63,5 +63,36 @@ pub type Label = usize;
 impl LLR {
     pub fn new() -> Self {
         Self { fns: vec![], extern_fns: vec![], strings: vec![] }
+    }
+}
+impl std::fmt::Display for LLR {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        // TODO find a way to display where in the code these are
+        write!(
+            f,
+            "\nFNS:\n{}\nEXTERNS:\n{}\nSTRINGS:\n{:?}",
+            fmt_vec(&self.fns),
+            fmt_vec(&self.extern_fns),
+            fmt_vec(&self.strings)
+        )
+    }
+}
+impl std::fmt::Display for Fn {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f, "{}", self.signature)?;
+        for inst in &self.instructions {
+            // eh don't bother with display the names are perfect
+            writeln!(f, "{:?}", inst)?;
+        }
+        Ok(())
+    }
+}
+impl std::fmt::Display for Signature {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "fn {}(", self.name)?;
+        for param in &self.parameters {
+            write!(f, "{}, ", param)?;
+        }
+        write!(f, ") {:?}", self.return_type)
     }
 }

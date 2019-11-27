@@ -1,6 +1,6 @@
 // This is the parser. yay.
 
-use crate::{ast::*, Span, Token, TokenType, Type};
+use crate::{ast::*, vec_errs_to_res, Span, Token, TokenType, Type};
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -16,31 +16,17 @@ impl std::fmt::Display for ParseError {
                 let expected_strings: Vec<String> =
                     expected.iter().map(|e| format!("{}", e)).collect();
                 let expected_str = expected_strings.join(", ");
-                write!(f, "[ERROR] expected {}, got {} at {}", expected_str, got.kind, got.span)
+                write!(f, "expected {}, got {} at {}", expected_str, got.kind, got.span)
             }
-            EOF(parsing) => write!(f, "[ERROR] unexpected EOF parsing {}", parsing),
+            EOF(parsing) => write!(f, "unexpected EOF parsing {}", parsing),
         }
     }
-}
-pub fn fmt_vec<T: std::fmt::Display>(vec: &Vec<T>) -> String {
-    vec.iter().map(|e| format!("{}", e)).collect::<Vec<String>>().join("\n")
 }
 // All relevant details in Display and Debug
 impl std::error::Error for ParseError {}
 impl ParseError {
     fn v(self) -> Vec<Self> {
         vec![self]
-    }
-}
-
-#[cfg(test)]
-fn dexpect<T>(res: Result<T>) -> T {
-    match res {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("{}", fmt_vec(&e));
-            panic!("unexpected parse error");
-        }
     }
 }
 
@@ -103,25 +89,9 @@ macro_rules! resolve1 {
 macro_rules! resolve {
     ( $($ident:ident),+$(;)?$($resarray:ident),* ) => {
         $(
-            let mut $resarray = vec_to_res($resarray);
+            let mut $resarray = vec_errs_to_res($resarray);
         )*
         resolve1!($($ident),+$(,$resarray)*)
-    }
-}
-
-fn vec_to_res<T>(vec: Vec<Result<T>>) -> Result<Vec<T>> {
-    let mut oks = vec![];
-    let mut errs = vec![];
-    for mut entry in vec {
-        match entry {
-            Ok(o) => oks.push(o),
-            Err(ref mut e) => errs.append(e),
-        }
-    }
-    if !errs.is_empty() {
-        Err(errs)
-    } else {
-        Ok(oks)
     }
 }
 
@@ -184,7 +154,7 @@ fn parse_id(rtokens: &mut Tokens, type_required: bool) -> Result<Id> {
         TokenType::Identifier(name) => name,
         _ => panic!("identifier wasn't identifier (compiler bug)"),
     };
-    Ok(Id { name, id_type: id_type, span: id_span })
+    Ok(Id { name, id_type, span: id_span })
 }
 
 fn token_to_binary_op(token: Option<Token>) -> Result<BinaryOp> {
@@ -308,7 +278,7 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
         }
     })??;
     // Then we try to parse a binary expression with it
-    match token_to_binary_op(rtokens.last().and_then(|t| Some(t.clone()))) {
+    match token_to_binary_op(rtokens.last().map(Token::clone)) {
         Ok(_) => Ok(Expression::Binary(Box::new(parse_binary(rtokens, left)?))),
         // If not, it's just a unary one
         Err(_) => Ok(left),
@@ -347,7 +317,7 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
         });
     }
     // can't continue without name, must resolve errors
-    let mut arguments = vec_to_res(arguments);
+    let mut arguments = vec_errs_to_res(arguments);
     resolve!(arguments);
     let name = match token.kind {
         TokenType::Identifier(s) => s,
@@ -443,7 +413,7 @@ fn parse_if(rtokens: &mut Tokens, tabs: usize) -> Result<If> {
             }
         }) {
             // convert Result<Vec<Result<>>> to Result<Vec<>>
-            Ok(else_statements) => else_statements.and_then(vec_to_res),
+            Ok(else_statements) => else_statements.and_then(vec_errs_to_res),
             // indent but no else
             Err(_) => Ok(vec![]),
         }
@@ -618,12 +588,7 @@ fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Vec<Result<
         // on error we want to skip to the next statement because we know this isn't valid
         if statement.is_err() {
             // delete until newline
-            loop {
-                match expect_token(rtokens, TokenType::Newline, "") {
-                    Ok(_) => break,
-                    Err(_) => (),
-                }
-            }
+            while expect_token(rtokens, TokenType::Newline, "").is_err() {}
         }
         statements.push(statement);
     }
@@ -650,11 +615,7 @@ pub fn parse(mut tokens: Vec<Token>) -> Result<AST> {
     let mut rtokens = Tokens(tokens);
     let mut ast_res = vec![];
     // Every token
-    loop {
-        let t = match rtokens.last() {
-            Some(t) => t,
-            None => break,
-        };
+    while let Some(t) = rtokens.last() {
         let expect = expect_any!("global space", Some(t) => {
             // Parse a function
             Fn => ast_res.push(parse_fn(&mut rtokens).and_then(|f| Ok(ASTNode::Fn(f)))),
@@ -671,7 +632,7 @@ pub fn parse(mut tokens: Vec<Token>) -> Result<AST> {
             }
         }
     }
-    let mut ast = vec_to_res(ast_res);
+    let mut ast = vec_errs_to_res(ast_res);
     resolve!(ast);
     Ok(ast)
 }
@@ -701,6 +662,18 @@ impl Tokens {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::fmt_vec;
+
+    fn dexpect<T>(res: Result<T>) -> T {
+        match res {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("{}", fmt_vec(&e));
+                panic!("unexpected parse error");
+            }
+        }
+    }
+
     #[test]
     // This is NOT meant to test recursion, it's meant as a hello-world
     // that only uses function definition and calling, which means we have

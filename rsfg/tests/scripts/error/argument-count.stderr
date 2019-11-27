@@ -1,1 +1,2 @@
-function too_many (5:4) expected 1 arguments, got 2 at 2:2
+[ERROR] function too_many (5:4) expected 1 arguments, got 2 at 2:2
+[ERROR] function too_few (7:4) expected 2 arguments, got 1 at 3:2

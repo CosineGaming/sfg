@@ -47,10 +47,10 @@ impl Fn {
 }
 
 fn i_as_f(what: i32) -> f32 {
-    unsafe { std::mem::transmute(what) }
+    f32::from_bits(what as u32)
 }
 fn f_as_i(what: f32) -> i32 {
-    unsafe { std::mem::transmute(what) }
+    f32::to_bits(what) as i32
 }
 fn pop_f(stack: &mut Vec<i32>) -> f32 {
 	i_as_f(stack.pop().unwrap())
