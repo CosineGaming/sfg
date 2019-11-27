@@ -1,0 +1,11 @@
+// we carefully notate the stack balance on this with returns
+// to test stack balance of calling
+
+fn main()
+	one(5)            // push            =  1
+//                    // pop
+
+fn one(x: int) int
+	var y = 2         // pop             = -1
+	return 4          // push, pop, pop  = -1
+

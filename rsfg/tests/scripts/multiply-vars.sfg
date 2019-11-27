@@ -1,0 +1,4 @@
+fn main()
+	var x = 5
+	assert((30 - (x * 6)) == 0)
+

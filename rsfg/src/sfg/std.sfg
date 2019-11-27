@@ -69,33 +69,30 @@ fn rec_logi(what: int)
 	if what > 9
 		// print the rest of the number first
 		var tens = what / 10
-		assert(tens < what)
 		rec_logi(tens)
-		assert(tens < what)
 		// only ones remaining
 		what -= tens * 10
-		assert(what < 10)
-	// TODO: this is a fucking joke LMAOOOO
+	// TODO: this is a fucking joke LMAOOOO (support dynamic strings or at least character log)
 	if what == 0
-		log("0")
+		log_opts("0", false)
 	if what == 1
-		log("1")
+		log_opts("1", false)
 	if what == 2
-		log("2")
+		log_opts("2", false)
 	if what == 3
-		log("3")
+		log_opts("3", false)
 	if what == 4
-		log("4")
+		log_opts("4", false)
 	if what == 5
-		log("5")
+		log_opts("5", false)
 	if what == 6
-		log("6")
+		log_opts("6", false)
 	if what == 7
-		log("7")
+		log_opts("7", false)
 	if what == 8
-		log("8")
+		log_opts("8", false)
 	if what == 9
-		log("9")
+		log_opts("9", false)
 
 @fn _log(what: str)
 

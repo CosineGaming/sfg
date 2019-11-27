@@ -1,0 +1,10 @@
+// returns mess up the stack balance sometimes
+// for easy testing without vm we have a script with no returns
+fn main()
+	var x = 5
+	if true
+		var y = 12
+	while x > 0
+		var _ = 2
+		x -= 1
+
