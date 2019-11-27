@@ -116,7 +116,7 @@ impl Thread {
                 };
                 assert_eq!(func.ip, 0, "extern fn call calling non-extern function");
                 match &name[..] {
-                    "log" => sfg_std::log(self),
+                    "_log" => sfg_std::log(self),
                     _ => {
                         panic!("special reflection business not yet supported and stdlib not found")
                     }

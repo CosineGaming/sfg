@@ -79,7 +79,7 @@ impl<'src> Lexer<'src> {
         match self.rchars.pop() {
             None => EOF,
             Some(c) => match c {
-                'A'..='Z' | 'a'..='z' => SymbolOrId(c),
+                'A'..='Z' | 'a'..='z' | '_' => SymbolOrId(c),
                 '@' => ExternFnOrExternCall,
                 '=' => AssignmentOrEquals,
                 '!' => NotOrEquals,

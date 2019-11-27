@@ -222,8 +222,10 @@ fn lower_loop(
     insts.append(&mut expression_to_push(state, &loop_data.condition, 0));
     insts.push(Ok(llr::Instruction::JumpZero(end)));
     lower_scope_begin(state);
-    insts.append(&mut lower_statements(state, &loop_data.statements, parent_signature));
-    // Immediately all go out of scope
+    {
+        insts.append(&mut lower_statements(state, &loop_data.statements, parent_signature));
+        // Immediately all go out of scope
+    }
     insts.append(&mut lower_scope_end(state));
     // Jump back to conditional, regardless
     // Lacking a Jump command, we push zero and then JumpZero
@@ -360,13 +362,13 @@ fn expression_to_push(
                     _ => insts.push(type_error),
                 },
                 Times => {
-                    // Translate 4*5 to internal_times(4,5)
+                    // Translate 4*5 to _times(4,5)
                     // This might be cleaner in a "sugar" / parser-side change
                     // TODO: obviously lacking Times instruction is slow af
                     // Also we could ditch the lower_fn_call and just add a FnCall
                     // instruction and then we could skip the push conditional up above
                     let call = FnCall {
-                        name: Id::fake("internal_times"),
+                        name: Id::fake("_times"),
                         arguments: vec![expr.left.clone(), expr.right.clone()],
                         span: expr.span,
                     };
@@ -376,7 +378,7 @@ fn expression_to_push(
                 And => {
                     // TODO: use multiply-generic? Or instruction?
                     let call = FnCall {
-                        name: Id::fake("internal_and"),
+                        name: Id::fake("_and"),
                         arguments: vec![expr.left.clone(), expr.right.clone()],
                         span: expr.span,
                     };
@@ -384,10 +386,10 @@ fn expression_to_push(
                 }
                 NotEqual => (),
                 Divide => {
-                    // Translate 10/2 to internal_divide(10, 2)
+                    // Translate 10/2 to _divide(10, 2)
                     // TODO: implement real divide (?)
                     let call = FnCall {
-                        name: Id::fake("internal_divide"),
+                        name: Id::fake("_divide"),
                         arguments: vec![expr.left.clone(), expr.right.clone()],
                         span: expr.span,
                     };
@@ -636,14 +638,17 @@ fn lower_statement(
                 }
                 Err(e) => insts.push(Err(e)),
             }
-            lower_scope_begin(state);
-            let mut push_condition = expression_to_push(state, &if_stmt.condition, 0);
-            let mut if_block = lower_statements(state, &if_stmt.statements, signature);
-            let mut else_block = lower_statements(state, &if_stmt.else_statements, signature);
-            insts.append(&mut push_condition);
+            // N.B. storing instructions considered harmful, believe it or not (scope issues possible)
+            // CONDITION
+            insts.append(&mut expression_to_push(state, &if_stmt.condition, 0));
             let else_start = state.get_label();
             insts.push(Ok(llr::Instruction::JumpZero(else_start)));
-            insts.append(&mut if_block);
+            // IF BLOCK
+            lower_scope_begin(state);
+            {
+                insts.append(&mut lower_statements(state, &if_stmt.statements, signature));
+            }
+            insts.append(&mut lower_scope_end(state));
             // CHECK: does creating a label you might not use, fuck things up? So far, no
             let else_end = state.get_label();
             // Don't bother with jump if no statements in else
@@ -655,10 +660,14 @@ fn lower_statement(
             }
             insts.push(Ok(llr::Instruction::LabelMark(else_start)));
             if !if_stmt.else_statements.is_empty() {
-                insts.append(&mut else_block);
+                // ELSE BLOCK
+                lower_scope_begin(state);
+                {
+                    insts.append(&mut lower_statements(state, &if_stmt.else_statements, signature));
+                }
+                insts.append(&mut lower_scope_end(state));
                 insts.push(Ok(llr::Instruction::LabelMark(else_end)));
             }
-            insts.append(&mut lower_scope_end(state));
             insts
         }
         Statement::WhileLoop(loop_data) => lower_loop(state, loop_data, signature),
@@ -711,7 +720,7 @@ fn lower_fn_statements(state: &mut LowerState, func: &Fn) -> InstResult {
     insts.append(&mut lower_statements(state, &func.statements, &func.signature));
     let last_statement_return = match insts.last() {
         Some(Ok(inst)) => inst == &llr::Instruction::Return,
-        None => false, // no last statement, isn't return
+        None => false,   // no last statement, isn't return
         Some(_) => true, // error, give true for easier recovery
     };
     // Add implied returns
@@ -740,19 +749,21 @@ fn lower_signature(signature: &Signature) -> llr::Signature {
 
 fn lower_fn(state: &mut LowerState, func: &Fn) -> Result<llr::Fn> {
     lower_scope_begin(state);
-    for param in &func.signature.parameters {
-        state.locals.last_mut().unwrap().insert(
-            param.name.clone(),
-            param.id_type.expect("untyped parameter let through parser"),
-        );
-    }
-    let rv = llr::Fn {
-        instructions: vec_to_res(lower_fn_statements(state, func))?,
-        signature: lower_signature(&func.signature),
-    };
-    // fn return doesn't pop locals
-    state.locals.pop();
-    Ok(rv)
+    {
+        for param in &func.signature.parameters {
+            state.locals.last_mut().unwrap().insert(
+                param.name.clone(),
+                param.id_type.expect("untyped parameter let through parser"),
+            );
+        }
+        let rv = llr::Fn {
+            instructions: vec_to_res(lower_fn_statements(state, func))?,
+            signature: lower_signature(&func.signature),
+        };
+        // fn return doesn't pop locals
+        state.locals.pop();
+        Ok(rv)
+    } // note missing scope end (must be careful about returns)
 }
 
 pub fn lower(ast: AST) -> Result<llr::LLR> {
@@ -774,7 +785,7 @@ pub fn lower(ast: AST) -> Result<llr::LLR> {
         Ok(o) => o,
         Err(mut e) => {
             e.dedup();
-            return Err(e)
+            return Err(e);
         }
     };
     out.extern_fns = externs;

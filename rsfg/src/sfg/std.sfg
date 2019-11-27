@@ -15,14 +15,14 @@
 // This file is implementations of section (a) of (1) and all the externs of (2)
 
 // TODO: negatives (for divide as well)
-fn internal_times(left: int, right: int) int
+fn _times(left: int, right: int) int
 	var total = 0
 	while right
 		total += left
 		right -= 1
 	return total
 
-fn internal_divide(left: int, right: int) int
+fn _divide(left: int, right: int) int
 	if right == 0
 		panic() // divide by zero error
 	var count = 0
@@ -31,7 +31,7 @@ fn internal_divide(left: int, right: int) int
 		count += 1
 	return count
 
-fn internal_and(left: bool, right: bool) bool
+fn _and(left: bool, right: bool) bool
 	if left
 		return true
 	if right
@@ -48,5 +48,54 @@ fn abs(what: float) float
 		what = 0f - what
 	return what
 
-@fn log(what: str)
+// default with \n
+fn log(what: str)
+	log_opts(what, true)
+
+fn log_opts(what: str, newline: bool)
+	_log(what)
+	// working with what we have
+	// TODO \n etc
+	if newline
+    	_log("
+")
+
+// TODO: operator overloading? or generics?
+fn logi(what: int)
+	rec_logi(what)
+	log("")
+
+fn rec_logi(what: int)
+	if what > 9
+		// print the rest of the number first
+		var tens = what / 10
+		assert(tens < what)
+		rec_logi(tens)
+		assert(tens < what)
+		// only ones remaining
+		what -= tens * 10
+		assert(what < 10)
+	// TODO: this is a fucking joke LMAOOOO
+	if what == 0
+		log("0")
+	if what == 1
+		log("1")
+	if what == 2
+		log("2")
+	if what == 3
+		log("3")
+	if what == 4
+		log("4")
+	if what == 5
+		log("5")
+	if what == 6
+		log("6")
+	if what == 7
+		log("7")
+	if what == 8
+		log("8")
+	if what == 9
+		log("9")
+
+@fn _log(what: str)
 

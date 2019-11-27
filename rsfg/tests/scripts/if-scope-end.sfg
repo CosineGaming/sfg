@@ -1,0 +1,8 @@
+// found while debugging logi
+
+fn main()
+	var y = 4
+	if false
+		var x = 5
+	assert(y == 4)
+

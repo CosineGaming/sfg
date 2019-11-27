@@ -1,0 +1,8 @@
+fn main()
+	assert(sum(5) == 15)
+
+fn sum(what: int) int
+	if what == 0
+		return 0
+	return what + sum(what - 1)
+
