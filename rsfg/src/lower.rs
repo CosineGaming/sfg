@@ -135,16 +135,14 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> OneResult<Type>
                 },
                 Type::Int => match expr.op {
                     Equal | NotEqual | Greater | GreaterEqual | Less | LessEqual => Type::Bool,
-                    Plus | Minus | Times => left,
-                    Divide => unimplemented!("divide"),
+                    Plus | Minus | Times | Divide => left,
                     And | Or => return fail,
                 },
                 Type::Float => match expr.op {
                     Equal | NotEqual | Greater | GreaterEqual | Less | LessEqual => Type::Bool,
                     Plus | Minus => left,
                     // TODO: add greater / less
-                    Times => return fail,
-                    Divide => unimplemented!("divide"),
+                    Times | Divide => return fail,
                     And | Or => return fail,
                 },
                 Type::Str => return fail,
@@ -276,7 +274,7 @@ fn expression_to_push(
             let left_type = tryv!(expression_type(state, &expr.left));
             // Special cases (most binary ops follow similar rules)
             match expr.op {
-                Times | GreaterEqual | LessEqual | And => (),
+                Times | GreaterEqual | LessEqual | And | Divide => (),
                 NotEqual => {
                     let mut as_equals = expr.clone();
                     as_equals.op = Equal;
@@ -380,12 +378,21 @@ fn expression_to_push(
                     let call = FnCall {
                         name: Id::fake("internal_and"),
                         arguments: vec![expr.left.clone(), expr.right.clone()],
-                        span: Span::new(),
+                        span: expr.span,
                     };
                     insts.append(&mut lower_fn_call(state, &call, false))
                 }
                 NotEqual => (),
-                Divide => unimplemented!(),
+                Divide => {
+                    // Translate 10/2 to internal_divide(10, 2)
+                    // TODO: implement real divide (?)
+                    let call = FnCall {
+                        name: Id::fake("internal_divide"),
+                        arguments: vec![expr.left.clone(), expr.right.clone()],
+                        span: expr.span,
+                    };
+                    insts.append(&mut lower_fn_call(state, &call, false))
+                }
             };
             insts
         }
