@@ -32,12 +32,12 @@ pub struct Thread {
 #[derive(PartialEq, Clone, Debug)]
 pub struct Fn {
     // ip will be 0 for externs (TODO: make this safer)
-    ip: u32,
+    ip: usize,
     return_type: Option<Type>,
     parameters: Vec<Type>,
 }
 impl Fn {
-    pub fn new(ip: u32, return_type: Option<Type>, parameters: Vec<Type>) -> Self {
+    pub fn new(ip: usize, return_type: Option<Type>, parameters: Vec<Type>) -> Self {
         Self {
             ip,
             return_type,
@@ -59,7 +59,36 @@ fn push_f(stack: &mut Vec<i32>, f: f32) {
 	stack.push(f_as_i(f))
 }
 
+macro_rules! thread_assert {
+    ( $thread:ident, $cond:expr, $lit:literal $(,)? $($expr:expr),* ) => {
+        if !$cond {
+            $thread.thread_panic(&format!($lit, $($expr),*))
+        }
+    }
+}
+
+impl std::fmt::Display for Thread {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        for stack in vec![&vec![self.ip], &self.call_stack] {
+            for ip in stack {
+                for (name, func) in &self.fns {
+                    let begin = &func.ip;
+                    if ip > begin {
+                        writeln!(f, "{} ({})", name, begin)?;
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 impl Thread {
+    fn thread_panic(&self, msg: &str) -> ! {
+        println!("vm panic: {}\nBACKTRACE:\n{}", msg, self);
+        panic!("vm panic");
+    }
     pub fn new(code: Vec<u8>) -> Self {
         let mut ip = 0;
         if next(&code, &mut ip) != b'b'
@@ -112,13 +141,13 @@ impl Thread {
                 let index = read_u32(&self.code, &mut self.ip);
                 let (name, func) = match self.fns.get_index(index as usize) {
                     Some(tuple) => tuple,
-                    _ => panic!("could not find extern function at {}", index),
+                    _ => self.thread_panic(&format!("could not find extern function at {}", index)),
                 };
-                assert_eq!(func.ip, 0, "extern fn call calling non-extern function");
+                thread_assert!(self, func.ip == 0, "extern fn call calling non-extern function");
                 match &name[..] {
                     "_log" => sfg_std::log(self),
                     _ => {
-                        panic!("special reflection business not yet supported and stdlib not found")
+                        self.thread_panic("special reflection business not yet supported and stdlib not found")
                     }
                 };
             }
@@ -126,15 +155,15 @@ impl Thread {
                 let index = read_u32(&self.code, &mut self.ip);
                 let func = match self.fns.get_index(index as usize) {
                     Some((_name, func)) => func,
-                    _ => panic!("could not find function at {}", index),
+                    _ => self.thread_panic(&format!("could not find function at {}", index)),
                 };
                 // We do we push ip here and not in
-                // call_fn? because call_fn by user should not
+                // set_fn? because set_fn by user should not
                 // push to stack, it should allow exit
                 self.call_stack.push(self.ip);
                 if self.call_stack.len() > CALL_STACK_MAX_SIZE {
                     self.sane_state();
-                    panic!("call stack overflow (too much recursion?)");
+                    self.thread_panic("call stack overflow (too much recursion?)");
                 }
                 Self::set_fn(&mut self.ip, func);
             }
@@ -157,13 +186,16 @@ impl Thread {
             }
             Deser::Dup => {
                 let count = next(&self.code, &mut self.ip) as usize;
-                debug!("{:?}", count);
+                thread_assert!(self, count < self.stack.len(),
+                    "attempted to Dup with stack underflow {}", count);
                 // -1 because 0 means last but len() means last+1
                 let stack_elem = self.stack[self.stack.len() - count - 1];
                 self.stack.push(stack_elem);
             }
             Deser::Swap => {
                 let count = next(&self.code, &mut self.ip) as usize;
+                thread_assert!(self, count < self.stack.len(),
+                    "attempted to Swap with stack underflow {}", count);
                 // -1 because 0 means last but len() means last+1
                 let down_i = self.stack.len() - 1 - count;
                 let up_i = self.stack.len() - 1;
@@ -173,7 +205,7 @@ impl Thread {
                 let line = read_u32(&self.code, &mut self.ip);
                 let col = read_u32(&self.code, &mut self.ip);
                 self.sane_state();
-                panic!("sfg code panicked at line {}:{}", line, col);
+                self.thread_panic(&format!("sfg code panicked at line {}:{}", line, col));
             }
             Deser::Add => {
                 let a = self.stack.pop().unwrap();
@@ -212,7 +244,7 @@ impl Thread {
             | got @ Deser::FnHeader
             | got @ Deser::ExternFnHeader
             | got @ Deser::StringLit
-            | got @ Deser::Void => panic!("expected instruction, got {:?}", got),
+            | got @ Deser::Void => self.thread_panic(&format!("expected instruction, got {:?}", got)),
         }
         false
     }
@@ -227,7 +259,7 @@ impl Thread {
     // understand that Fn is contained within self
     fn set_fn(ip: &mut usize, func: &Fn) {
         assert_ne!(func.ip, 0, "tried to call extern function");
-        *ip = func.ip as usize;
+        *ip = func.ip;
     }
     fn run(&mut self) {
         loop {
@@ -258,7 +290,7 @@ impl Thread {
     pub fn call_name(&mut self, name: &str) {
         let func = match self.fns.get(name) {
             Some(func) => func,
-            None => panic!("could not find function {}", name),
+            None => self.thread_panic(&format!("could not find function {}", name)),
         };
         Self::set_fn(&mut self.ip, func);
         self.run();

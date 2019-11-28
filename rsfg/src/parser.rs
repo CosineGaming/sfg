@@ -290,7 +290,7 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
         Identifier(_,IDENT) => rtokens.pop().unwrap(),
     });
     // Arguments
-    let mut paren = expect_token(rtokens, TokenType::LParen, "fn call");
+    let mut paren = expect_token(rtokens, TokenType::LParen, "call");
     let mut arguments = vec![];
     // we need token and paren to exit early to prevent infinite loop
     resolve!(token, paren);
@@ -313,7 +313,7 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
                 }
                 e
             }
-            _ => return Err(ParseError::EOF("call".to_string()).v()),
+            _ => return Err(ParseError::EOF("arguments list".to_string()).v()),
         });
     }
     // can't continue without name, must resolve errors
@@ -588,7 +588,21 @@ fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Vec<Result<
         // on error we want to skip to the next statement because we know this isn't valid
         if statement.is_err() {
             // delete until newline
-            while expect_token(rtokens, TokenType::Newline, "").is_err() {}
+            loop {
+                let exp = expect_token(rtokens, TokenType::Newline, "indented block");
+                match exp {
+                    Ok(_) => break,
+                    Err(v) => {
+                        // fake vector error (sigh)
+                        let v = v.into_iter().next().unwrap();
+                        match v {
+                            ParseError::Expected(_,_) => (),
+                            // this is in a rollback of an error, no need to report
+                            ParseError::EOF(_) => break,
+                        }
+                    }
+                }
+            }
         }
         statements.push(statement);
     }

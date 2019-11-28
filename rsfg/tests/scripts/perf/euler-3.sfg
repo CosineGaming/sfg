@@ -1,0 +1,22 @@
+// i'm doing euler problems to help understand what's needed in the language
+// https://projecteuler.net/problem=3
+// The prime factors of 13195 are 5, 7, 13 and 29.
+// What is the largest prime factor of the number 600851475143 ?
+// that number is too big for i32 which i don't plan on changing so i've
+// moved the goalposts to calculate prime factorization of an arbitrary number i chose
+
+fn main()
+	var of = 1050 // 2 3 5 5 7
+	var factor = 0
+	while of > 1
+		factor = 2
+		// USEFUL break
+		var running = true
+		while (factor <= of) && running
+			if mod(of, factor) == 0
+				of /= factor
+				running = false
+			else
+    			factor += 1 // don't bother checking prime it's not faster (??)
+    assert(factor == 7)
+

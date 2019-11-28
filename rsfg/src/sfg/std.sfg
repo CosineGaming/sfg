@@ -33,9 +33,8 @@ fn _divide(left: int, right: int) int
 
 fn _and(left: bool, right: bool) bool
 	if left
-		return true
-	if right
-		return true
+		if right 
+			return true
 	return false
 
 fn epsilon_eq(left: float, right: float) bool
@@ -48,6 +47,9 @@ fn abs(what: float) float
 		what = 0f - what
 	return what
 
+fn mod(a: int, b: int) int
+	return a - ((a / b) * b)
+
 // default with \n
 fn log(what: str)
 	log_opts(what, true)
@@ -57,7 +59,7 @@ fn log_opts(what: str, newline: bool)
 	// working with what we have
 	// TODO \n etc
 	if newline
-    	_log("
+		_log("
 ")
 
 // TODO: operator overloading? or generics?

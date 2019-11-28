@@ -198,7 +198,7 @@ fn test_errors() {
             if !out_path.is_file() {
                 panic!(
                     "no expected output for test at {}. to interactively populate:
-cargo run -- --update-tests GARBAGE",
+cargo run -- --update-tests",
                     out_path.to_string_lossy()
                 );
             }

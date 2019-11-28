@@ -147,7 +147,7 @@ pub fn read_fn_header(code: &[u8], mut ip: &mut usize, is_extern: bool) -> (Stri
     let codeloc = if is_extern {
         0
     } else {
-        read_u32(code, &mut ip)
+        read_u32(code, &mut ip) as usize
     };
     let func = Fn::new(codeloc, return_type, parameters);
     (name, func)

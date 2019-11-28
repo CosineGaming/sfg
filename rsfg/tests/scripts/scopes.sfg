@@ -9,4 +9,8 @@ fn main()
 		// will fail stack-balance if loop scopes don't work
 		var y = 2
 		x -= 1
+	var affect = 4
+	if true
+		affect = 3
+	assert(affect == 3)
 

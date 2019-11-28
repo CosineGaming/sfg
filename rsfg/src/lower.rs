@@ -15,6 +15,7 @@ pub enum LowerError {
     UnknownFn(Id),
     UnknownIdent(Id),
     NoOperation(BinaryOp, Type, Span),
+    Shadow(Id),
 }
 impl std::fmt::Display for LowerError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -48,6 +49,9 @@ impl std::fmt::Display for LowerError {
             }
             NoOperation(op, on_type, span) => {
                 write!(f, "no operation {:?} for {} at {}", op, on_type, span)
+            }
+            Shadow(id) => {
+                write!(f, "shadowing is illegal within the same scope with {} at {}", id.name, id.span)
             }
         }
     }
@@ -487,6 +491,7 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
         }
     };
     if !state.error_state {
+        #[cfg(debug_assertions)]
         debug_assert_eq!(state.stack_length - 1, old_plus);
     }
     insts
@@ -601,8 +606,10 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> I
         let mut push = expression_to_push(state, arg);
         insts.append(&mut push);
     }
-    // to simulate the function's return so we just the stack pluses
-    state.stack_length -= call.arguments.len() as u8;
+    if !state.error_state {
+        // to simulate the function's return so we just the stack pluses
+        state.stack_length -= call.arguments.len() as u8;
+    }
     // Generate lowered call
     let fn_call = llr::FnCall { index, arg_count: call.arguments.len() as u8 };
     let call = if is_extern {
@@ -703,13 +710,10 @@ fn stack_search(state: &mut LowerState, name: &Id) -> OneResult<(u8, Type)> {
     // Assume not found until proven otherwise
     let mut forward = Err(LowerError::UnknownIdent(name.clone()));
     for scope in state.locals.iter() {
-        match scope.get_full(&name.name) {
-            Some((i, _, id_type)) => {
-                forward = Ok(((lower_scopes + i) as u8, *id_type));
-                // We use shadowing so keep searching for a closer one
-            }
-            None => ()
-        }
+        if let Some((i, _, id_type)) = scope.get_full(&name.name) {
+            forward = Ok(((lower_scopes + i) as u8, *id_type));
+            // We use shadowing so keep searching for a closer one
+        } // otherwise keep searching
         // track the lower scopes so when we get the final scope result we can get a total
         lower_scopes += scope.len();
     }
@@ -804,7 +808,16 @@ fn lower_statement(
             // have to change locals AFTER push ofc
             match expression_type(state, &decl.rvalue) {
                 Ok(o) => {
-                    state.locals.last_mut().unwrap().insert(decl.lvalue.name.clone(), o);
+                    // shadows within same scope are illegal
+                    // TODO: make shadows within any scope illegal(?)
+                    // best recovery for illegal shadow is to still insert new type
+                    // because most likely cause is "i thought they were legal"
+                    // so do what they expect
+                    if let Some(_) = state.locals.last_mut().unwrap().insert(decl.lvalue.name.clone(), o) {
+                        // TODO wouldn't it be nice if IndexMap held spans
+                        // so we could indicate who shadows it
+                        insts.push(state, Err(LowerError::Shadow(decl.lvalue.clone())));
+                    }
                 }
                 Err(e) => insts.push(state, Err(e)),
             }

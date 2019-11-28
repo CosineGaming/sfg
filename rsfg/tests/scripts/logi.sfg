@@ -1,3 +1,4 @@
 fn main()
+	logi(2)
 	logi(123)
 

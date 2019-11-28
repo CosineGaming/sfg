@@ -1,0 +1,265 @@
+// https://github.com/CosineGaming/entropy/blob/master/player.js
+// #update
+// implementing some game code in sfg to see what's important to /game code/
+// not math examples
+
+// NEED receive input to main
+fn main()
+	var touch_dir_x = 0
+	var touch_dir_y = 0
+	// WANT vector2 see a looooot here
+	var left_pointer_x = 0
+	var left_pointer_y = 0
+	var right_pointer_x = 0
+	var right_pointer_y = 0
+	// NEED input
+	// TODO ag WANT and NEED for this kinda stuff
+	// FAKE SHIMS
+	var game_input_pointer1_x = fake_input_int()
+	var game_input_pointer1_y = fake_input_int()
+	var game_input_pointer2_x = fake_input_int()
+	var game_input_pointer2_y = fake_input_int()
+	if game_input_pointer1_x > 160
+		right_pointer_x = game_input_pointer1_x
+		right_pointer_y = game_input_pointer1_y
+	else if game_input_pointer1_x != -1
+		left_pointer_x = game_input_pointer1_x
+		left_pointer_y = game_input_pointer1_y
+	// This line accounts for two pointers that are in the same half
+	// If the pointer2 is on the right and it's not to the left of the first pointer OR it's to the right of the left pointer
+	// WANT precedence
+	if ((game_input_pointer1_x > 160) && (((right_pointer_x == 0) && (right_pointer_x == 0)) || right_pointer_x < game_input_pointer2_x)) || ((left_pointer_x != 0) && (left_pointer_y != 0) && (left_pointer_x < game_input_pointer2_x))
+		right_pointer_x = game_input_pointer2_x
+		right_pointer_y = game_input_pointer2_y
+	// you know what. it's just hell. i just can't do this (TODO)
+	// especially not the _x and _ys. i guess it's time for vectors at least
+
+// shims to make the code build when i don't have what i need
+fn fake_input_int() int
+	return 0
+
+//	else if (game.input.pointer2.x != -1)
+//	{
+//		leftPointer = game.input.pointer2;
+//	}
+//	if (!leftPointer && !rightPointer)
+//	{
+//		rightPointer = game.input.activePointer;
+//	}
+//
+//	// Portal interaction! Suprisingly complex
+//	var distance = 27;
+//	var holdFrames = 50;
+//	var withinDecreaseSpeed = 0.5;
+//	var decreaseSpeed = 2;
+//	var chargeKeep = 0.5;
+//	var preventMove = false;
+//	var preventShoot = false;
+//	// -1 and 1, for portalDown and portalUp
+//	for (var direction=-1; direction<=1; direction+=2)
+//	{
+//		// Level 1, no portal down, skip it
+//		if (direction == -1 && !this.portalDown)
+//			continue;
+//
+//		var portal = direction == -1 ? this.portalDown : this.portalUp;
+//
+//		// Complex logic to determine whether we're portaling
+//		// Are we near? Are we trying to act? (Are we clicking with a pointer or holding E?)
+//		var near = Phaser.Point.distance(this.body.center, portal.body.center) < distance;
+//		var point1 = Phaser.Point.distance(portal.body.center,  leftPointer) < distance &&  leftPointer.isDown;
+//		var point2 = Phaser.Point.distance(portal.body.center, rightPointer) < distance && rightPointer.isDown;
+//		var acting = point1 || point2 || actions.chargePortal.isDown;
+//		var counter = direction == -1 ? "d" : "u";
+//		if (near)
+//		{
+//			// If a pointer is clicking on a near portal,...
+//			// prevent{action} will be true and it will be cancelled
+//			if (point1 && near)
+//				preventMove = true;
+//			if (point2 && near)
+//				preventShoot = true;
+//			if (acting)
+//			{
+//				this.portalHold[counter]++;
+//				if (this.portalHold[counter] > holdFrames)
+//				{
+//					// Make it so we don't go immediately back down, but it still looks nice
+//					this.portalHold[counter] *= chargeKeep;
+//					// The more entropy increase per level, the more reason to go down a level
+//					entropy += 3 * direction;
+//					setLevel(level + direction);
+//				}
+//			}
+//			else
+//			{
+//				// We're not trying to portal, but we're near so decreases slower.
+//				this.portalHold[counter] -= withinDecreaseSpeed;
+//			}
+//		}
+//		else
+//		{
+//			// Decrease redness a lot, we are not within portal distance at all!
+//			this.portalHold[counter] -= decreaseSpeed;
+//		}
+//		if (this.portalHold[counter] < 0)
+//		{
+//			// Don't go into negatives and make it take forever to portal
+//			this.portalHold[counter] = 0;
+//		}
+//
+//		portal.tint = Phaser.Color.getColor(255, 255 * (1 - this.portalHold[counter] / holdFrames), 255 * (1 - this.portalHold[counter] / holdFrames));
+//
+//	}
+//
+//	if (leftPointer && leftPointer.isDown && !preventMove)
+//	{
+//		var dpadX = 25;
+//		var dpadY = 110;
+//		var dpadHS = 23;
+//		touchDirX = leftPointer.x - (dpadX + dpadHS) > 0 ? 1 : -1;
+//		touchDirY = leftPointer.y - (dpadY + dpadHS) > 0 ? 1 : -1;
+//	}
+//
+//	var speed = 18;
+//	var friction = .85;
+//	if (cursors.left.isDown || actions.left.isDown || touchDirX == -1)
+//	{
+//		this.body.velocity.x -= speed;
+//	}
+//	if (cursors.right.isDown || actions.right.isDown || touchDirX == 1)
+//	{
+//		this.body.velocity.x += speed;
+//	}
+//	if (cursors.up.isDown || actions.up.isDown || touchDirY == -1)
+//	{
+//		this.body.velocity.y -= speed * perspective;
+//	}
+//	if (cursors.down.isDown || actions.down.isDown || touchDirY == 1)
+//	{
+//		this.body.velocity.y += speed * perspective;
+//	}
+//	this.body.velocity.x *= friction;
+//	this.body.velocity.y *= friction;
+//	if (Math.abs(this.body.velocity.x) > 1 || Math.abs(this.body.velocity.y) > 1)
+//	{
+//		if (Math.abs(this.body.velocity.x) > Math.abs(this.body.velocity.y))
+//		{
+//			if (this.body.velocity.x > 0)
+//			{
+//				this.animations.play("walkRight");
+//			}
+//			else
+//			{
+//				this.animations.play("walkLeft");
+//			}
+//		}
+//		else
+//		{
+//			if (this.body.velocity.y > 0)
+//			{
+//				this.animations.play("walkDown");
+//			}
+//			else
+//			{
+//				this.animations.play("walkUp");
+//			}
+//		}
+//		this.onStop = "stand" + this.animations.currentAnim.name.substr(4);
+//	}
+//	else
+//	{
+//		this.animations.play(this.onStop);
+//	}
+//
+//	// Bullets
+//	var cool = 20;
+//	var charge = 5;
+//	var speed = 150;
+//	var mouseDown = rightPointer != -1 && rightPointer.isDown;
+//	if (mouseDown && !preventShoot)
+//	{
+//		if (this.bulletCharge < 0 && this.bulletCool <= 0)
+//		{
+//			this.bulletCharge = charge;
+//		}
+//	}
+//	this.lastDown = mouseDown;
+//	// Brings to -1 after first shot
+//	if (this.bulletCharge > 0)
+//	{
+//		this.bulletCharge -= 1;
+//	}
+//	if (this.bulletCharge == 0)
+//	{
+//		// this.bulletCharge = rate;
+//		var bullet = this.state.bullets.create(this.x + 10, this.y + 26, "bullet");
+//		bullet.checkWorldBounds = true;
+//		bullet.outOfBoundsKill = true;
+//		game.physics.arcade.enable(bullet);
+//		if (game.device.touch)
+//		{
+//			// dpad based shooting
+//			bullet.rotation = game.physics.arcade.moveToXY(bullet, bullet.x + rightPointer.x - 273, bullet.y + rightPointer.y - 133, speed);
+//		}
+//		else
+//		{
+//			// Shoot directly to mouse
+//			bullet.rotation = game.physics.arcade.moveToXY(bullet, rightPointer.x, rightPointer.y, speed);
+//		}
+//		this.bulletCool = cool;
+//		this.bulletCharge = -1;
+//	}
+//	if (this.bulletCool > 0)
+//	{
+//		this.bulletCool -= 1;
+//	}
+//
+//
+//	game.physics.arcade.collide(this, this.state.walls);
+//	game.physics.arcade.collide(this, this.portalUp);
+//	if (typeof this.state.portalDown != "undefned")
+//	{
+//		game.physics.arcade.collide(this, this.portalDown);
+//	}
+//
+//	game.physics.arcade.collide(this, this.state.monsters, function(player, monster)
+//	{
+//		if (monster.touchDamage > 0)
+//		{
+//			health -= monster.touchDamage;
+//			monster.aggressive = true;
+//		}
+//		else
+//		{
+//			monster.health += monster.touchDamage;
+//			monster.aggressive = false;
+//		}
+//	});
+//	game.physics.arcade.overlap(this, this.state.enemyBullets, function(player, bullet)
+//	{
+//		health -= bullet.strength;
+//		bullet.destroy();
+//	});
+//
+//	if (health <= 0)
+//	{
+//		health = 0;
+//		game.state.start("lose");
+//	}
+//
+//	health += 0.05;
+//	if (health > this.maxHealth)
+//	{
+//		health = this.maxHealth;
+//	}
+//
+//	this.healthBar.setPercent(100 * health / this.maxHealth);
+//	var percent = 100 * (1 - (this.bulletCool / cool));
+//	this.bulletBar.setPercent(percent);
+//
+//	this.state.sorted.sort("y", Phaser.Group.SORT_ASCENDING);
+//
+//}
+//
+//
