@@ -1,12 +1,9 @@
 rsfg
 ====
 
-This is a rust implementation of a compiler for `sfg`, and the original
-canonical one. For docs on the `sfg` language see ../lang/lang.md .
+`cargo run` for help.
 
-Because it's in early stages of development, rsfg implements a rough subset
-of the sfg language. The best way to find out what's *currently implemented*
-is the file tests/scripts/without-errors.sfg . As i add language features,
-i add them to this file as part of the testing process. Using this along
-with the language docs should be adequate information.
-
+This is the compiler for `sfg`. The best sfg docs are the extensive and intuitive
+test suite at [`tests/`](tests/). You can start with
+[`tests/scripts/tutorial.sfg`](tests/scripts/tutorial.sfg). there's also
+`cargo doc` for using the compiler as a library.
