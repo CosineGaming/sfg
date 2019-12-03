@@ -103,7 +103,13 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> OneResult<Type>
         Expression::Identifier(id) => match stack_search(state, id)? {
             (_, t) => t,
         },
-        Expression::Not(_) => Type::Bool,
+        Expression::Not(of) => {
+            match expression_type(state, of) {
+                Ok(Type::Bool) => Type::Bool,
+                Ok(what) => return Err(LowerError::MismatchedType(Type::Bool, of.full_span(), what, of.full_span())),
+                Err(e) => return Err(e),
+            }
+        }
         Expression::FnCall(func) => {
             let node = match state.fn_map.get(&func.name.name) {
                 Some(func) => func,
@@ -803,11 +809,11 @@ fn lower_statement(
         Statement::Declaration(decl) => {
             // Declaration is just a push where we change locals
             let mut insts = InstResults::default();
-            let mut rv = expression_to_push(state, &decl.rvalue);
-            insts.append(&mut rv);
             // have to change locals AFTER push ofc
             match expression_type(state, &decl.rvalue) {
                 Ok(o) => {
+                    let mut rv = expression_to_push(state, &decl.rvalue);
+                    insts.append(&mut rv);
                     // shadows within same scope are illegal
                     // TODO: make shadows within any scope illegal(?)
                     // best recovery for illegal shadow is to still insert new type

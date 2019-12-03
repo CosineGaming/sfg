@@ -1,0 +1,7 @@
+// INVISIBLE: Note that the indents here are four spaces
+
+fn main()
+    if true
+        return
+    panic()
+

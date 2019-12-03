@@ -1,0 +1,10 @@
+fn main()
+	if 5 == 5.0
+		panic()
+	var bool_times = false * true
+	var float_times = 2.0 * 3.0
+	var int_and = 5 && 6
+	var float_and = 5f && 6f
+	var str_eq = "this" == "this" // TODO support this instead of error
+	var str_minus = "one" - "two"
+
