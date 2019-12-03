@@ -1,0 +1,4 @@
+fn main()
+	if !"str"
+		panic()
+

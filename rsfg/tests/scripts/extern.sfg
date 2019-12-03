@@ -1,0 +1,6 @@
+fn main()
+	extern_of_int(5)
+
+// TODO: allow dropping identifier in externs
+fn @extern_of_int(_: int)
+
