@@ -8,12 +8,13 @@ use std::path::Path;
 const USAGE: &str = "
 rsfg command line interface
 
-Usage: rsfg [--run] <source> [dest]
-       rsfg [--update-tests]
+Usage: rsfg <source> [<dest>]
+       rsfg --run <source>
+       rsfg --update-tests
 
 Options:
-    -r, --run       Use rvmfg virtual machine to immediately run code
-    --update-tests  (DEBUG ONLY) Spawn interactive prompt to update stdout of tests if correct
+    -r, --run       [DEBUG ONLY] Use rvmfg virtual machine to immediately run code
+    --update-tests  [DEBUG ONLY] Spawn interactive prompt to update stdout of tests if correct
 ";
 
 fn get_stdlib() -> String {
@@ -52,7 +53,7 @@ fn main() {
         let mut thread = Thread::new(compiled);
         call![thread.main()];
     } else {
-        let out_path = args.get_str("[dest]"); // TODO i think this is broken
+        let out_path = args.get_str("<dest>");
         let out = if out_path == "" {
             script_path.with_extension("bcfg")
         } else {

@@ -777,7 +777,6 @@ fn lower_statement(
             // Don't bother with jump if no statements in else
             if !if_stmt.else_statements.is_empty() {
                 // if we executed if, don't execute else (jump to end of else)
-                // TODO: unconditional jump, rather than push zero jmp0
                 insts.push(state, Ok(llr::Instruction::Push(0)));
                 insts.push(state, Ok(llr::Instruction::JumpZero(else_end)));
             }
