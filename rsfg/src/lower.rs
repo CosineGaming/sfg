@@ -304,9 +304,13 @@ fn inst_stack(i: llr::Instruction) -> i8 {
         | JumpZero(_)
         | Add
         | Sub
+        | Mul
+        | Div
         | FAdd
         | FSub
         | FLess
+        | FMul
+        | FDiv
             => -1,
     }
 }
@@ -375,7 +379,7 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
             let left_type = tryv!(state, expression_type(state, &expr.left));
             // Special cases (most binary ops follow similar rules)
             match expr.op {
-                Times | GreaterEqual | LessEqual | And | Divide => (),
+                GreaterEqual | LessEqual | And => (),
                 NotEqual => {
                     let mut as_equals = expr.clone();
                     as_equals.op = Equal;
@@ -458,19 +462,16 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
                     Type::Float => insts.push(state, Ok(llr::Instruction::FSub)),
                     _ => insts.push(state, type_error),
                 },
-                Times => {
-                    // Translate 4*5 to _times(4,5)
-                    // This might be cleaner in a "sugar" / parser-side change
-                    // TODO: obviously lacking Times instruction is slow af
-                    // Also we could ditch the lower_fn_call and just add a FnCall
-                    // instruction and then we could skip the push conditional up above
-                    let call = FnCall {
-                        name: Id::fake("_times"),
-                        arguments: vec![expr.left.clone(), expr.right.clone()],
-                        span: expr.span,
-                    };
-                    insts.append(&mut lower_fn_call(state, &call, false))
-                }
+                Times => match left_type {
+                    Type::Int => insts.push(state, Ok(llr::Instruction::Mul)),
+                    Type::Float => insts.push(state, Ok(llr::Instruction::FMul)),
+                    _ => insts.push(state, type_error),
+                },
+                Divide => match left_type {
+                    Type::Int => insts.push(state, Ok(llr::Instruction::Div)),
+                    Type::Float => insts.push(state, Ok(llr::Instruction::FDiv)),
+                    _ => insts.push(state, type_error),
+                },
                 Or => insts.push(state, Ok(llr::Instruction::Add)),
                 And => {
                     // TODO: use multiply-generic? Or instruction?
@@ -482,16 +483,6 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
                     insts.append(&mut lower_fn_call(state, &call, false))
                 }
                 NotEqual => (),
-                Divide => {
-                    // Translate 10/2 to _divide(10, 2)
-                    // TODO: implement real divide (?)
-                    let call = FnCall {
-                        name: Id::fake("_divide"),
-                        arguments: vec![expr.left.clone(), expr.right.clone()],
-                        span: expr.span,
-                    };
-                    insts.append(&mut lower_fn_call(state, &call, false))
-                }
             };
             insts
         }

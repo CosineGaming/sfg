@@ -14,23 +14,6 @@
 //
 // This file is implementations of section (a) of (1) and all the externs of (2)
 
-// TODO: negatives (for divide as well)
-fn _times(left: int, right: int) int
-	var total = 0
-	while right
-		total += left
-		right -= 1
-	return total
-
-fn _divide(left: int, right: int) int
-	if right == 0
-		panic() // divide by zero error
-	var count = 0
-	while left >= right
-		left -= right
-		count += 1
-	return count
-
 fn _and(left: bool, right: bool) bool
 	if left
 		if right 

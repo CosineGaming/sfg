@@ -13,10 +13,13 @@ pub enum Type {
 #[derive(PartialEq, Eq, Debug)]
 pub enum Deser {
     Add,
+    Div,
     Dup,
     Equals,
     FAdd,
+    FDiv,
     FLess,
+    FMul,
     FSub,
     Less,
     ExternFnCall,
@@ -25,6 +28,7 @@ pub enum Deser {
     FnHeader,
     Panic,
     JumpZero,
+    Mul,
     Pop,
     Push,
     Return,
@@ -64,9 +68,15 @@ pub fn deser(what: u8) -> Option<Deser> {
         0x3e => Some(D::Swap),
         0x3f => Some(D::Less),
         // Float/?? 4x
+        0x40 => Some(D::FMul),
+        0x41 => Some(D::FDiv),
         0x4c => Some(D::FAdd),
         0x4d => Some(D::FSub),
         0x4f => Some(D::FLess),
+        // 5x is used for internal panics in rsfg
+        // 6x int instructions (ctd)
+        0x60 => Some(D::Mul),
+        0x61 => Some(D::Div),
         _ => None,
     }
 }
