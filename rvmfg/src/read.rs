@@ -109,11 +109,6 @@ pub fn read_i32(code: &[u8], ip: &mut usize) -> i32 {
     *ip += 4;
     rv
 }
-pub fn read_i8(code: &[u8], ip: &mut usize) -> i8 {
-    use std::mem::transmute;
-    let as_u8 = next(code, ip);
-    unsafe { transmute(as_u8) }
-}
 
 pub fn read_to_zero(code: &[u8], mut ip: &mut usize) -> Vec<u8> {
     let mut rv = Vec::new();
