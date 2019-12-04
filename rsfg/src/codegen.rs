@@ -141,14 +141,15 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
             Dup(what) | Swap(what) => code.push(*what),
             // is label
             LabelMark(label) => {
-                debug!("CODEGEN: label marked, \"{}\" refers to {}", label, code.len());
                 labels.marks.insert(*label, code.len());
             }
             // label argument
             JumpZero(label) => {
-                debug!("CODEGEN: label referred, at {} references \"{}\"", code.len(), label);
                 labels.refs.push((*label, code.len()));
-                code.push(serialize(Serializable::Placeholder));
+                // 4-byte jumps, which i choose simply to avoid needing a 16-bit deserialize method
+                for _ in 0..4 {
+                    code.push(serialize(Serializable::Placeholder));
+                }
             }
             // As simple as serializing the instruction
             Return | Pop | BAnd | BNot | Add | Sub | Mul | Div | FAdd | FSub | FLess | FMul | FDiv => {}
@@ -160,7 +161,6 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
 /// Should only be called ONCE, when everything has been generated
 fn resolve_labels(labeled: &mut LabeledCode) {
     for (label, location) in &labeled.labels.refs {
-        debug!("CODEGEN: trying to look up {}", label);
         let refers = labeled.labels.marks.get(&label).expect("referred to non-existent label");
         // Ensure that the ref location is in fact a placeholder byte
         assert_eq!(
@@ -168,19 +168,16 @@ fn resolve_labels(labeled: &mut LabeledCode) {
             serialize(Serializable::Placeholder),
             "tried to write label to non-placeholder"
         );
-        // Why do we add 1? because we've already popped location, so relative to the NEXT inst
-        labeled.code[*location] = i8_as_u8((*refers as isize - (*location + 1) as isize) as i8);
+        let bs = u32_bytes(*refers as u32);
+        for i in 0..4 {
+            labeled.code[location+i] = bs[i];
+        }
     }
 }
 
 fn u32_bytes(word: u32) -> [u8; 4] {
     use std::mem::transmute;
     unsafe { transmute(word.to_le()) }
-}
-
-fn i8_as_u8(what: i8) -> u8 {
-    use std::mem::transmute;
-    unsafe { transmute(what) }
 }
 
 /// fn_headers / sep | strings / fn_bodies
@@ -242,19 +239,25 @@ mod test {
         use super::{resolve_labels, serialize, LabeledCode, Labels, Serializable};
         use std::collections::HashMap;
         // Initial:
-        // ref byte 0: Placeholder
-        // mark byte 1: 'm'
+        // ref byte 0-3: Placeholder
+        // mark byte 4: 'm'
         // Expected:
-        // ref byte 0: 0
-        // mark byte 1: 'm'
+        // ref byte 0-3: 0
+        // mark byte 4: 'm'
         let mut marks = HashMap::new();
         let label = 2;
-        marks.insert(label, 1);
+        marks.insert(label, 4);
         let mut labeled = LabeledCode {
-            code: vec![serialize(Serializable::Placeholder), 'm' as u8],
+            code: vec![
+                serialize(Serializable::Placeholder),
+                serialize(Serializable::Placeholder),
+                serialize(Serializable::Placeholder),
+                serialize(Serializable::Placeholder),
+                b'm'
+            ],
             labels: Labels { marks, refs: vec![(label, 0)] },
         };
-        let expected = vec![0, 'm' as u8];
+        let expected = vec![4, 0, 0, 0, b'm'];
         resolve_labels(&mut labeled);
         assert_eq!(labeled.code, expected);
     }

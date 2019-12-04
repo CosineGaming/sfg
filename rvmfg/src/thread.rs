@@ -177,10 +177,10 @@ impl Thread {
                 self.stack.push((!a) as i32);
             }
             Deser::JumpZero => {
-                let amount = read_i8(&self.code, &mut self.ip);
+                let to = read_u32(&self.code, &mut self.ip);
                 let test = self.stack.pop().unwrap();
                 if test == 0 {
-                    self.ip = (self.ip as isize + amount as isize) as usize;
+                    self.ip = to as usize;
                 }
             }
             Deser::Dup => {

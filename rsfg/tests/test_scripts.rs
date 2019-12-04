@@ -1,6 +1,7 @@
 extern crate rsfg;
 use rsfg::{compile, CompileError};
 use std::path::Path;
+use std::error::Error;
 // We use rvmfg for convenient integration testing
 // Not a build dependency, just for this test.
 extern crate rvmfg;
@@ -59,7 +60,7 @@ fn decompile() {
             0x3c, // add
             0x30, 0x00, 0x00, 0x00, 0x00, // push 0 (false)
             0x39, // jump zero
-            0x0a, // by ten instructions to AFTER:
+            0x3b, 0x00, 0x00, 0x00, // to absolute point 59 (0x3b):
             // call log:
             0x30, 0x00, 0x00, 0x00, // push string lit
             0,    // string index
@@ -99,12 +100,16 @@ fn compile_safe(path: &Path) -> Vec<u8> {
     }
 }
 
-fn call_main(path: &Path) {
-    let bytecode = compile_safe(path);
-    let mut thread = Thread::new(bytecode);
-    call![thread.main()];
-    state_tests(&thread);
+#[derive(Debug)]
+struct StateError(usize, usize);
+impl std::fmt::Display for StateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "improper state, stack length was {}, call stack length was {}", self.0, self.1)
+    }
 }
+impl Error for StateError {}
+
+type ThreadResult = std::thread::Result<()>;
 
 // There are some additional tests we can make on all programs
 // Like assert various things about the final state of the program
@@ -112,78 +117,108 @@ fn call_main(path: &Path) {
 // This allows us to assume no returns
 // Note that there is a test in lower that checks for total push/pop balance
 // So a problem here should indicate a VM problem
-fn state_tests(thread: &Thread) {
-    assert_eq!(thread.stack.len(), 0);
-    assert_eq!(thread.call_stack.len(), 0);
+fn state_tests(thread: &Thread) -> Result<(), StateError> {
+    let tsl = thread.stack.len();
+    let tcsl = thread.call_stack.len();
+    if tsl != 0 || tcsl != 0 {
+        Err(StateError(tsl, tcsl))
+    } else {
+        Ok(())
+    }
 }
 
-fn run_in_dir(dir: &str) -> std::io::Result<()> {
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file() {
-            let pathstr = path.to_string_lossy();
-            println!("TESTING: {}", pathstr);
-            call_main(&path);
+fn show_failures(fails: Vec<ThreadResult>) -> ThreadResult {
+    let mut should_panic = false;
+    for fail in fails {
+        if let Err(e) = fail {
+            eprintln!("THERE WAS A FAILURE BUT NOT SURE HOW TO PRINT IT");
+            should_panic = true;
         }
+    }
+    if should_panic {
+        panic!()
     }
     Ok(())
 }
 
+fn show_successes(fails: Vec<ThreadResult>) -> ThreadResult {
+    let mut should_panic = false;
+    for fail in fails {
+        if let Ok(()) = fail {
+            eprintln!("a program succeeded");
+            should_panic = true;
+        }
+    }
+    if should_panic {
+        panic!()
+    }
+    Ok(())
+}
+
+fn test_dir(path: &'static str) -> Vec<ThreadResult> {
+    let mut failures = vec![];
+    for entry in std::fs::read_dir(path).unwrap() {
+        // unwrap too much error fuckery
+        let entry = entry.unwrap();
+        let path = entry.path();
+        if path.is_file() {
+            let pathstr = path.to_string_lossy();
+            println!("TESTING: {}", pathstr);
+            failures.push(run_test(&path));
+        }
+    }
+    failures
+}
+
 #[test]
-fn test_succeed() -> std::io::Result<()> {
+fn test_succeed() -> ThreadResult {
     ensure_log_init();
-    run_in_dir("tests/scripts")
+    let failures = test_dir("tests/scripts");
+    show_failures(failures)
 }
 
 // Ignore because these performance tests literally take a long time
 #[ignore]
 #[test]
-fn test_perf_tests() -> std::io::Result<()> {
+fn test_perf_tests() -> ThreadResult {
     // No log to accurately test perf - TODO: actually may still log if ran after logging one
-    run_in_dir("tests/scripts/perf")
+    let failures = test_dir("tests/scripts/perf");
+    show_failures(failures)
 }
 
-fn test_should_fail(entry: std::fs::DirEntry) {
+fn run_test(path: &Path) -> ThreadResult {
     use std::panic::{catch_unwind, AssertUnwindSafe};
-    let path = entry.path();
-    if path.is_file() {
-        let pathstr = path.to_string_lossy();
-        println!("TESTING (SHOULD PANIC): {}", pathstr);
-        // Compilation should succeed
-        let bytecode = compile_safe(&path);
-        // As well as LOADING into the vm
-        let mut thread = Thread::new(bytecode);
-        // &mut is not UnwindSafe so we wrap it because we test
-        // that panics are expected and properly handled by the VM
-        // https://doc.rust-lang.org/beta/std/panic/trait.UnwindSafe.html
-        let mut wrapped = AssertUnwindSafe(&mut thread);
-        // These should panic. The following construction ensures that
-        // We can't use call! because it adds additional &mut already wrapped
-        let result = catch_unwind(move || wrapped.call_name("main"));
-        assert!(result.is_err());
-        // These should PASS. Thus not wrappend in catch_unwind
-        state_tests(&thread);
-    }
+    // Compilation should succeed
+    let bytecode = compile_safe(&path);
+    // As well as LOADING into the vm
+    let mut thread = Thread::new(bytecode);
+    // &mut is not UnwindSafe so we wrap it because we test
+    // that panics are expected and properly handled by the VM
+    // https://doc.rust-lang.org/beta/std/panic/trait.UnwindSafe.html
+    let mut wrapped = AssertUnwindSafe(&mut thread);
+    // These should panic. The following construction ensures that
+    // We can't use call! because it adds additional &mut already wrapped
+    let result = catch_unwind(move || wrapped.call_name("main"));
+    // print the result in time so we can trace easier
+    println!("TEST RESULT for {}: {:?}", path.to_string_lossy(), result);
+    // These should PASS. Thus not wrappend in catch_unwind
+    //state_tests(&thread).map_err(|e| Box::new(e))?; // TODO: somehow idk how to type this
+    result
 }
 
 #[test]
-fn test_fails() -> std::io::Result<()> {
+fn test_fails() -> ThreadResult {
     ensure_log_init();
-    for entry in std::fs::read_dir("tests/scripts/fail")? {
-        test_should_fail(entry?);
-    }
-    Ok(())
+    let failures = test_dir("tests/scripts/fail");
+    show_successes(failures)
 }
 
 #[ignore]
 #[test]
-fn test_ignored_fails() -> std::io::Result<()> {
+fn test_ignored_fails() -> ThreadResult {
     // No log to speed up - TODO: actually may still log if ran after logging one
-    for entry in std::fs::read_dir("tests/scripts/fail/ignore")? {
-        test_should_fail(entry?);
-    }
-    Ok(())
+    let failures = test_dir("tests/scripts/fail/ignore");
+    show_successes(failures)
 }
 
 // errors / ui
