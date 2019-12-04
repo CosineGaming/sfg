@@ -42,11 +42,16 @@ fn serialize(what: Serializable) -> u8 {
         S::Instruction(I::Swap(_)) => 0x3e,
         S::Instruction(I::Less) => 0x3f,
         // Float/?? 4x
+        S::Instruction(I::FMul) => 0x40,
+        S::Instruction(I::FDiv) => 0x41,
         S::Instruction(I::FAdd) => 0x4c,
         S::Instruction(I::FSub) => 0x4d,
         S::Instruction(I::FLess) => 0x4f,
         // This should never be actually kept in the end
         S::Placeholder => 0x50,
+        // Overflow too many instructions 6x
+        S::Instruction(I::Mul) => 0x60,
+        S::Instruction(I::Div) => 0x61,
         S::Instruction(I::LabelMark(_)) => panic!("tried to serialize unresolved label"),
     };
     typier as u8
@@ -146,7 +151,7 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
                 code.push(serialize(Serializable::Placeholder));
             }
             // As simple as serializing the instruction
-            Return | Pop | Equal | Add | Sub | Less | FAdd | FSub | FLess => {}
+            Return | Pop | Equal | Add | Sub | Less | Mul | Div | FAdd | FSub | FLess | FMul | FDiv => {}
         }
     }
     LabeledCode { code, labels }

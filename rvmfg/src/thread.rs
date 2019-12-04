@@ -215,8 +215,17 @@ impl Thread {
             Deser::Sub => {
                 let a = self.stack.pop().unwrap();
                 let b = self.stack.pop().unwrap();
-                // The stack is placed in makes-sense order, we reverse
                 self.stack.push(b - a);
+            }
+            Deser::Mul => {
+                let a = self.stack.pop().unwrap();
+                let b = self.stack.pop().unwrap();
+                self.stack.push(b * a);
+            }
+            Deser::Div => {
+                let a = self.stack.pop().unwrap();
+                let b = self.stack.pop().unwrap();
+                self.stack.push(b / a);
             }
             Deser::FAdd => {
                 let a = pop_f(&mut self.stack);
@@ -232,6 +241,16 @@ impl Thread {
                 let a = pop_f(&mut self.stack);
                 let b = pop_f(&mut self.stack);
                 self.stack.push((b < a) as i32);
+            }
+            Deser::FMul => {
+                let a = pop_f(&mut self.stack);
+                let b = pop_f(&mut self.stack);
+                push_f(&mut self.stack, b * a);
+            }
+            Deser::FDiv => {
+                let a = pop_f(&mut self.stack);
+                let b = pop_f(&mut self.stack);
+                push_f(&mut self.stack, b / a);
             }
             Deser::Return => {
                 self.ip = match self.call_stack.pop() {
