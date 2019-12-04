@@ -242,14 +242,16 @@ impl InstResults {
     fn push(&mut self, state: &mut LowerState, inst: OneResult<llr::Instruction>) {
         // obviously we don't use _ here because any new instruction added
         // has to be classified here
-        let d: i8 = match inst {
+        let d: isize = match inst {
             Ok(o) => inst_stack(o),
             Err(_) => {
                 state.error_state = true; // if it's an error we're kinda boned
                 0
             }
         };
-        state.stack_length = (state.stack_length as i8 + d) as u8;
+        if !state.error_state {
+            state.stack_length = (state.stack_length as isize + d) as u8;
+        }
         self.0.push(inst);
     }
     // shadow append so we can't unsafely append a vec
@@ -284,7 +286,7 @@ impl From<LowerError> for InstResults {
     }
 }
 
-fn inst_stack(i: llr::Instruction) -> i8 {
+fn inst_stack(i: llr::Instruction) -> isize {
     use llr::Instruction::*;
     match i {
         | Push(_)
@@ -725,7 +727,9 @@ fn lower_return(
         // the stack_length would be incremented by this push, but because
         // it's already been processed by fn_call in context, to best continue
         // forward we undo the stack plus
-        state.stack_length -= 1;
+        if !state.error_state {
+            state.stack_length -= 1;
+        }
         // We want to preserve value from coming pops by moving it to the bottom
         insts.push(Ok(llr::Instruction::Swap(num_locals as u8)))
     }
@@ -992,7 +996,7 @@ mod test {
             })
             .unwrap();
         let fns = lowered.fns;
-        let mut balance: i8 = 0;
+        let mut balance = 0;
         for func in fns {
             for inst in func.instructions {
                 balance += inst_stack(inst);
