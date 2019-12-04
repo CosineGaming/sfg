@@ -35,40 +35,41 @@ fn decompile() {
     assert_hex(
         result,
         vec![
-            // bcfg
-            0x62, 0x63, 0x66, 0x67, // header for main:
-            // fn header
-            0x33, // return type: void
-            0x21, // parameter count
-            0,    // "main"
-            0x6d, 0x61, 0x69, 0x6e, // "\0"
-            0,    // codeloc (4b)
-            0x1c, 0x00, 0x00, 0x00, // header for log:
-            // extern fn header
-            0x34, // return type: void
-            0x21, // parameter count
-            1,    // parameters:
-            // type: string
-            0x11, // "log\0"
-            0x6c, 0x6f, 0x67, 0,    // string lit
-            0x32, // "hi\0"
-            0x68, 0x69, 0,    // push
-            0x30, // 8
-            0x08, 0x00, 0x00, 0x00, // push 8 again
-            0x30, 0x08, 0x00, 0x00, 0x00, // equals
-            0x38, // jump zero
-            0x39, // by one instruction (just the return) to AFTER:
-            0x01, // return
-            0x35, // AFTER:
+            // trailing comments on all lines to prevent rustfmt
+            0x62, 0x63, 0x66, 0x67, // bcfg magic number
+            // header for main:
+            0x33, // fn header
+            0x21, // return type: void
+            0,    // parameter count
+            0x6d, 0x61, 0x69, 0x6e, // "main"
+            0,    // "\0"
+            0x1c, 0x00, 0x00, 0x00, // codeloc
+            // header for log:
+            0x34, // extern fn header
+            0x21, // return type: void
+            1,    // parameter count
+            // parameters:
+            0x11, // type: string
+            0x6c, 0x6f, 0x67, 0, // "log\0"
+            0x32, // string lit
+            0x68, 0x69, 0, // "hi\0"
+            0x30, // push
+            0x08, 0x00, 0x00, 0x00, // 8
+            0x30, 0x08, 0x00, 0x00, 0x00, // push 8 again
+            0x3c, // add
+            0x30, 0x00, 0x00, 0x00, 0x00, // push 0 (false)
+            0x39, // jump zero
+            0x0a, // by ten instructions to AFTER:
             // call log:
-            // push string lit
-            0x30, 0x00, 0x00, 0x00, // string index
-            0,    // call extern log
-            0x31, // function index (4b)
-            // 1 (0:main, 1:log)
-            0x01, 0x00, 0x00, 0x00, // Return
-            0x35,
-        ],
+            0x30, 0x00, 0x00, 0x00, // push string lit
+            0,    // string index
+            0x31, // call extern log
+            // function index (4b)
+            0x01, 0x00, 0x00, 0x00, // 1 (0:main, 1:log)
+            // AFTER:
+            0x37, // Pop local x
+            0x35, // Return
+        ]
     );
 }
 
@@ -130,7 +131,7 @@ fn run_in_dir(dir: &str) -> std::io::Result<()> {
 }
 
 #[test]
-fn test_scripts() -> std::io::Result<()> {
+fn test_succeed() -> std::io::Result<()> {
     ensure_log_init();
     run_in_dir("tests/scripts")
 }

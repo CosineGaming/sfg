@@ -230,17 +230,12 @@ impl<'a> LowerState<'a> {
 }
 type UnsafeInstResults = Vec<std::result::Result<llr::Instruction, LowerError>>;
 // A regular vec except it keeps track of stack safety
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct InstResults(UnsafeInstResults);
 impl std::ops::Deref for InstResults {
     type Target = UnsafeInstResults;
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-impl std::ops::DerefMut for InstResults {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
     }
 }
 impl InstResults {
@@ -256,6 +251,10 @@ impl InstResults {
         };
         state.stack_length = (state.stack_length as i8 + d) as u8;
         self.0.push(inst);
+    }
+    // shadow append so we can't unsafely append a vec
+    fn append(&mut self, insts: &mut InstResults) {
+        self.0.append(&mut insts.0);
     }
     fn push_unsafe(&mut self, inst: OneResult<llr::Instruction>) {
         debug!("warning: pushing unsafe");
@@ -296,11 +295,11 @@ fn inst_stack(i: llr::Instruction) -> i8 {
         | Swap(_)
         | Return // ???
         | Panic(_, _)
+        | BNot
         | LabelMark(_)
             => 0,
         | Pop
-        | Equal
-        | Less
+        | BAnd
         | JumpZero(_)
         | Add
         | Sub
@@ -341,9 +340,56 @@ fn lower_loop(
     insts
 }
 
+// i hate that these are resulty but there's no clean way to integrate them not so
+fn or(state: &mut LowerState) -> InstResults {
+    // A|B = !(!A&!B)
+    use llr::Instruction::*;
+    InstResults::from_vec(state, vec![
+        // A B
+        Ok(BNot),
+        // A !B
+        Ok(Swap(1)),
+        // !B A
+        Ok(BNot),
+        // !B !A
+        Ok(BAnd),
+        // !B&!A ; NB eq !A&!B
+        // !(!A&!B)
+        Ok(BNot),
+    ])
+}
+
+fn xor(state: &mut LowerState) -> InstResults {
+    // A^B = (A&!B)|(!A&B)
+    use llr::Instruction::*;
+    let mut insts = InstResults::default();
+    // first compute the two terms of the or
+    insts.append(&mut InstResults::from_vec(state, vec![
+        // A B
+        Ok(Dup(1)),
+        Ok(BNot),
+        // A B !A
+        Ok(Dup(1)),
+        // A B !A B
+        Ok(BAnd),
+        // A B (!A&B)
+        Ok(Swap(2)),
+        // (!A&B) B A
+        Ok(Swap(1)),
+        // (!A&B) A B
+        Ok(BNot),
+        // (!A&B) A !B
+        Ok(BAnd),
+    ]));
+    // now or them
+    insts.append(&mut or(state));
+    insts
+}
+
 fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstResults {
     #[cfg(debug_assertions)]
     let old_plus = state.stack_length;
+    tryv!(state, expression_type(state, expression)); // failure to determine type is fatal, incorrect type is not
     let LowerState { strings, .. } = state;
     let insts = match expression {
         Expression::Literal(lit) => match lit.data {
@@ -357,12 +403,13 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
             LiteralData::Float(val) => InstResults::from_inst(state, llr::Instruction::Push(f_as_u(val))),
         },
         Expression::Not(expr) => {
-            let mut insts = InstResults::default();
-            // expr == false
-            insts.append(&mut expression_to_push(state, expr));
-            insts.push(state, Ok(llr::Instruction::Push(0)));
-            insts.push(state, Ok(llr::Instruction::Equal));
-            insts
+            // TODO: optimize != with Xor? Optimize at all?? lol
+            let call = FnCall {
+                name: Id::fake("_not"),
+                arguments: vec![*expr.clone()],
+                span: expr.full_span(),
+            };
+            lower_fn_call(state, &call, false)
         }
         // fn call leaves result on the stack which is exactly what we need
         Expression::FnCall(call) => lower_fn_call(state, call, false),
@@ -379,28 +426,19 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
             let left_type = tryv!(state, expression_type(state, &expr.left));
             // Special cases (most binary ops follow similar rules)
             match expr.op {
-                GreaterEqual | LessEqual | And => (),
-                NotEqual => {
-                    let mut as_equals = expr.clone();
-                    as_equals.op = Equal;
-                    let desugared = Expression::Not(Box::new(Expression::Binary(as_equals)));
-                    insts.append(&mut expression_to_push(state, &desugared));
-                }
-                Equal if Type::Float == left_type => {
-                    let desugared = Expression::FnCall(FnCall {
-                        name: Id { name: "epsilon_eq".to_string(), id_type: None, span: expr.span },
-                        arguments: vec![expr.left.clone(), expr.right.clone()],
-                        span: expr.span,
-                    });
-                    insts.append(&mut expression_to_push(state, &desugared));
-                }
+                // no prep, (mostly gonna desugar and try again)
+                And | Equal => (),
+                // depends on type
+                GreaterEqual | LessEqual if left_type == Type::Int => (),
+                NotEqual if left_type == Type::Float => (),
+                // otherwise we usual left/right
                 // Right, left, op-to-follow
-                // r l < == l r >
+                // (reverse to less)
                 Greater => {
                     insts.append(&mut expression_to_push(state, &expr.right));
                     insts.append(&mut expression_to_push(state, &expr.left));
                 }
-                // Left, right, op-to-follow
+                // Left, right, op-to-follow (usual)
                 _ => {
                     insts.append(&mut expression_to_push(state, &expr.left));
                     insts.append(&mut expression_to_push(state, &expr.right));
@@ -408,49 +446,45 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
             }
             let type_error = Err(LowerError::NoOperation(expr.op.clone(), left_type, expr.span));
             match expr.op {
-                Equal => match left_type {
-                    Type::Int | Type::Bool => insts.push(state, Ok(llr::Instruction::Equal)),
-                    Type::Float => (),
-                    _ => insts.push(state, type_error),
+                Equal => {
+                    // Even tho float and int have different NotEqual
+                    // implementations, we choose to implement NotEqual for
+                    // float instead of Eq to make this code sharable
+                    let mut not_eq = expr.clone();
+                    not_eq.op = NotEqual;
+                    let desugared = Expression::Not(Box::new(Expression::Binary(not_eq)));
+                    insts.append(&mut expression_to_push(state, &desugared))
                 },
                 // Arguments reversed previously
-                Greater => insts.push(state, Ok(llr::Instruction::Less)),
-                Less => insts.push(state, Ok(llr::Instruction::Less)),
-                GreaterEqual | LessEqual => {
-                    match expr.op {
-                        LessEqual => {
-                            insts.append(&mut expression_to_push(state, &expr.left));
-                            insts.append(&mut expression_to_push(
-                                state,
-                                &expr.right,
-                            ));
+                // implements Less (Greater has been reversed)
+                Greater | Less => {
+                    match left_type {
+                        Type::Int => {
+                            // Pos,0 => GreaterEqual, Neg => Less
+                            insts.push(state, Ok(llr::Instruction::Sub));
+                            // parity bit (32-bit only)
+                            insts.push(state, Ok(llr::Instruction::Push(0x8000)));
+                            // 0 => GreaterEqual, 0x8000 => Less
+                            insts.push(state, Ok(llr::Instruction::BAnd));
                         }
-                        GreaterEqual => {
-                            insts.append(&mut expression_to_push(state, &expr.right));
-                            insts.append(&mut expression_to_push(
-                                state,
-                                &expr.left,
-                            ));
+                        Type::Float => {
+                            insts.push(state, Ok(llr::Instruction::FLess))
                         }
                         _ => unreachable!(),
+                    }
+                }
+                GreaterEqual | LessEqual => {
+                    // Dummy the !this
+                    let op = match expr.op {
+                        GreaterEqual => Less,
+                        LessEqual => Greater,
+                        _ => unreachable!(),
                     };
-                    // Stack: l r
-                    // (if > then it's r l but assume < for now)
-                    // Duplicate left
-                    insts.push(state, Ok(llr::Instruction::Dup(1)));
-                    // Stack: l r l
-                    // Duplicate right (further forward now)
-                    insts.push(state, Ok(llr::Instruction::Dup(1)));
-                    // Stack: l r l r
-                    insts.push(state, Ok(llr::Instruction::Less));
-                    // Stack: l r <
-                    // Swap g to back
-                    insts.push(state, Ok(llr::Instruction::Swap(2)));
-                    // Stack: > l r
-                    insts.push(state, Ok(llr::Instruction::Equal));
-                    // Stack: > =
-                    // Or == Add
-                    insts.push(state, Ok(llr::Instruction::Add));
+                    let mut not = expr.clone();
+                    not.op = op;
+                    // note this requires boolean not, not bitwise not
+                    let actual = Expression::Not(Box::new(Expression::Binary(not)));
+                    insts.append(&mut expression_to_push(state, &actual));
                 }
                 Plus => match left_type {
                     Type::Int => insts.push(state, Ok(llr::Instruction::Add)),
@@ -474,7 +508,7 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
                 },
                 Or => insts.push(state, Ok(llr::Instruction::Add)),
                 And => {
-                    // TODO: use multiply-generic? Or instruction?
+                    // TODO: short-circuit
                     let call = FnCall {
                         name: Id::fake("_and"),
                         arguments: vec![expr.left.clone(), expr.right.clone()],
@@ -482,14 +516,27 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
                     };
                     insts.append(&mut lower_fn_call(state, &call, false))
                 }
-                NotEqual => (),
+                NotEqual => {
+                    match left_type {
+                        Type::Int | Type::Bool => insts.append(&mut xor(state)),
+                        Type::Float => {
+                            let desugared = Expression::FnCall(FnCall {
+                                name: Id { name: "_epsilon_not_eq".to_string(), id_type: None, span: expr.span },
+                                arguments: vec![expr.left.clone(), expr.right.clone()],
+                                span: expr.span,
+                            });
+                            insts.append(&mut expression_to_push(state, &desugared));
+                        }
+                        _ => insts.push(state, type_error),
+                    }
+                },
             };
             insts
         }
     };
     if !state.error_state {
         #[cfg(debug_assertions)]
-        debug_assert_eq!(state.stack_length - 1, old_plus);
+        debug_assert_eq!(state.stack_length, old_plus + 1, "{:?}\n{:#?}", expression, insts);
     }
     insts
 }
@@ -674,7 +721,7 @@ fn lower_return(
         (None, None) => (),
     }
     if let Some(expr) = expr {
-        insts.append(&mut expression_to_push(state, &expr));
+        insts.append(&mut expression_to_push(state, &expr).0);
         // the stack_length would be incremented by this push, but because
         // it's already been processed by fn_call in context, to best continue
         // forward we undo the stack plus
@@ -763,7 +810,6 @@ fn lower_statement(
                 insts.append(&mut lower_statements(state, &if_stmt.statements, signature));
             }
             insts.append(&mut lower_scope_end(state));
-            // CHECK: does creating a label you might not use, fuck things up? So far, no
             let else_end = state.get_label();
             // Don't bother with jump if no statements in else
             if !if_stmt.else_statements.is_empty() {

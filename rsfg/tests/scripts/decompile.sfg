@@ -3,11 +3,12 @@
 // The requirements behind this are essentially:
 // 1. short
 // 2. no std
+// 3. relatively stable
 
 fn main()
-	if 8 == 8
-		return
-	log("hi")
+	var x = 8 + 8
+	if false
+		log("hi")
 
 @fn log(what: str)
 

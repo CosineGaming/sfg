@@ -167,15 +167,14 @@ impl Thread {
                 }
                 Self::set_fn(&mut self.ip, func);
             }
-            Deser::Equals => {
+            Deser::BAnd => {
                 let a = self.stack.pop().unwrap();
                 let b = self.stack.pop().unwrap();
-                self.stack.push((a == b) as i32);
+                self.stack.push((a & b) as i32);
             }
-            Deser::Less => {
+            Deser::BNot => {
                 let a = self.stack.pop().unwrap();
-                let b = self.stack.pop().unwrap();
-                self.stack.push((b < a) as i32);
+                self.stack.push((!a) as i32);
             }
             Deser::JumpZero => {
                 let amount = read_i8(&self.code, &mut self.ip);
