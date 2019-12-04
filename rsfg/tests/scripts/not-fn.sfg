@@ -1,0 +1,12 @@
+// the actual thing that was failing here is returning in if statements or
+// any advanced scope. this was simply named as such because it was how i first
+// learned of the problem
+
+fn main()
+	assert(_not(false) == true)
+	assert(_not(true) == false)
+
+fn _not_reimp(what: bool) bool
+	if what
+		return false
+	return true

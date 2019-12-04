@@ -651,7 +651,7 @@ fn lower_return(
     expr: &Option<Expression>,
     signature: &Signature,
 ) -> InstResults {
-    let num_locals = state.locals.last().unwrap().len();
+    let num_locals = state.locals.iter().fold(0, |c, l| c + l.len());
     let mut insts = vec![];
     // Typecheck return value
     // None == None -> return == void
