@@ -1,25 +1,40 @@
 Scripting for Games
 ===================
 
-> A scripting language with strong static analysis and a minimal VM, made
-for game development
+> A performant scripting language with strong static analysis, made for
+game development
 
 This language is intended to script systems in an ECS scalably, safely,
 and cleanly. These are my goals:
 
-- Script-like
-	- New systems should have minimal boilerplate and be accessible to
+- Performant
+	- games are one of the most performance-critical softwares we
+	make these days
+- Script-like *
+	- new systems should have minimal boilerplate and be accessible to
 	tweak for low-experience programmers. Syntax matters
-- Strong static analysis, including static typing
-	- It shouldn't require triggering a logic path to discover a typo
-- Minimal VM
-	- No static dependency or binary bloat, and re-implementing across
-	languages should be easy
-- No garbage collection
-	- Garbage collection leads to framerate stutter
-- Idiomatic and easy ABI bindings
-	- Scripting and your game should fit like a glove, and it shouldn't
-	require a binding layer
+- Strong static analysis, including static typing *
+	- it shouldn't require triggering a logic path to discover a typo,
+	and dynamic typing was never any easier than type inference
+- Easy to integrate VM for C, C++, and Rust
+	- goal is to maintain within LUAJit binary size *
+	- the compiler is considered a dev dependency, but games are big
+	these days so the VM is allowed some space
+- No stop-the-world garbage collection
+	- stop-the-world garbage collection is a non-starter for game
+	performance.
+	- counterpoint: ARC can actually be reasonably consistently performant
+	if you use reasonable data structures (no DAGs, no LLs), which is
+	reasonable in game scripting. but if i can figure out how to do it
+	statically, that's a win for performance and elegance
+- Idiomatic and compact ABI bindings
+	- scripting and your game should fit like a glove, and it shouldn't
+	require a binding layer. set name rewrite rules and use a simple
+	extern function syntax or write one-line typed function bindings
+
+\* already implemented
+
+sfg is a work-in-progress, here's what we have so far:
 
 ```
 // clean syntax
@@ -27,16 +42,16 @@ fn main()
 	// implicit typing
 	var x = 5 + 2 * 6
 	assert(x == 17)
-	if entity_id_exists(x)
+	if extern_from_binding(x)
 		log("exists")
-	else if false
+	else if @inline_externs("untyped")
 		// tracks line number
 		panic()
 	while x != 0
 		x -= 1
 
 // Easily declare externs
-@fn entity_id_exists(id: int) bool
+@fn extern_from_binding(id: int) bool
 ```
 
 rsfg
@@ -46,23 +61,9 @@ rsfg
 documentation at [`rsfg/README.md`](rsfg/README.md). the best documentation
 for `sfg` is found in the extensive test suite for `rsfg`.
 
-bcfg
-----
-
-The bytecode `rsfg` compiles to is `bcfg` (ByteCode for Games). documentation
-for the `bcfg` format can be found at [`rvmfg/bcfg.md`](rvmfg/bcfg.md).
-
 rvmfg
 -----
 
-i have provided an implementation of a Virtual Machine executing `bcfg`
-in Rust, called [`rvmfg`](rvmfg/). This Virtual Machine is intended to be used by
-Rust applications (games) to import and run `bcfg` bytecode. usage is
-extremely simple, but a `cargo doc --open` should get you started
-
-i do not recommend writing bindings from `rvmfg` to other languages. While
-such a binding may be useful, it provides minimal effort saved for the cost
-of significant additional tooling and total bloat. `bcfg` is designed so
-that VM implementations may be as simple as possible: re-implementation is
-an assumed cost.
+the Virtual Machine is also written in Rust, but with a clean C interface,
+in [`rvmfg`](rvmfg/). `cargo doc --open` should get you started
 

@@ -6,9 +6,7 @@ use indexmap::IndexMap;
 
 #[derive(Debug, PartialEq)]
 pub enum LowerError {
-    // TODO: figure out how to mark positions / spans in AST
     MismatchedType(Type, Span, Type, Span),
-    //CannotInfer(Id), // TODO??? idk
     MismatchedReturn(Id, Option<Type>, Span),
     ArgumentCount(Id, usize, usize, Span),
     NonLiteral(&'static str, Span),
