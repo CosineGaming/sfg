@@ -31,19 +31,18 @@ pub type NameKey = usize;
 //pub type Namespace = Vec<TypedVar>;
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Instruction {
-    //pub Assignment(Assignment),
     FnCall(FnCall),
     ExternFnCall(FnCall),
     Push(u32),
+    Dup,
     Pop,
-    // Swaps n down the stack with the top
-    Swap(u8),
     Return,
     BAnd,
     BNot,
-    // Difference in INSTRUCTIONS, not in bytes!
     JumpZero(Label),
-    Dup(u8),
+    //VarAlloc(u8),// this is a perf improvement to add later TODO
+    // It pre-allocates for all the locals that are to be added in the procedure call
+    DeVars(u8),
     Add,
     Sub,
     Mul,
@@ -55,6 +54,10 @@ pub enum Instruction {
     FDiv,
     Panic(u32, u32),
     LabelMark(Label),
+    Xor,
+    Decl,
+    Store(u8),
+    Load(u8),
 }
 pub type TypedVar = Type;
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]

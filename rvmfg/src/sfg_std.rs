@@ -6,7 +6,7 @@
 use crate::thread::Thread;
 
 pub fn log(thread: &mut Thread) {
-    let string_index = thread.stack.pop().expect("param not provided");
+    let string_index = thread.locals.pop().expect("param not provided");
     let string = &thread.strings[string_index as usize];
     print!("{}", string);
 }

@@ -27,6 +27,8 @@ pub struct Thread {
     ip: usize,
     pub strings: Vec<String>,
     fns: IndexMap<String, Fn>,
+    /// shouldn't really be public but used for testing in rsfg (TODO)
+    pub locals: Vec<i32>,
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -51,12 +53,6 @@ fn i_as_f(what: i32) -> f32 {
 }
 fn f_as_i(what: f32) -> i32 {
     f32::to_bits(what) as i32
-}
-fn pop_f(stack: &mut Vec<i32>) -> f32 {
-	i_as_f(stack.pop().unwrap())
-}
-fn push_f(stack: &mut Vec<i32>, f: f32) {
-	stack.push(f_as_i(f))
 }
 
 macro_rules! thread_assert {
@@ -85,16 +81,17 @@ impl std::fmt::Display for Thread {
 }
 
 impl Thread {
-    fn thread_panic(&self, msg: &str) -> ! {
-        println!("vm panic: {}\nBACKTRACE:\n{}", msg, self);
+    fn thread_panic(&mut self, msg: &str) -> ! {
+        self.sane_state();
+        eprintln!("vm panic: {}\nBACKTRACE:\n{}", msg, self);
         panic!("vm panic");
     }
     pub fn new(code: Vec<u8>) -> Self {
         let mut ip = 0;
-        if next(&code, &mut ip) != b'b'
-            || next(&code, &mut ip) != b'c'
-            || next(&code, &mut ip) != b'f'
-            || next(&code, &mut ip) != b'g'
+        if read_u8(&code, &mut ip) != b'b'
+            || read_u8(&code, &mut ip) != b'c'
+            || read_u8(&code, &mut ip) != b'f'
+            || read_u8(&code, &mut ip) != b'g'
         {
             panic!("expected bcfg");
         }
@@ -122,6 +119,7 @@ impl Thread {
             ip,
             strings,
             fns,
+            locals: vec![],
         }
     }
     /// Returns whether a return has been called requiring exit
@@ -130,12 +128,13 @@ impl Thread {
         // until asked to, so we don't have to worry about pop then
         // push being slow. If we're worried, we can shrink_to at the
         // end of each instruction
-        match deser_strong(next(&self.code, &mut self.ip)) {
+        match deser_strong(read_u8(&self.code, &mut self.ip)) {
             Deser::Push => {
-                self.stack.push(read_i32(&self.code, &mut self.ip));
+                let lit = read_i32(&self.code, &mut self.ip);
+                self.push(lit);
             }
             Deser::Pop => {
-                self.stack.pop();
+                self.pop();
             }
             Deser::ExternFnCall => {
                 let index = read_u32(&self.code, &mut self.ip);
@@ -162,94 +161,109 @@ impl Thread {
                 // push to stack, it should allow exit
                 self.call_stack.push(self.ip);
                 if self.call_stack.len() > CALL_STACK_MAX_SIZE {
-                    self.sane_state();
                     self.thread_panic("call stack overflow (too much recursion?)");
                 }
                 Self::set_fn(&mut self.ip, func);
             }
             Deser::BAnd => {
-                let a = self.stack.pop().unwrap();
-                let b = self.stack.pop().unwrap();
-                self.stack.push((a & b) as i32);
+                let b = self.pop();
+                let a = self.pop();
+                self.push((a & b) as i32);
             }
             Deser::BNot => {
-                let a = self.stack.pop().unwrap();
-                self.stack.push((!a) as i32);
+                let a = self.pop();
+                self.push((!a) as i32);
+            }
+            Deser::Xor => {
+                let b = self.pop();
+                let a = self.pop();
+                self.push(a^b as i32);
             }
             Deser::JumpZero => {
                 let to = read_u32(&self.code, &mut self.ip);
-                let test = self.stack.pop().unwrap();
+                let test = self.pop();
                 if test == 0 {
                     self.ip = to as usize;
                 }
             }
-            Deser::Dup => {
-                let count = next(&self.code, &mut self.ip) as usize;
-                thread_assert!(self, count < self.stack.len(),
-                    "attempted to Dup with stack underflow {}", count);
-                // -1 because 0 means last but len() means last+1
-                let stack_elem = self.stack[self.stack.len() - count - 1];
-                self.stack.push(stack_elem);
-            }
-            Deser::Swap => {
-                let count = next(&self.code, &mut self.ip) as usize;
-                thread_assert!(self, count < self.stack.len(),
-                    "attempted to Swap with stack underflow {}", count);
-                // -1 because 0 means last but len() means last+1
-                let down_i = self.stack.len() - 1 - count;
-                let up_i = self.stack.len() - 1;
-                self.stack.swap(down_i, up_i);
-            }
             Deser::Panic => {
                 let line = read_u32(&self.code, &mut self.ip);
                 let col = read_u32(&self.code, &mut self.ip);
-                self.sane_state();
                 self.thread_panic(&format!("sfg code panicked at line {}:{}", line, col));
             }
+            Deser::Decl => {
+                let a = self.pop();
+                self.locals.push(a);
+            }
+            Deser::Store => {
+                let ri = read_u8(&self.code, &mut self.ip) as usize;
+                let i = self.locals.len() - ri - 1;
+                let a = self.pop();
+                self.locals[i] = a;
+            }
+            Deser::Load => {
+                let ri = read_u8(&self.code, &mut self.ip) as usize;
+                debug!("ri {}", ri);
+                let i = self.locals.len() - ri - 1;
+                self.push(self.locals[i]);
+            }
+            Deser::Locals => {
+                let count = read_u8(&self.code, &mut self.ip) as usize;
+                self.locals.reserve(count);
+            }
+            Deser::DeVars => {
+                let count = read_u8(&self.code, &mut self.ip) as usize;
+                let new_size = self.locals.len() - count;
+                self.locals.resize(new_size, 0);
+            }
+            Deser::Dup => {
+                let a = self.pop();
+                self.push(a);
+            }
             Deser::Add => {
-                let a = self.stack.pop().unwrap();
-                let b = self.stack.pop().unwrap();
-                self.stack.push(a + b);
+                let b = self.pop();
+                let a = self.pop();
+                self.push(a + b);
             }
             Deser::Sub => {
-                let a = self.stack.pop().unwrap();
-                let b = self.stack.pop().unwrap();
-                self.stack.push(b - a);
+                let b = self.pop();
+                let a = self.pop();
+                self.push(a - b);
             }
             Deser::Mul => {
-                let a = self.stack.pop().unwrap();
-                let b = self.stack.pop().unwrap();
-                self.stack.push(b * a);
+                let b = self.pop();
+                let a = self.pop();
+                self.push(a * b);
             }
             Deser::Div => {
-                let a = self.stack.pop().unwrap();
-                let b = self.stack.pop().unwrap();
-                self.stack.push(b / a);
+                let b = self.pop();
+                let a = self.pop();
+                self.push(a / b);
             }
             Deser::FAdd => {
-                let a = pop_f(&mut self.stack);
-                let b = pop_f(&mut self.stack);
-                push_f(&mut self.stack, a + b);
+                let b = self.pop_f();
+                let a = self.pop_f();
+                self.push_f(a + b);
             }
             Deser::FSub => {
-                let a = pop_f(&mut self.stack);
-                let b = pop_f(&mut self.stack);
-                push_f(&mut self.stack, b - a);
+                let b = self.pop_f();
+                let a = self.pop_f();
+                self.push_f(a - b);
             }
             Deser::FLess => {
-                let a = pop_f(&mut self.stack);
-                let b = pop_f(&mut self.stack);
-                self.stack.push((b < a) as i32);
+                let b = self.pop_f();
+                let a = self.pop_f();
+                self.push((a < b) as i32);
             }
             Deser::FMul => {
-                let a = pop_f(&mut self.stack);
-                let b = pop_f(&mut self.stack);
-                push_f(&mut self.stack, b * a);
+                let b = self.pop_f();
+                let a = self.pop_f();
+                self.push_f(a * b);
             }
             Deser::FDiv => {
-                let a = pop_f(&mut self.stack);
-                let b = pop_f(&mut self.stack);
-                push_f(&mut self.stack, b / a);
+                let b = self.pop_f();
+                let a = self.pop_f();
+                self.push_f(a / b);
             }
             Deser::Return => {
                 self.ip = match self.call_stack.pop() {
@@ -272,6 +286,8 @@ impl Thread {
         self.stack.shrink_to_fit();
         self.call_stack.resize(0, 0);
         self.call_stack.shrink_to_fit();
+        self.locals.resize(0, 0);
+        self.call_stack.shrink_to_fit();
     }
     // Changed to an associated function because borrow checker still can't
     // understand that Fn is contained within self
@@ -282,15 +298,29 @@ impl Thread {
     fn run(&mut self) {
         loop {
             debug!(
-                "stack {:?}| next {:?}| call stack {:?}",
+                "stack {:?}| next {:?}| call stack {:?}| locals {:?}",
                 self.stack,
                 deser_strong(self.code[self.ip]),
                 self.call_stack,
+                self.locals,
             );
             if self.exec_next() {
                 break;
             }
         }
+    }
+    fn pop(&mut self) -> i32 {
+        match self.stack.pop() {
+            Some(p) => p,
+            None => self.thread_panic("stack underflow"),
+        }
+    }
+    fn push(&mut self, p: i32) { self.stack.push(p) }
+    fn pop_f(&mut self) -> f32 {
+    	i_as_f(self.pop())
+    }
+    fn push_f(&mut self, f: f32) {
+    	self.push(f_as_i(f))
     }
     // I can't believe this works
     // I have no idea how this works
@@ -299,7 +329,7 @@ impl Thread {
     #[allow(clippy::ptr_arg)]
     pub fn push_string(&mut self, string: &String) {
         let as_number = string as *const String as i32;
-        self.stack.push(as_number);
+        self.push(as_number);
     }
     /// This ONLY calls the function, does NOT push to stack
     /// use the c! macro to perform a call. It's only public because

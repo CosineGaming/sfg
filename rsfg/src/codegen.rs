@@ -17,41 +17,46 @@ fn serialize(what: Serializable) -> u8 {
     let typier = match what {
         // Sep is traditionally 00
         S::Sep => 0x00,
+        // Sections
+        S::StringLit => 0x01,
+        S::FnHeader => 0x02,
+        S::ExternFnHeader => 0x03,
         // Types 1x
-        S::Type(Int) => 0x10,
-        S::Type(Str) => 0x11,
-        S::Type(Bool) => 0x12,
-        S::Type(Float) => 0x13,
-        // Other 2x
-        S::Void => 0x21,
-        // Instructions 3x
-        S::Instruction(I::Push(_)) => 0x30,
-        S::Instruction(I::ExternFnCall(_)) => 0x31,
-        S::StringLit => 0x32,
-        S::FnHeader => 0x33,
-        S::ExternFnHeader => 0x34,
-        S::Instruction(I::Return) => 0x35,
-        S::Instruction(I::FnCall(_)) => 0x36,
-        S::Instruction(I::Pop) => 0x37,
-        S::Instruction(I::BAnd) => 0x38,
-        S::Instruction(I::JumpZero(_)) => 0x39,
-        S::Instruction(I::Dup(_)) => 0x3a,
-        S::Instruction(I::Panic(_, _)) => 0x3b,
-        S::Instruction(I::Add) => 0x3c,
-        S::Instruction(I::Sub) => 0x3d,
-        S::Instruction(I::Swap(_)) => 0x3e,
-        S::Instruction(I::BNot) => 0x3f,
+        S::Void => 0x10,
+        S::Type(Int) => 0x11,
+        S::Type(Str) => 0x12,
+        S::Type(Bool) => 0x13,
+        S::Type(Float) => 0x14,
+        // Data and Flow 2x
+        S::Instruction(I::Push(_)) => 0x20,
+        S::Instruction(I::Pop) => 0x21,
+        S::Instruction(I::FnCall(_)) => 0x22,
+        S::Instruction(I::ExternFnCall(_)) => 0x23,
+        S::Instruction(I::Return) => 0x24,
+        S::Instruction(I::JumpZero(_)) => 0x25,
+        S::Instruction(I::Panic(_, _)) => 0x26,
+        //S::Instruction(I::Locals(_)) => 0x27,
+        S::Instruction(I::DeVars(_)) => 0x28,
+        S::Instruction(I::Dup) => 0x29,
+        S::Instruction(I::Decl) => 0x2a,
+        S::Instruction(I::Store(_)) => 0x2b,
+        S::Instruction(I::Load(_)) => 0x2c,
         // Float/?? 4x
-        S::Instruction(I::FMul) => 0x40,
-        S::Instruction(I::FDiv) => 0x41,
-        S::Instruction(I::FAdd) => 0x4c,
-        S::Instruction(I::FSub) => 0x4d,
-        S::Instruction(I::FLess) => 0x4f,
+        S::Instruction(I::FAdd) => 0x40,
+        S::Instruction(I::FSub) => 0x41,
+        S::Instruction(I::FMul) => 0x42,
+        S::Instruction(I::FDiv) => 0x43,
+        S::Instruction(I::FLess) => 0x44,
+        // Int 5x
+        S::Instruction(I::Add) => 0x50,
+        S::Instruction(I::Sub) => 0x51,
+        S::Instruction(I::Mul) => 0x52,
+        S::Instruction(I::Div) => 0x53,
+        S::Instruction(I::BAnd) => 0x54,
+        S::Instruction(I::Xor) => 0x55,
+        S::Instruction(I::BNot) => 0x56,
         // This should never be actually kept in the end
-        S::Placeholder => 0x50,
-        // Overflow too many instructions 6x
-        S::Instruction(I::Mul) => 0x60,
-        S::Instruction(I::Div) => 0x61,
+        S::Placeholder => 0xee,
         S::Instruction(I::LabelMark(_)) => panic!("tried to serialize unresolved label"),
     };
     typier as u8
@@ -138,7 +143,10 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
                 code.extend_from_slice(&u32_bytes(call.index as u32));
             }
             // u8 argument
-            Dup(what) | Swap(what) => code.push(*what),
+            | Load(what)
+            | Store(what)
+            | DeVars(what)
+            => code.push(*what),
             // is label
             LabelMark(label) => {
                 labels.marks.insert(*label, code.len());
@@ -152,7 +160,7 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
                 }
             }
             // As simple as serializing the instruction
-            Return | Pop | BAnd | BNot | Add | Sub | Mul | Div | FAdd | FSub | FLess | FMul | FDiv => {}
+            _ => {}
         }
     }
     LabeledCode { code, labels }

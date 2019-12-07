@@ -4,6 +4,7 @@ use docopt::Docopt;
 use rsfg::{compile, CompileError};
 use rvmfg::{call, Thread};
 use std::path::Path;
+use log::debug;
 
 const USAGE: &str = "
 rsfg command line interface
@@ -67,31 +68,37 @@ fn main() {
 fn update_tests() {
     // TODO: Actually write the tests this tests (and deduplicate)
     use std::io::*;
+    let mut failed = 0;
     for entry in std::fs::read_dir("tests/scripts/error").unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
         if path.is_file() && path.extension() == Some(&std::ffi::OsString::from("sfg")) {
             let pathstr = path.to_string_lossy();
             let out_path = path.with_extension("stderr");
-            println!("COMPILING: {}", pathstr);
-            let err = compile_file(&path).expect_err("compiled ok. fix?");
+            debug!("COMPILING {}:", pathstr);
+            let err = match compile_file(&path) {
+                Ok(_) => {
+                    println!("{}:\nCOMPILED OK. MUST FIX.", pathstr);
+                    failed += 1;
+                    continue;
+                }
+                Err(e) => e,
+            };
             let out = format!("{}", err);
-            let mut old_str = String::new();
-            let mut differs = true;
             if out_path.is_file() {
                 let old = std::fs::read_to_string(out_path.clone()).unwrap();
                 if old == out {
-                    differs = false;
+                    debug!("SAVED OUTPUT IS THE SAME. CONTINUING.");
+                    continue;
                 } else {
-                    old_str = format!("OLD STDERR:\n{}\n", old);
+                    println!(
+"{}:
+OUTPUT:
+{}
+OLD OUTPUT:
+{}
+save Y/n?", pathstr, out, old);
                 }
-            }
-            println!("OUTPUT:\n{}", out);
-            if differs {
-                println!("{}save Y/n?", old_str);
-            } else {
-                println!("SAVED OUTPUT IS THE SAME. CONTINUING.");
-                continue;
             }
             let do_write = loop {
                 let mut input = String::new();
@@ -108,8 +115,15 @@ fn update_tests() {
                 file.write_all(out.as_bytes()).unwrap();
             } else {
                 println!("PRESERVING OLD.");
+                failed += 1;
             }
         }
     }
-    println!("NO MORE TESTS.");
+    if failed != 0 {
+        println!("{} TESTS FAILED AND WEREN'T UPDATED.", failed);
+        std::process::exit(failed);
+    } else {
+        println!("ALL TESTS SUCCEEDED OR WERE UPDATED.");
+        std::process::exit(0);
+    }
 }

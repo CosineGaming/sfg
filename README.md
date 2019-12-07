@@ -67,3 +67,8 @@ rvmfg
 the Virtual Machine is also written in Rust, but with a clean C interface,
 in [`rvmfg`](rvmfg/). `cargo doc --open` should get you started
 
+the bytecode is not necessarily planned to be stable in step with
+the VM even after 1.0, but a best-effort reference is located at
+[`rvmfg/bcfg.md`](rvmfg/bcfg.md). once the VM is much more stable, perhaps
+the bytecode will be stabilized and other VMs could be implemented
+

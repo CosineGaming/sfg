@@ -98,7 +98,7 @@ fn literal_type(lit: &Literal) -> Type {
 fn expression_type(state: &mut LowerState, expr: &Expression) -> OneResult<Type> {
     Ok(match expr {
         Expression::Literal(lit) => literal_type(lit),
-        Expression::Identifier(id) => match stack_search(state, id)? {
+        Expression::Identifier(id) => match var_search(state, id)? {
             (_, t) => t,
         },
         Expression::Not(of) => {
@@ -229,6 +229,7 @@ impl<'a> LowerState<'a> {
 type UnsafeInstResults = Vec<std::result::Result<llr::Instruction, LowerError>>;
 // A regular vec except it keeps track of stack safety
 #[derive(Default, Debug)]
+#[must_use]
 struct InstResults(UnsafeInstResults);
 impl std::ops::Deref for InstResults {
     type Target = UnsafeInstResults;
@@ -288,15 +289,16 @@ fn inst_stack(i: llr::Instruction) -> isize {
     use llr::Instruction::*;
     match i {
         | Push(_)
-        | Dup(_)
+        | Dup
+        | Load(_)
             => 1,
         | FnCall(_) // ??? push happens before so.... but return???
         | ExternFnCall(_)
-        | Swap(_)
         | Return // ???
         | Panic(_, _)
         | BNot
         | LabelMark(_)
+        | DeVars(_) // minuses the locals, not the op stack
             => 0,
         | Pop
         | BAnd
@@ -310,6 +312,9 @@ fn inst_stack(i: llr::Instruction) -> isize {
         | FLess
         | FMul
         | FDiv
+        | Xor
+        | Decl
+        | Store(_)
             => -1,
     }
 }
@@ -337,52 +342,6 @@ fn lower_loop(
     insts.push(state, Ok(llr::Instruction::Push(0)));
     insts.push(state, Ok(llr::Instruction::JumpZero(begin)));
     insts.push(state, Ok(llr::Instruction::LabelMark(end)));
-    insts
-}
-
-// i hate that these are resulty but there's no clean way to integrate them not so
-fn or(state: &mut LowerState) -> InstResults {
-    // A|B = !(!A&!B)
-    use llr::Instruction::*;
-    InstResults::from_vec(state, vec![
-        // A B
-        Ok(BNot),
-        // A !B
-        Ok(Swap(1)),
-        // !B A
-        Ok(BNot),
-        // !B !A
-        Ok(BAnd),
-        // !B&!A ; NB eq !A&!B
-        // !(!A&!B)
-        Ok(BNot),
-    ])
-}
-
-fn xor(state: &mut LowerState) -> InstResults {
-    // A^B = (A&!B)|(!A&B)
-    use llr::Instruction::*;
-    let mut insts = InstResults::default();
-    // first compute the two terms of the or
-    insts.append(&mut InstResults::from_vec(state, vec![
-        // A B
-        Ok(Dup(1)),
-        Ok(BNot),
-        // A B !A
-        Ok(Dup(1)),
-        // A B !A B
-        Ok(BAnd),
-        // A B (!A&B)
-        Ok(Swap(2)),
-        // (!A&B) B A
-        Ok(Swap(1)),
-        // (!A&B) A B
-        Ok(BNot),
-        // (!A&B) A !B
-        Ok(BAnd),
-    ]));
-    // now or them
-    insts.append(&mut or(state));
     insts
 }
 
@@ -415,9 +374,9 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
         Expression::FnCall(call) => lower_fn_call(state, call, false),
         Expression::Identifier(var) => {
             let mut insts = InstResults::default();
-            let rindex =
-                stack_index(state, var).and_then(|i| Ok(llr::Instruction::Dup(i)));
-            insts.push(state, rindex);
+            let load = var_rindex(state, var)
+                .and_then(|i| Ok(llr::Instruction::Load(i)));
+            insts.push(state, load);
             insts
         }
         Expression::Binary(expr) => {
@@ -518,7 +477,7 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
                 }
                 NotEqual => {
                     match left_type {
-                        Type::Int | Type::Bool => insts.append(&mut xor(state)),
+                        Type::Int | Type::Bool => insts.push(state, Ok(llr::Instruction::Xor)),
                         Type::Float => {
                             let desugared = Expression::FnCall(FnCall {
                                 name: Id { name: "_epsilon_not_eq".to_string(), id_type: None, span: expr.span },
@@ -627,33 +586,33 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> I
         ));
     }
     let mut insts = InstResults::default();
-    // Typecheck all arguments calls with their found IDs
-    for (i, arg) in call.arguments.iter().enumerate() {
-        let param = &params[i];
-        let type_r = expression_type(state, arg);
-        match type_r {
-            Ok(given_type) => {
-                if types_match(Some(given_type), param.id_type) == Some(false) {
-                    insts.push(state, Err(LowerError::MismatchedType(
-                        param.id_type.expect("type definitely given for mismatch"),
-                        param.span,
-                        given_type,
-                        arg.full_span(),
-                    )));
+    // begin a fake scope for arguments, to allow declaring them without state-declaring them
+    // it's a hack but shrug CHECK
+    lower_scope_begin(state); {
+        // Typecheck all arguments calls with their found IDs
+        for (i, arg) in call.arguments.iter().enumerate() {
+            let param = &params[i];
+            let type_r = expression_type(state, arg);
+            match type_r {
+                Ok(given_type) => {
+                    if types_match(Some(given_type), param.id_type) == Some(false) {
+                        insts.push(state, Err(LowerError::MismatchedType(
+                            param.id_type.expect("type definitely given for mismatch"),
+                            param.span,
+                            given_type,
+                            arg.full_span(),
+                        )));
+                    }
                 }
+                Err(e) => insts.push(state, Err(e)),
             }
-            Err(e) => insts.push(state, Err(e)),
+                insts.append(&mut lower_statement(state, &Statement::Declaration(Assignment {
+                    lvalue: param.clone(), // TODO: uneccesary clone?
+                    rvalue: arg.clone(),
+                    span: arg.full_span(),
+                }), signature));
         }
-        // Otherwise our types are just fine
-        // Now we just have to evaluate it
-        // The number of arguments we've pushed already is i which is also stack_length
-        let mut push = expression_to_push(state, arg);
-        insts.append(&mut push);
-    }
-    if !state.error_state {
-        // to simulate the function's return so we just the stack pluses
-        state.stack_length -= call.arguments.len() as u8;
-    }
+    } state.locals.pop(); // don't actually add end scope instructions, but end fake scope
     // Generate lowered call
     let fn_call = llr::FnCall { index, arg_count: call.arguments.len() as u8 };
     let call = if is_extern {
@@ -686,9 +645,33 @@ fn lower_scope_end(state: &mut LowerState) -> InstResults {
     // Actually i'm not sure that's true, what if final use is in if statement?
     // Something about single-assignment form
     let mut insts = InstResults::default();
-    for _local in state.locals.pop().unwrap() {
-        debug!("{:?}", _local);
-        insts.push(state, Ok(llr::Instruction::Pop));
+    let n = state.locals.pop().unwrap().len();
+    insts.append(&mut lower_de_vars(state, n));
+    insts
+}
+
+fn total_vars(state: &mut LowerState) -> usize {
+    state.locals.iter().fold(0, |c, l| c + l.len())
+}
+
+fn lower_de_vars(state: &mut LowerState, mut n: usize) -> InstResults {
+    use std::convert::TryFrom;
+    // no reason to de nothing
+    // this may be an optimization but it's reaaally obvious so i'll let it pass
+    if n == 0 { return InstResults::default() }
+    let mut insts = InstResults::default();
+    loop {
+        match u8::try_from(n) {
+            Ok(n) => {
+                insts.push(state, Ok(llr::Instruction::DeVars(n)));
+                break;
+            }
+            Err(_) => {
+                debug!("CHECK: possibly untested >256 scope vars");
+                insts.push(state, Ok(llr::Instruction::DeVars(std::u8::MAX)));
+                n -= std::u8::MAX as usize;
+            }
+        }
     }
     insts
 }
@@ -698,7 +681,6 @@ fn lower_return(
     expr: &Option<Expression>,
     signature: &Signature,
 ) -> InstResults {
-    let num_locals = state.locals.iter().fold(0, |c, l| c + l.len());
     let mut insts = vec![];
     // Typecheck return value
     // None == None -> return == void
@@ -728,17 +710,11 @@ fn lower_return(
         if !state.error_state {
             state.stack_length -= 1;
         }
-        // We want to preserve value from coming pops by moving it to the bottom
-        insts.push(Ok(llr::Instruction::Swap(num_locals as u8)))
     }
     // Return kills all scopes down thru function
-    // CHECK: when we implement globals, this'll have to have -1 trickery
     // We could use lower_scope_end but it would delete the IndexMap entry(?)
-    for scope in &state.locals {
-        for _ in scope {
-            insts.push(Ok(llr::Instruction::Pop));
-        }
-    }
+    let num_locals = total_vars(state);
+    insts.append(&mut lower_de_vars(state, num_locals).0);
     // We DON'T pop the *internal state scopes* because return may be mid-function
     // (non-lexical). Instead the popping occurs at the end of the function
     // lowering
@@ -749,7 +725,7 @@ fn lower_return(
     InstResults::from_vec_unsafe(insts)
 }
 
-fn stack_search(state: &mut LowerState, name: &Id) -> OneResult<(u8, Type)> {
+fn var_search(state: &mut LowerState, name: &Id) -> OneResult<(u8, Type)> {
     let mut lower_scopes = 0;
     // First we find the forward index before finding the reverse one
     // TODO: maybe this means we should be using the forward index in Dup anyway? probly not
@@ -768,12 +744,13 @@ fn stack_search(state: &mut LowerState, name: &Id) -> OneResult<(u8, Type)> {
         return forward;
     }
     forward.and_then(|(i, t)| Ok((
-        // now we subtract the known stack length minus the forward index for the reverse index
-        // minus one because stack is length, index is index
-        state.stack_length - i - 1, t)))
+        // now we subtract the COMPILER locals length minus the forward
+        // index for the VM reverse index minus one because vars is length,
+        // index is index
+        total_vars(state) as u8 - i - 1, t)))
 }
-fn stack_index(state: &mut LowerState, name: &Id) -> OneResult<u8> {
-    let (i, _) = stack_search(state, name)?;
+fn var_rindex(state: &mut LowerState, name: &Id) -> OneResult<u8> {
+    let (i, _) = var_search(state, name)?;
     Ok(i)
 }
 
@@ -836,12 +813,10 @@ fn lower_statement(
             let mut insts = InstResults::default();
             // Compile rvalue first in case it depends on lvalue
             insts.append(&mut expression_to_push(state, &assign.rvalue));
-            let swap = stack_index(state, &assign.lvalue)
+            let store = var_rindex(state, &assign.lvalue)
                 // Swap the old value to the top, new value is in old spot
-                .and_then(|i| Ok(llr::Instruction::Swap(i)));
-            insts.push(state, swap);
-            // Pop old value off, never to be seen again
-            insts.push(state, Ok(llr::Instruction::Pop));
+                .and_then(|i| Ok(llr::Instruction::Store(i)));
+            insts.push(state, store);
             insts
         }
         Statement::Declaration(decl) => {
@@ -850,8 +825,8 @@ fn lower_statement(
             // have to change locals AFTER push ofc
             match expression_type(state, &decl.rvalue) {
                 Ok(o) => {
-                    let mut rv = expression_to_push(state, &decl.rvalue);
-                    insts.append(&mut rv);
+                    insts.append(&mut expression_to_push(state, &decl.rvalue));
+                    insts.push(state, Ok(llr::Instruction::Decl));
                     // shadows within same scope are illegal
                     // TODO: make shadows within any scope illegal(?)
                     // best recovery for illegal shadow is to still insert new type
@@ -923,21 +898,16 @@ fn lower_fn(state: &mut LowerState, func: &Fn) -> Result<llr::Fn> {
                 param.name.clone(),
                 param.id_type.expect("untyped parameter let through parser"),
             );
-            // simulate the pushing that would have occurred in FnCall
-            state.stack_length += 1;
         }
         let rv = llr::Fn {
             instructions: vec_to_res(lower_fn_statements(state, func).0)?,
             signature: lower_signature(&func.signature),
         };
-        // fn return doesn't handle stack_length correctly because it can
-        // happen multiple times
-        // neither does local popping / scope end for same reason
-        let locals = state.locals.pop().unwrap();
+        // return doesn't pop the actual locals because it can happen mid-fn
+        state.locals.pop();
         if !state.error_state {
-            debug_assert_eq!(state.stack_length, locals.len() as u8);
+            debug_assert_eq!(state.stack_length, 0);
         }
-        state.stack_length = 0;
         Ok(rv)
     } // note missing scope end (must be careful about returns)
 }
@@ -998,6 +968,38 @@ mod test {
         for func in fns {
             for inst in func.instructions {
                 balance += inst_stack(inst);
+            }
+        }
+        assert_eq!(balance, 0);
+    }
+    #[test]
+    fn locals_balance() {
+        use super::{lower, llr::Instruction::*};
+        use crate::{lexer::lex, parser::parse};
+        let script_string = std::fs::read_to_string("tests/scripts/no-returns.sfg")
+            .expect("could not load given file");
+        let lexed = lex(&script_string);
+        let parsed = parse(lexed)
+            .map_err(|e| {
+                println!("{}", fmt_vec(&e));
+                panic!()
+            })
+            .unwrap();
+        let lowered = lower(parsed)
+            .map_err(|e| {
+                println!("{}", fmt_vec(&e));
+                panic!()
+            })
+            .unwrap();
+        let fns = lowered.fns;
+        let mut balance = 0;
+        for func in fns {
+            for inst in func.instructions {
+                match inst {
+                    Decl => balance += 1,
+                    DeVars(n) => balance -= n,
+                    _ => (),
+                }
             }
         }
         assert_eq!(balance, 0);

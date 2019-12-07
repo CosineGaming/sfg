@@ -14,6 +14,8 @@ pub enum Type {
 pub enum Deser {
     Add,
     BAnd,
+    Decl,
+    DeVars,
     Div,
     Dup,
     FAdd,
@@ -27,6 +29,8 @@ pub enum Deser {
     FnHeader,
     Panic,
     JumpZero,
+    Load,
+    Locals,
     Mul,
     BNot,
     Pop,
@@ -34,51 +38,56 @@ pub enum Deser {
     Return,
     StringLit,
     Sub,
-    Swap,
+    Store,
     Type(Type),
     Void,
+    Xor,
 }
 
 pub fn deser(what: u8) -> Option<Deser> {
     use Deser as D;
     use Type::*;
-    match what {
+    Some(match what {
+        // Sections
+        0x01 => D::StringLit,
+        0x02 => D::FnHeader,
+        0x03 => D::ExternFnHeader,
         // Types 1x
-        0x10 => Some(D::Type(Int)),
-        0x11 => Some(D::Type(Str)),
-        0x12 => Some(D::Type(Bool)),
-        0x13 => Some(D::Type(Float)),
-        // Other 2x
-        0x21 => Some(D::Void),
-        // Instructions 3x
-        0x30 => Some(D::Push),
-        0x31 => Some(D::ExternFnCall),
-        0x32 => Some(D::StringLit),
-        0x33 => Some(D::FnHeader),
-        0x34 => Some(D::ExternFnHeader),
-        0x35 => Some(D::Return),
-        0x36 => Some(D::FnCall),
-        0x37 => Some(D::Pop),
-        0x38 => Some(D::BAnd),
-        0x39 => Some(D::JumpZero),
-        0x3a => Some(D::Dup),
-        0x3b => Some(D::Panic),
-        0x3c => Some(D::Add),
-        0x3d => Some(D::Sub),
-        0x3e => Some(D::Swap),
-        0x3f => Some(D::BNot),
+        0x10 => D::Void,
+        0x11 => D::Type(Int),
+        0x12 => D::Type(Str),
+        0x13 => D::Type(Bool),
+        0x14 => D::Type(Float),
+        // Data and Flow 2x
+        0x20 => D::Push,
+        0x21 => D::Pop,
+        0x22 => D::FnCall,
+        0x23 => D::ExternFnCall,
+        0x24 => D::Return,
+        0x25 => D::JumpZero,
+        0x26 => D::Panic,
+        0x27 => D::Locals,
+        0x28 => D::DeVars,
+        0x29 => D::Dup,
+        0x2a => D::Decl,
+        0x2b => D::Store,
+        0x2c => D::Load,
         // Float/?? 4x
-        0x40 => Some(D::FMul),
-        0x41 => Some(D::FDiv),
-        0x4c => Some(D::FAdd),
-        0x4d => Some(D::FSub),
-        0x4f => Some(D::FLess),
-        // 5x is used for internal panics in rsfg
-        // 6x int instructions (ctd)
-        0x60 => Some(D::Mul),
-        0x61 => Some(D::Div),
-        _ => None,
-    }
+        0x40 => D::FAdd,
+        0x41 => D::FSub,
+        0x42 => D::FMul,
+        0x43 => D::FDiv,
+        0x44 => D::FLess,
+        // Int 5x
+        0x50 => D::Add,
+        0x51 => D::Sub,
+        0x52 => D::Mul,
+        0x53 => D::Div,
+        0x54 => D::BAnd,
+        0x55 => D::Xor,
+        0x56 => D::BNot,        // Types 1x
+        _ => return None,
+    })
 }
 pub fn deser_strong(what: u8) -> Deser {
     match deser(what) {
@@ -87,7 +96,7 @@ pub fn deser_strong(what: u8) -> Deser {
     }
 }
 
-pub fn next(code: &[u8], ip: &mut usize) -> u8 {
+pub fn read_u8(code: &[u8], ip: &mut usize) -> u8 {
     let rv = code[*ip];
     *ip += 1;
     rv
@@ -113,7 +122,7 @@ pub fn read_i32(code: &[u8], ip: &mut usize) -> i32 {
 pub fn read_to_zero(code: &[u8], mut ip: &mut usize) -> Vec<u8> {
     let mut rv = Vec::new();
     loop {
-        let b = next(code, &mut ip);
+        let b = read_u8(code, &mut ip);
         if b == 0 {
             break;
         }
@@ -132,16 +141,16 @@ pub fn read_string(code: &[u8], mut ip: &mut usize) -> String {
 
 /// Returns (name, function)
 pub fn read_fn_header(code: &[u8], mut ip: &mut usize, is_extern: bool) -> (String, Fn) {
-    let return_type_u8 = next(code, &mut ip);
+    let return_type_u8 = read_u8(code, &mut ip);
     let return_type = match deser_strong(return_type_u8) {
         Deser::Type(t) => Some(t),
         Deser::Void => None,
         _ => panic!("expected type or void, got {}", return_type_u8),
     };
-    let param_count = next(code, &mut ip);
+    let param_count = read_u8(code, &mut ip);
     let mut parameters = vec![];
     for _ in 0..param_count {
-        let type_u8 = next(code, &mut ip);
+        let type_u8 = read_u8(code, &mut ip);
         let param = match deser_strong(type_u8) {
             Deser::Type(t) => t,
             _ => panic!("expected type, got {}", type_u8),

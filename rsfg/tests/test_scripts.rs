@@ -37,39 +37,41 @@ fn decompile() {
         result,
         vec![
             // trailing comments on all lines to prevent rustfmt
-            0x62, 0x63, 0x66, 0x67, // bcfg magic number
+            b'b', b'c', b'f', b'g', // bcfg magic number
             // header for main:
-            0x33, // fn header
-            0x21, // return type: void
+            0x02, // fn header
+            0x10, // return type: void
             0,    // parameter count
             0x6d, 0x61, 0x69, 0x6e, // "main"
             0,    // "\0"
             0x1c, 0x00, 0x00, 0x00, // codeloc
             // header for log:
-            0x34, // extern fn header
-            0x21, // return type: void
+            0x03, // extern fn header
+            0x10, // return type: void
             1,    // parameter count
             // parameters:
-            0x11, // type: string
+            0x12, // type: string
             0x6c, 0x6f, 0x67, 0, // "log\0"
-            0x32, // string lit
+            0x01, // string lit
             0x68, 0x69, 0, // "hi\0"
-            0x30, // push
+            0x20, // push
             0x08, 0x00, 0x00, 0x00, // 8
-            0x30, 0x08, 0x00, 0x00, 0x00, // push 8 again
-            0x3c, // add
-            0x30, 0x00, 0x00, 0x00, 0x00, // push 0 (false)
-            0x39, // jump zero
-            0x3b, 0x00, 0x00, 0x00, // to absolute point 59 (0x3b):
+            0x20, 0x08, 0x00, 0x00, 0x00, // push 8 again
+            0x50, // add
+            0x2a, // decl x
+            0x20, 0x00, 0x00, 0x00, 0x00, // push 0 (false)
+            0x25, // jump zero
+            0x3d, 0x00, 0x00, 0x00, // to absolute point (label AFTER):
             // call log:
-            0x30, 0x00, 0x00, 0x00, // push string lit
+            0x20, 0x00, 0x00, 0x00, // push string lit
             0,    // string index
-            0x31, // call extern log
+            0x2a, // decl for function call
+            0x23, // call extern log
             // function index (4b)
             0x01, 0x00, 0x00, 0x00, // 1 (0:main, 1:log)
             // AFTER:
-            0x37, // Pop local x
-            0x35, // Return
+            0x28, 0x01, // Delet 1 local x
+            0x24, // Return
         ]
     );
 }
@@ -101,15 +103,16 @@ fn compile_safe(path: &Path) -> Vec<u8> {
 }
 
 #[derive(Debug)]
-struct StateError(usize, usize);
+struct StateError(usize, usize, usize);
 impl std::fmt::Display for StateError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "improper state, stack length was {}, call stack length was {}", self.0, self.1)
+        write!(f, "improper state, stack length was {}, call stack length was {}, locals len was {}", self.0, self.1, self.2)
     }
 }
 impl Error for StateError {}
 
-type ThreadResult = std::thread::Result<()>;
+type ThreadResult = (std::thread::Result<()>, Result<(), StateError>);
+type SetResult = Vec<(String, ThreadResult)>;
 
 // There are some additional tests we can make on all programs
 // Like assert various things about the final state of the program
@@ -120,70 +123,73 @@ type ThreadResult = std::thread::Result<()>;
 fn state_tests(thread: &Thread) -> Result<(), StateError> {
     let tsl = thread.stack.len();
     let tcsl = thread.call_stack.len();
-    if tsl != 0 || tcsl != 0 {
-        Err(StateError(tsl, tcsl))
+    let tll = thread.locals.len();
+    if tsl != 0 || tcsl != 0 || tll != 0 {
+        Err(StateError(tsl, tcsl, tll))
     } else {
         Ok(())
     }
 }
 
-fn show_failures(fails: Vec<ThreadResult>) -> ThreadResult {
+fn show_failures(fails: SetResult) {
     let mut should_panic = false;
-    for fail in fails {
-        if let Err(e) = fail {
-            eprintln!("THERE WAS A FAILURE BUT NOT SURE HOW TO PRINT IT");
+    for (path, fail) in fails {
+        if let Err(ref e) = fail.0 {
+            eprintln!("{}: error {:?}", path, e);
+            should_panic = true;
+        }
+        if let Err(ref e) = fail.1 {
+            eprintln!("{}: error {}", path, e);
+            should_panic = true;
+        }
+    }
+    if should_panic {
+        panic!("some tests failed")
+    }
+}
+
+fn show_successes(fails: SetResult) {
+    let mut should_panic = false;
+    for (path, fail) in fails {
+        if let (Ok(()), Ok(())) = fail {
+            eprintln!("{}, which should fail, succeeded", path);
             should_panic = true;
         }
     }
     if should_panic {
         panic!()
     }
-    Ok(())
 }
 
-fn show_successes(fails: Vec<ThreadResult>) -> ThreadResult {
-    let mut should_panic = false;
-    for fail in fails {
-        if let Ok(()) = fail {
-            eprintln!("a program succeeded");
-            should_panic = true;
-        }
-    }
-    if should_panic {
-        panic!()
-    }
-    Ok(())
-}
-
-fn test_dir(path: &'static str) -> Vec<ThreadResult> {
+fn test_dir(path: &'static str) -> SetResult {
     let mut failures = vec![];
     for entry in std::fs::read_dir(path).unwrap() {
         // unwrap too much error fuckery
         let entry = entry.unwrap();
         let path = entry.path();
         if path.is_file() {
-            let pathstr = path.to_string_lossy();
+            let pathstr = path.to_string_lossy().to_string();
             println!("TESTING: {}", pathstr);
-            failures.push(run_test(&path));
+            failures.push((pathstr, run_test(&path)));
         }
     }
     failures
 }
 
 #[test]
-fn test_succeed() -> ThreadResult {
+fn test_succeed() {
     ensure_log_init();
     let failures = test_dir("tests/scripts");
-    show_failures(failures)
+    show_failures(failures);
 }
 
 // Ignore because these performance tests literally take a long time
 #[ignore]
 #[test]
-fn test_perf_tests() -> ThreadResult {
+fn test_perf_tests() {
     // No log to accurately test perf - TODO: actually may still log if ran after logging one
     let failures = test_dir("tests/scripts/perf");
-    show_failures(failures)
+    show_failures(failures);
 }
 
 fn run_test(path: &Path) -> ThreadResult {
@@ -202,12 +208,12 @@ fn run_test(path: &Path) -> ThreadResult {
     // print the result in time so we can trace easier
     println!("TEST RESULT for {}: {:?}", path.to_string_lossy(), result);
     // These should PASS. Thus not wrappend in catch_unwind
-    //state_tests(&thread).map_err(|e| Box::new(e))?; // TODO: somehow idk how to type this
-    result
+    let state_res = state_tests(&thread); // TODO: return somehow idk how to type this
+    (result, state_res)
 }
 
 #[test]
-fn test_fails() -> ThreadResult {
+fn test_fails() {
     ensure_log_init();
     let failures = test_dir("tests/scripts/fail");
     show_successes(failures)
@@ -215,7 +221,7 @@ fn test_fails() -> ThreadResult {
 
 #[ignore]
 #[test]
-fn test_ignored_fails() -> ThreadResult {
+fn test_ignored_fails() {
     // No log to speed up - TODO: actually may still log if ran after logging one
     let failures = test_dir("tests/scripts/fail/ignore");
     show_successes(failures)
@@ -231,6 +237,7 @@ fn test_errors() {
             let pathstr = path.to_string_lossy();
             println!("TESTING: {}", pathstr);
             let out_path = path.with_extension("stderr");
+            let err = compile_file(&path).expect_err("error example compiled without error");
             if !out_path.is_file() {
                 panic!(
                     "no expected output for test at {}. to interactively populate:
@@ -238,7 +245,6 @@ cargo run -- --update-tests",
                     out_path.to_string_lossy()
                 );
             }
-            let err = compile_file(&path).expect_err("error example compiled without error");
             let err_str = format!("{}", err);
             let expected = std::fs::read_to_string(out_path.clone()).unwrap();
             assert_eq!(err_str, expected);
