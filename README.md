@@ -7,7 +7,7 @@ game development
 This language is intended to script systems in an ECS scalably, safely,
 and cleanly. These are my goals:
 
-- Performant
+- Performant * (>50% speed of lua)
 	- games are one of the most performance-critical softwares we
 	make these days
 - Script-like *

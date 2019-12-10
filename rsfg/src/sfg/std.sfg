@@ -14,17 +14,6 @@
 //
 // This file is implementations of section (a) of (1) and all the externs of (2)
 
-fn _not(what: bool) bool
-	if what
-		return false
-	return true
-
-fn _and(left: bool, right: bool) bool
-	if left
-		if right 
-			return true
-	return false
-
 fn epsilon_eq(left: float, right: float) bool
 	return !_epsilon_not_eq(left, right)
 
@@ -37,9 +26,6 @@ fn abs(what: float) float
 	if what < 0f
 		what = 0f - what
 	return what
-
-fn mod(a: int, b: int) int
-	return a - ((a / b) * b)
 
 // default with \n
 fn log(what: str)

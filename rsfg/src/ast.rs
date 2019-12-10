@@ -1,4 +1,4 @@
-use super::{Span, Type};
+use super::{Span, Type, llr};
 
 pub type AST = Vec<ASTNode>;
 
@@ -16,13 +16,13 @@ pub struct Fn {
 pub struct ExternFn {
     pub signature: Signature,
 }
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Default)]
 pub struct Signature {
     pub id: Id,
     pub parameters: Vec<Id>,
     pub span: Span,
 }
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug, Default)]
 pub struct Id {
     pub name: String,
     pub id_type: Option<Type>,
@@ -30,7 +30,7 @@ pub struct Id {
 }
 impl Id {
     pub fn fake(name: &'static str) -> Self {
-        Self { name: name.to_string(), id_type: None, span: Span::new() }
+        Self { name: name.to_string(), ..Default::default() }
     }
 }
 #[derive(PartialEq, Clone, Debug)]
@@ -42,6 +42,7 @@ pub enum Statement {
     Return(Option<Expression>),
     If(If),
     WhileLoop(WhileLoop),
+    LLRInsts(Vec<llr::Instruction>),
 }
 #[derive(PartialEq, Clone, Debug)]
 pub enum Expression {
@@ -111,6 +112,7 @@ pub enum BinaryOp {
     Minus,
     Times,
     Divide,
+    Mod,
 }
 
 impl Expression {

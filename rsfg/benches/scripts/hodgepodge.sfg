@@ -1,0 +1,13 @@
+fn main()
+	log("something")
+	var x = 12 * 16
+	if (x % 8) == 0
+		var descopes = 5.0
+	else
+		panic()
+	var f = 12.0 + 14.0
+	var tight_loop = 200
+	while tight_loop
+		f += 2.0
+		tight_loop -= 1
+

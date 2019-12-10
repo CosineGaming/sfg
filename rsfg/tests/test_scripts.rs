@@ -5,7 +5,7 @@ use std::error::Error;
 // We use rvmfg for convenient integration testing
 // Not a build dependency, just for this test.
 extern crate rvmfg;
-use rvmfg::{call, Thread};
+use rvmfg::Thread;
 
 // Log needs to be initialized once in the async mess that is cargo test
 use std::sync::Once;
@@ -61,7 +61,7 @@ fn decompile() {
             0x2a, // decl x
             0x20, 0x00, 0x00, 0x00, 0x00, // push 0 (false)
             0x25, // jump zero
-            0x3d, 0x00, 0x00, 0x00, // to absolute point (label AFTER):
+            0x3b, 0x00, // to absolute point (label AFTER):
             // call log:
             0x20, 0x00, 0x00, 0x00, // push string lit
             0,    // string index

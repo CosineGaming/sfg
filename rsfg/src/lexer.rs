@@ -32,6 +32,7 @@ enum NextTokenType {
     Plus,
     Minus,
     Times,
+    Mod,
     Unknown(char),
 }
 
@@ -99,6 +100,7 @@ impl<'src> Lexer<'src> {
                 '+' => Plus,
                 '-' => Minus,
                 '*' => Times,
+                '%' => Mod,
                 o => Unknown(o),
             },
         }
@@ -283,6 +285,7 @@ pub fn lex(text: &str) -> Vec<Token> {
             NextTokenType::Plus => lexer.reinterpret(Plus, '=', OpAssign(Box::new(Plus))),
             NextTokenType::Minus => lexer.reinterpret(Minus, '=', OpAssign(Box::new(Minus))),
             NextTokenType::Times => lexer.reinterpret(Times, '=', OpAssign(Box::new(Times))),
+            NextTokenType::Mod => lexer.reinterpret(Mod, '=', OpAssign(Box::new(Mod))),
             NextTokenType::LParen => LParen,
             NextTokenType::RParen => RParen,
             NextTokenType::Colon => Colon,

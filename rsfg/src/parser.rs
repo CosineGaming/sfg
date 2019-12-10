@@ -171,6 +171,7 @@ fn token_to_binary_op(token: Option<Token>) -> Result<BinaryOp> {
         Minus => BinaryOp::Minus,
         Times => BinaryOp::Times,
         Divide => BinaryOp::Divide,
+        Mod => BinaryOp::Mod,
     })
 }
 

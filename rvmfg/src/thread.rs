@@ -5,9 +5,11 @@ use indexmap::IndexMap;
 
 /// Should be small enough to make small scripts low-RAM, but high enough
 /// that startup doesn't take forever with 1000s of incremental allocs
-const INIT_STACK_SIZE: usize = 32;
+const INIT_STACK_SIZE: usize = 16;
 /// Similarly chosen for the expected call stack size
-const INIT_CALL_STACK_SIZE: usize = 6;
+const INIT_CALL_STACK_SIZE: usize = 8;
+/// Similarly chosen for the expected locals size
+const INIT_LOCALS_SIZE: usize = 16;
 /// This is mostly arbitrary but keeps us from unrecoverable OOM error on
 /// incorrect recursion
 /// 256MB is excessively large but within the realms of normal operation
@@ -97,17 +99,17 @@ impl Thread {
         }
         let mut fns = IndexMap::new();
         let mut strings = Vec::new();
-        while let Some(Deser::FnHeader) = deser(code[ip]) {
+        while let Some(DeserHeader::FnHeader) = deser_header(code[ip]) {
             ip += 1;
             let (name, func) = read_fn_header(&code, &mut ip, false);
             fns.insert(name, func);
         }
-        while let Some(Deser::ExternFnHeader) = deser(code[ip]) {
+        while let Some(DeserHeader::ExternFnHeader) = deser_header(code[ip]) {
             ip += 1;
             let (name, func) = read_fn_header(&code, &mut ip, true);
             fns.insert(name, func);
         }
-        while let Some(Deser::StringLit) = deser(code[ip]) {
+        while let Some(DeserHeader::StringLit) = deser_header(code[ip]) {
             ip += 1;
             let string = read_string(&code, &mut ip);
             strings.push(string);
@@ -119,7 +121,7 @@ impl Thread {
             ip,
             strings,
             fns,
-            locals: vec![],
+            locals: Vec::with_capacity(INIT_LOCALS_SIZE),
         }
     }
     /// Returns whether a return has been called requiring exit
@@ -128,7 +130,7 @@ impl Thread {
         // until asked to, so we don't have to worry about pop then
         // push being slow. If we're worried, we can shrink_to at the
         // end of each instruction
-        match deser_strong(read_u8(&self.code, &mut self.ip)) {
+        match deser(read_u8(&self.code, &mut self.ip)) {
             Deser::Push => {
                 let lit = read_i32(&self.code, &mut self.ip);
                 self.push(lit);
@@ -165,22 +167,18 @@ impl Thread {
                 }
                 Self::set_fn(&mut self.ip, func);
             }
-            Deser::BAnd => {
-                let b = self.pop();
-                let a = self.pop();
-                self.push((a & b) as i32);
-            }
-            Deser::BNot => {
-                let a = self.pop();
-                self.push((!a) as i32);
-            }
             Deser::Xor => {
                 let b = self.pop();
                 let a = self.pop();
-                self.push(a^b as i32);
+                self.push(a^b);
+            }
+            Deser::Less => {
+                let b = self.pop();
+                let a = self.pop();
+                self.push((a < b) as i32);
             }
             Deser::JumpZero => {
-                let to = read_u32(&self.code, &mut self.ip);
+                let to = read_u16(&self.code, &mut self.ip);
                 let test = self.pop();
                 if test == 0 {
                     self.ip = to as usize;
@@ -240,6 +238,11 @@ impl Thread {
                 let a = self.pop();
                 self.push(a / b);
             }
+            Deser::Mod => {
+                let b = self.pop();
+                let a = self.pop();
+                self.push(a % b);
+            }
             Deser::FAdd => {
                 let b = self.pop_f();
                 let a = self.pop_f();
@@ -271,12 +274,10 @@ impl Thread {
                     None => return true,
                 };
             }
-            // TODO: Split deser into categories so this unreachable code won't be necessary
-            got @ Deser::Type(_)
-            | got @ Deser::FnHeader
-            | got @ Deser::ExternFnHeader
-            | got @ Deser::StringLit
-            | got @ Deser::Void => self.thread_panic(&format!("expected instruction, got {:?}", got)),
+            Deser::Not => {
+                let a = self.pop();
+                self.push(!(a != 0) as i32);
+            }
         }
         false
     }
@@ -300,7 +301,7 @@ impl Thread {
             debug!(
                 "stack {:?}| next {:?}| call stack {:?}| locals {:?}",
                 self.stack,
-                deser_strong(self.code[self.ip]),
+                deser(self.code[self.ip]),
                 self.call_stack,
                 self.locals,
             );

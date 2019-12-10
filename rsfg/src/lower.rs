@@ -142,15 +142,13 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> OneResult<Type>
                 },
                 Type::Int => match expr.op {
                     Equal | NotEqual | Greater | GreaterEqual | Less | LessEqual => Type::Bool,
-                    Plus | Minus | Times | Divide => left,
+                    Plus | Minus | Times | Divide | Mod => left,
                     And | Or => return fail,
                 },
                 Type::Float => match expr.op {
                     Equal | NotEqual | Greater | GreaterEqual | Less | LessEqual => Type::Bool,
-                    Plus | Minus => left,
-                    // TODO: add greater / less
-                    Times | Divide => return fail,
-                    And | Or => return fail,
+                    Plus | Minus | Times | Divide => left,
+                    And | Or | Mod => return fail,
                 },
                 Type::Str => return fail,
             }
@@ -272,6 +270,10 @@ impl InstResults {
         debug!("warning: pushing unsafe vec");
         Self(nonsafe)
     }
+    fn from_insts_unsafe(insts: &Vec<llr::Instruction>) -> Self {
+        debug!("warning: creating unsafe vec");
+        Self(insts.into_iter().map(|i| Ok(*i)).collect())
+    }
     fn from_res(state: &mut LowerState, res: OneResult<llr::Instruction>) -> Self {
         Self::from_vec(state, vec![res])
     }
@@ -296,17 +298,18 @@ fn inst_stack(i: llr::Instruction) -> isize {
         | ExternFnCall(_)
         | Return // ???
         | Panic(_, _)
-        | BNot
+        | Not
         | LabelMark(_)
         | DeVars(_) // minuses the locals, not the op stack
             => 0,
         | Pop
-        | BAnd
         | JumpZero(_)
         | Add
         | Sub
         | Mul
         | Div
+        | Mod
+        | Less
         | FAdd
         | FSub
         | FLess
@@ -363,12 +366,10 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
         },
         Expression::Not(expr) => {
             // TODO: optimize != with Xor? Optimize at all?? lol
-            let call = FnCall {
-                name: Id::fake("_not"),
-                arguments: vec![*expr.clone()],
-                span: expr.full_span(),
-            };
-            lower_fn_call(state, &call, false)
+            let mut insts = InstResults::default();
+            insts.append(&mut expression_to_push(state, expr));
+            insts.push(state, Ok(llr::Instruction::Not));
+            insts
         }
         // fn call leaves result on the stack which is exactly what we need
         Expression::FnCall(call) => lower_fn_call(state, call, false),
@@ -419,15 +420,10 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
                 Greater | Less => {
                     match left_type {
                         Type::Int => {
-                            // Pos,0 => GreaterEqual, Neg => Less
-                            insts.push(state, Ok(llr::Instruction::Sub));
-                            // parity bit (32-bit only)
-                            insts.push(state, Ok(llr::Instruction::Push(0x8000)));
-                            // 0 => GreaterEqual, 0x8000 => Less
-                            insts.push(state, Ok(llr::Instruction::BAnd));
+                            insts.push(state, Ok(llr::Instruction::Less));
                         }
                         Type::Float => {
-                            insts.push(state, Ok(llr::Instruction::FLess))
+                            insts.push(state, Ok(llr::Instruction::FLess));
                         }
                         _ => unreachable!(),
                     }
@@ -465,15 +461,49 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
                     Type::Float => insts.push(state, Ok(llr::Instruction::FDiv)),
                     _ => insts.push(state, type_error),
                 },
+                Mod => insts.push(state, Ok(llr::Instruction::Mod)),
+                // TODO: short-circuit
                 Or => insts.push(state, Ok(llr::Instruction::Add)),
                 And => {
-                    // TODO: short-circuit
-                    let call = FnCall {
-                        name: Id::fake("_and"),
-                        arguments: vec![expr.left.clone(), expr.right.clone()],
-                        span: expr.span,
-                    };
-                    insts.append(&mut lower_fn_call(state, &call, false))
+                    // instead of sfg code desugar for short-circuiting we write it manually
+                    // this instead of inlining which may not even do it (?)
+                    let span = expr.span;
+                    // if a
+                    let desugared = Statement::If(If {
+                        condition: expr.left.clone(),
+                        // then
+                        statements: vec![
+                            // if b
+                            Statement::If(If {
+                                condition: expr.right.clone(),
+                                statements: vec![
+                                    // true -- a && b
+                                    Statement::LLRInsts(vec![
+                                        llr::Instruction::Push(1),
+                                    ])
+                                ],
+                                // else
+                                else_statements: vec![
+                                    // false -- a && !b
+                                    Statement::LLRInsts(vec![
+                                        llr::Instruction::Push(0),
+                                    ]),
+                                ],
+                                span,
+                            })
+                        ],
+                        else_statements: vec![
+                            // short circuit
+                            // push false
+                            Statement::LLRInsts(vec![
+                                llr::Instruction::Push(0),
+                            ])
+                        ],
+                        span,
+                    });
+                    // LLRInsts does nothing to state
+                    state.stack_length += 1;
+                    insts.append(&mut lower_statement(state, &desugared, &Signature::default()))
                 }
                 NotEqual => {
                     match left_type {
@@ -842,6 +872,7 @@ fn lower_statement(
             }
             insts
         }
+        Statement::LLRInsts(insts) => InstResults::from_insts_unsafe(insts),
     }
 }
 

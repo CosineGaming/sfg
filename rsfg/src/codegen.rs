@@ -33,6 +33,10 @@ fn serialize(what: Serializable) -> u8 {
         S::Instruction(I::FnCall(_)) => 0x22,
         S::Instruction(I::ExternFnCall(_)) => 0x23,
         S::Instruction(I::Return) => 0x24,
+        // TODO: add Jump
+        // TODO: adding 8-bit Jumps for most cases could improve performance
+        // from reading code in VM
+        // TODO: 16-bit Jumps may actually be less performant than 32-bit (alignment??? idk)
         S::Instruction(I::JumpZero(_)) => 0x25,
         S::Instruction(I::Panic(_, _)) => 0x26,
         //S::Instruction(I::Locals(_)) => 0x27,
@@ -41,7 +45,7 @@ fn serialize(what: Serializable) -> u8 {
         S::Instruction(I::Decl) => 0x2a,
         S::Instruction(I::Store(_)) => 0x2b,
         S::Instruction(I::Load(_)) => 0x2c,
-        // Float/?? 4x
+        // Float 4x
         S::Instruction(I::FAdd) => 0x40,
         S::Instruction(I::FSub) => 0x41,
         S::Instruction(I::FMul) => 0x42,
@@ -52,9 +56,11 @@ fn serialize(what: Serializable) -> u8 {
         S::Instruction(I::Sub) => 0x51,
         S::Instruction(I::Mul) => 0x52,
         S::Instruction(I::Div) => 0x53,
-        S::Instruction(I::BAnd) => 0x54,
+        S::Instruction(I::Less) => 0x54,
         S::Instruction(I::Xor) => 0x55,
-        S::Instruction(I::BNot) => 0x56,
+        S::Instruction(I::Mod) => 0x56,
+        // Bool/?? 6x
+        S::Instruction(I::Not) => 0x60,
         // This should never be actually kept in the end
         S::Placeholder => 0xee,
         S::Instruction(I::LabelMark(_)) => panic!("tried to serialize unresolved label"),
@@ -155,7 +161,7 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
             JumpZero(label) => {
                 labels.refs.push((*label, code.len()));
                 // 4-byte jumps, which i choose simply to avoid needing a 16-bit deserialize method
-                for _ in 0..4 {
+                for _ in 0..2 {
                     code.push(serialize(Serializable::Placeholder));
                 }
             }
@@ -176,14 +182,18 @@ fn resolve_labels(labeled: &mut LabeledCode) {
             serialize(Serializable::Placeholder),
             "tried to write label to non-placeholder"
         );
-        let bs = u32_bytes(*refers as u32);
-        for i in 0..4 {
+        let bs = u16_bytes(*refers as u16);
+        for i in 0..2 {
             labeled.code[location+i] = bs[i];
         }
     }
 }
 
 fn u32_bytes(word: u32) -> [u8; 4] {
+    use std::mem::transmute;
+    unsafe { transmute(word.to_le()) }
+}
+fn u16_bytes(word: u16) -> [u8; 2] {
     use std::mem::transmute;
     unsafe { transmute(word.to_le()) }
 }
@@ -254,18 +264,16 @@ mod test {
         // mark byte 4: 'm'
         let mut marks = HashMap::new();
         let label = 2;
-        marks.insert(label, 4);
+        marks.insert(label, 10);
         let mut labeled = LabeledCode {
             code: vec![
-                serialize(Serializable::Placeholder),
-                serialize(Serializable::Placeholder),
                 serialize(Serializable::Placeholder),
                 serialize(Serializable::Placeholder),
                 b'm'
             ],
             labels: Labels { marks, refs: vec![(label, 0)] },
         };
-        let expected = vec![4, 0, 0, 0, b'm'];
+        let expected = vec![10, 0, b'm'];
         resolve_labels(&mut labeled);
         assert_eq!(labeled.code, expected);
     }

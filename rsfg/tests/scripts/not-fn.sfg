@@ -3,8 +3,8 @@
 // learned of the problem
 
 fn main()
-	assert(_not(false) == true)
-	assert(_not(true) == false)
+	assert(_not_reimp(false) == true)
+	assert(_not_reimp(true) == false)
 
 fn _not_reimp(what: bool) bool
 	if what

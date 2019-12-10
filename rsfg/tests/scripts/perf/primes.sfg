@@ -1,6 +1,6 @@
 fn main()
 	var prime = 2
-	var MAX_PRIME = 10000
+	var MAX_PRIME = 50000
 	while prime < MAX_PRIME
 		var fact = 2
 		var is_prime = true
@@ -8,11 +8,11 @@ fn main()
 		var running = true
 		// WANT sqrt, prime/2 will do for now
 		while (fact < (prime/2)) && running
-			if mod(prime, fact) == 0
+			if (prime % fact) == 0
 				is_prime = false
 				running = false
 			fact += 1
 		if is_prime
-			logi(prime)
+			//logi(prime)
 		prime += 1
 

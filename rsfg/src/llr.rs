@@ -37,8 +37,8 @@ pub enum Instruction {
     Dup,
     Pop,
     Return,
-    BAnd,
-    BNot,
+    Not,
+    Less,
     JumpZero(Label),
     //VarAlloc(u8),// this is a perf improvement to add later TODO
     // It pre-allocates for all the locals that are to be added in the procedure call
@@ -47,6 +47,7 @@ pub enum Instruction {
     Sub,
     Mul,
     Div,
+    Mod,
     FAdd,
     FSub,
     FLess,

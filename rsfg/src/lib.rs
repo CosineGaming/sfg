@@ -87,6 +87,7 @@ pub enum TokenType {
     Plus,
     Minus,
     Times,
+    Mod,
     Divide,
     OpAssign(Box<TokenType>),
     True,
@@ -130,6 +131,7 @@ impl std::fmt::Display for TokenType {
             Minus => "-",
             Times => "*",
             Divide => "/",
+            Mod => "%",
             OpAssign(of) => match **of {
                 Plus => "+=",
                 Minus => "-=",

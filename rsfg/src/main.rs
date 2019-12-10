@@ -4,7 +4,6 @@ use docopt::Docopt;
 use rsfg::{compile, CompileError};
 use rvmfg::{call, Thread};
 use std::path::Path;
-use log::debug;
 
 const USAGE: &str = "
 rsfg command line interface
@@ -68,6 +67,7 @@ fn main() {
 fn update_tests() {
     // TODO: Actually write the tests this tests (and deduplicate)
     use std::io::*;
+    use log::debug;
     let mut failed = 0;
     for entry in std::fs::read_dir("tests/scripts/error").unwrap() {
         let entry = entry.unwrap();
