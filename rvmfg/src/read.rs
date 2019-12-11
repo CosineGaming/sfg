@@ -11,6 +11,7 @@ pub enum Type {
 }
 
 #[derive(PartialEq, Eq, Debug)]
+#[repr(u8)]
 pub enum Deser {
     Add,
     Decl,
