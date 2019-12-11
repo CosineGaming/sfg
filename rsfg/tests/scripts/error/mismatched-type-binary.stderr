@@ -1,7 +1,6 @@
 [ERROR] mismatched type, expected int at 2:5, got float at 2:10
 [ERROR] no operation Times for bool at 4:25
-[ERROR] no operation Times for float at 5:24
-[ERROR] no operation And for int at 6:18
-[ERROR] no operation And for float at 7:21
-[ERROR] no operation Equal for str at 8:22
-[ERROR] no operation Minus for str at 9:24
+[ERROR] no operation And for int at 5:18
+[ERROR] no operation And for float at 6:21
+[ERROR] no operation Equal for str at 7:22
+[ERROR] no operation Minus for str at 8:24
