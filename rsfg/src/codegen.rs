@@ -45,6 +45,9 @@ fn serialize(what: Serializable) -> u8 {
         S::Instruction(I::Decl) => 0x2a,
         S::Instruction(I::Store(_)) => 0x2b,
         S::Instruction(I::Load(_)) => 0x2c,
+        S::Instruction(I::DeclLit(_)) => 0x2d,
+        S::Instruction(I::StoreLit(_,_)) => 0x2e,
+        S::Instruction(I::Jump(_)) => 0x2f,
         // Float 4x
         S::Instruction(I::FAdd) => 0x40,
         S::Instruction(I::FSub) => 0x41,
@@ -135,18 +138,16 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
         }
         use Instruction::*;
         match instr {
-            Push(what) => {
-                code.extend_from_slice(&u32_bytes(*what as u32));
+            // u32 arg
+            | Push(what)
+            | DeclLit(what)
+            => {
+                code.extend_from_slice(&u32_bytes(*what));
             }
             // Two u32 args
             Panic(l, c) => {
-                code.extend_from_slice(&u32_bytes(*l as u32));
-                code.extend_from_slice(&u32_bytes(*c as u32));
-            }
-            // Besides instruction, the procedure for generating
-            // FnCall and ExternFnCall is the same
-            FnCall(call) | ExternFnCall(call) => {
-                code.extend_from_slice(&u32_bytes(call.index as u32));
+                code.extend_from_slice(&u32_bytes(*l));
+                code.extend_from_slice(&u32_bytes(*c));
             }
             // u8 argument
             | Load(what)
@@ -158,12 +159,26 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
                 labels.marks.insert(*label, code.len());
             }
             // label argument
-            JumpZero(label) => {
+            | JumpZero(label)
+            | Jump(label)
+            => {
                 labels.refs.push((*label, code.len()));
                 // 4-byte jumps, which i choose simply to avoid needing a 16-bit deserialize method
                 for _ in 0..2 {
                     code.push(serialize(Serializable::Placeholder));
                 }
+            }
+            // u16 argument
+            | FnCall(what)
+            | ExternFnCall(what)
+            => {
+                code.extend_from_slice(&u16_bytes(*what))
+            }
+            // u8, u32
+            | StoreLit(i, lit)
+            => {
+                code.push(*i);
+                code.extend_from_slice(&u32_bytes(*lit));
             }
             // As simple as serializing the instruction
             _ => {}

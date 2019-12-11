@@ -14,6 +14,7 @@ pub enum Type {
 pub enum Deser {
     Add,
     Decl,
+    DeclLit,
     DeVars,
     Div,
     Dup,
@@ -25,6 +26,7 @@ pub enum Deser {
     ExternFnCall,
     FnCall,
     Panic,
+    Jump,
     JumpZero,
     Less,
     Load,
@@ -37,6 +39,7 @@ pub enum Deser {
     Return,
     Sub,
     Store,
+    StoreLit,
     Xor,
 }
 
@@ -69,6 +72,9 @@ pub fn deser(what: u8) -> Deser {
         0x2a => Decl,
         0x2b => Store,
         0x2c => Load,
+        0x2d => DeclLit,
+        0x2e => StoreLit,
+        0x2f => Jump,
         // Float/?? 4x
         0x40 => FAdd,
         0x41 => FSub,

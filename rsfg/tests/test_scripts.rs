@@ -59,16 +59,14 @@ fn decompile() {
             0x20, 0x08, 0x00, 0x00, 0x00, // push 8 again
             0x50, // add
             0x2a, // decl x
-            0x20, 0x00, 0x00, 0x00, 0x00, // push 0 (false)
-            0x25, // jump zero
-            0x3b, 0x00, // to absolute point (label AFTER):
+            0x2f, // jump
+            0x33, 0x00, // to absolute point (label AFTER):
             // call log:
-            0x20, 0x00, 0x00, 0x00, // push string lit
-            0,    // string index
-            0x2a, // decl for function call
+            0x2d, // decl literal
+            0x00, 0x00, 0x00, 0x00, // string index
             0x23, // call extern log
             // function index (4b)
-            0x01, 0x00, 0x00, 0x00, // 1 (0:main, 1:log)
+            0x01, 0x00, // 1 (0:main, 1:log)
             // AFTER:
             0x28, 0x01, // Delet 1 local x
             0x24, // Return

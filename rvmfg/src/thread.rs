@@ -139,7 +139,7 @@ impl Thread {
                 self.pop();
             }
             Deser::ExternFnCall => {
-                let index = read_u32(&self.code, &mut self.ip);
+                let index = read_u16(&self.code, &mut self.ip);
                 let (name, func) = match self.fns.get_index(index as usize) {
                     Some(tuple) => tuple,
                     _ => self.thread_panic(&format!("could not find extern function at {}", index)),
@@ -153,7 +153,7 @@ impl Thread {
                 };
             }
             Deser::FnCall => {
-                let index = read_u32(&self.code, &mut self.ip);
+                let index = read_u16(&self.code, &mut self.ip);
                 let func = match self.fns.get_index(index as usize) {
                     Some((_name, func)) => func,
                     _ => self.thread_panic(&format!("could not find function at {}", index)),
@@ -184,6 +184,10 @@ impl Thread {
                     self.ip = to as usize;
                 }
             }
+            Deser::Jump => {
+                let to = read_u16(&self.code, &mut self.ip);
+                self.ip = to as usize;
+            }
             Deser::Panic => {
                 let line = read_u32(&self.code, &mut self.ip);
                 let col = read_u32(&self.code, &mut self.ip);
@@ -193,11 +197,21 @@ impl Thread {
                 let a = self.pop();
                 self.locals.push(a);
             }
+            Deser::DeclLit => {
+                let lit = read_i32(&self.code, &mut self.ip);
+                self.locals.push(lit);
+            }
             Deser::Store => {
                 let ri = read_u8(&self.code, &mut self.ip) as usize;
                 let i = self.locals.len() - ri - 1;
                 let a = self.pop();
                 self.locals[i] = a;
+            }
+            Deser::StoreLit => {
+                let ri = read_u8(&self.code, &mut self.ip) as usize;
+                let lit = read_i32(&self.code, &mut self.ip);
+                let i = self.locals.len() - ri - 1;
+                self.locals[i] = lit;
             }
             Deser::Load => {
                 let ri = read_u8(&self.code, &mut self.ip) as usize;

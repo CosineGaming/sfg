@@ -301,6 +301,9 @@ fn inst_stack(i: llr::Instruction) -> isize {
         | Not
         | LabelMark(_)
         | DeVars(_) // minuses the locals, not the op stack
+        | DeclLit(_)
+        | StoreLit(_, _)
+        | Jump(_)
             => 0,
         | Pop
         | JumpZero(_)
@@ -341,9 +344,7 @@ fn lower_loop(
     }
     insts.append(&mut lower_scope_end(state));
     // Jump back to conditional, regardless
-    // Lacking a Jump command, we push zero and then JumpZero
-    insts.push(state, Ok(llr::Instruction::Push(0)));
-    insts.push(state, Ok(llr::Instruction::JumpZero(begin)));
+    insts.push(state, Ok(llr::Instruction::Jump(begin)));
     insts.push(state, Ok(llr::Instruction::LabelMark(end)));
     insts
 }
@@ -365,7 +366,6 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
             LiteralData::Float(val) => InstResults::from_inst(state, llr::Instruction::Push(f_as_u(val))),
         },
         Expression::Not(expr) => {
-            // TODO: optimize != with Xor? Optimize at all?? lol
             let mut insts = InstResults::default();
             insts.append(&mut expression_to_push(state, expr));
             insts.push(state, Ok(llr::Instruction::Not));
@@ -644,11 +644,11 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> I
         }
     } state.locals.pop(); // don't actually add end scope instructions, but end fake scope
     // Generate lowered call
-    let fn_call = llr::FnCall { index, arg_count: call.arguments.len() as u8 };
     let call = if is_extern {
-        llr::Instruction::ExternFnCall(fn_call)
+        // TODO (minor) check the conversion
+        llr::Instruction::ExternFnCall(index as u16)
     } else {
-        llr::Instruction::FnCall(fn_call)
+        llr::Instruction::FnCall(index as u16)
     };
     insts.push(state, Ok(call));
     if signature.id.id_type.is_some() {
@@ -686,9 +686,6 @@ fn total_vars(state: &mut LowerState) -> usize {
 
 fn lower_de_vars(state: &mut LowerState, mut n: usize) -> InstResults {
     use std::convert::TryFrom;
-    // no reason to de nothing
-    // this may be an optimization but it's reaaally obvious so i'll let it pass
-    if n == 0 { return InstResults::default() }
     let mut insts = InstResults::default();
     loop {
         match u8::try_from(n) {
@@ -823,8 +820,7 @@ fn lower_statement(
             // Don't bother with jump if no statements in else
             if !if_stmt.else_statements.is_empty() {
                 // if we executed if, don't execute else (jump to end of else)
-                insts.push(state, Ok(llr::Instruction::Push(0)));
-                insts.push(state, Ok(llr::Instruction::JumpZero(else_end)));
+                insts.push(state, Ok(llr::Instruction::Jump(else_end)));
             }
             insts.push(state, Ok(llr::Instruction::LabelMark(else_start)));
             if !if_stmt.else_statements.is_empty() {
@@ -968,7 +964,6 @@ pub fn lower(ast: AST) -> Result<llr::LLR> {
     assert!(!state.error_state, "if in error state error should've been reported");
     // here for a borrowck fanciness
     out.strings = strings;
-    debug!("{}", out);
     Ok(out)
 }
 

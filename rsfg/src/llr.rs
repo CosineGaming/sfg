@@ -27,12 +27,12 @@ pub struct Signature {
     pub return_type: Option<Type>, // Can be void (None)
     pub name: String,              // All fns are public and may need to interact with ABI
 }
-pub type NameKey = usize;
+pub type NameKey = u16;
 //pub type Namespace = Vec<TypedVar>;
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Instruction {
-    FnCall(FnCall),
-    ExternFnCall(FnCall),
+    FnCall(NameKey),
+    ExternFnCall(NameKey),
     Push(u32),
     Dup,
     Pop,
@@ -40,6 +40,7 @@ pub enum Instruction {
     Not,
     Less,
     JumpZero(Label),
+    Jump(Label),
     //VarAlloc(u8),// this is a perf improvement to add later TODO
     // It pre-allocates for all the locals that are to be added in the procedure call
     DeVars(u8),
@@ -58,14 +59,11 @@ pub enum Instruction {
     Xor,
     Decl,
     Store(u8),
+    DeclLit(u32), // opt
+    StoreLit(u8, u32), // opt
     Load(u8),
 }
 pub type TypedVar = Type;
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub struct FnCall {
-    pub index: NameKey,
-    pub arg_count: u8,
-}
 pub type Label = usize;
 
 impl LLR {

@@ -5,9 +5,9 @@ fn main()
 		var descopes = 5.0
 	else
 		panic()
-	var f = 12.0 + 14.0
+	var f = 12.2 + 14.5
 	var tight_loop = 200
-	while tight_loop
-		f += 2.0
+	while tight_loop > (12+2)
+		f *= 2.4
 		tight_loop -= 1
 

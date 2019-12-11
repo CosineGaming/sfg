@@ -9,6 +9,7 @@ mod lexer;
 mod llr;
 mod lower;
 mod parser;
+mod optimizer;
 
 #[derive(Debug)]
 pub enum CompileError {
@@ -229,7 +230,8 @@ pub fn compile(text: &str, stdlib: &str) -> Result<Vec<u8>> {
         Ok(llr) => llr,
         Err(err) => return Err(CompileError::Lower(err)),
     };
-    Ok(codegen::gen(llr))
+    let opt = optimizer::optimize_llr(llr);
+    Ok(codegen::gen(opt))
 }
 
 pub fn compile_or_print(text: &str, stdlib: &str) -> Vec<u8> {
