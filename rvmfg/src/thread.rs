@@ -229,7 +229,7 @@ impl Thread {
                 self.locals.resize(new_size, 0);
             }
             Deser::Dup => {
-                let a = self.pop();
+                let a = self.last();
                 self.push(a);
             }
             Deser::Add => {
@@ -327,6 +327,12 @@ impl Thread {
     fn pop(&mut self) -> i32 {
         match self.stack.pop() {
             Some(p) => p,
+            None => self.thread_panic("stack underflow"),
+        }
+    }
+    fn last(&mut self) -> i32 {
+        match self.stack.last() {
+            Some(p) => *p,
             None => self.thread_panic("stack underflow"),
         }
     }

@@ -755,7 +755,6 @@ fn lower_return(
 fn var_search(state: &mut LowerState, name: &Id) -> OneResult<(u8, Type)> {
     let mut lower_scopes = 0;
     // First we find the forward index before finding the reverse one
-    // TODO: maybe this means we should be using the forward index in Dup anyway? probly not
     // Assume not found until proven otherwise
     let mut forward = Err(LowerError::UnknownIdent(name.clone()));
     for scope in state.locals.iter() {
