@@ -15,13 +15,13 @@ pub struct LLR {
     pub extern_fns: Vec<Signature>,
     pub strings: Vec<String>,
 }
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Fn {
     pub instructions: Vec<Instruction>,
     pub signature: Signature,
     //pub namespace: Namespace,// my idea is to use the namespace as where variables are placed
 }
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug, Default)]
 pub struct Signature {
     pub parameters: Vec<TypedVar>, // When namespace is added, this should be Vec<NameKey> and point to the namespace
     pub return_type: Option<Type>, // Can be void (None)

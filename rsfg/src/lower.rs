@@ -1,7 +1,7 @@
 // Most static analysis occurs here. Lower the AST which matches syntax into
 // LLR which matches bytecode
 
-use crate::{ast::*, llr, vec_errs_to_res, Span, Type};
+use crate::{ast::*, llr, vec_errs_to_res, Span, Type, optimizer::optimize_llr};
 use indexmap::IndexMap;
 
 #[derive(Debug, PartialEq)]
@@ -636,11 +636,11 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> I
                 }
                 Err(e) => insts.push(state, Err(e)),
             }
-                insts.append(&mut lower_statement(state, &Statement::Declaration(Assignment {
-                    lvalue: param.clone(), // TODO: uneccesary clone?
-                    rvalue: arg.clone(),
-                    span: arg.full_span(),
-                }), signature));
+            insts.append(&mut lower_statement(state, &Statement::Declaration(Assignment {
+                lvalue: param.clone(), // TODO: uneccesary clone?
+                rvalue: arg.clone(),
+                span: arg.full_span(),
+            }), signature));
         }
     } state.locals.pop(); // don't actually add end scope instructions, but end fake scope
     // Generate lowered call
@@ -962,9 +962,11 @@ pub fn lower(ast: AST) -> Result<llr::LLR> {
     };
     out.extern_fns = externs;
     assert!(!state.error_state, "if in error state error should've been reported");
+    // also here for a borrowck fanciness
+    let pass_label = state.next_label;
     // here for a borrowck fanciness
     out.strings = strings;
-    Ok(out)
+    Ok(optimize_llr(out, pass_label))
 }
 
 #[cfg(test)]
@@ -1023,6 +1025,7 @@ mod test {
             for inst in func.instructions {
                 match inst {
                     Decl => balance += 1,
+                    DeclLit(_) => balance += 1,
                     DeVars(n) => balance -= n,
                     _ => (),
                 }

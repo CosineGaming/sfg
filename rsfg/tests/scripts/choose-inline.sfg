@@ -1,0 +1,12 @@
+// does NOT test inline
+// however does present a case of inlining
+// in case of errors / etc
+
+fn main()
+	something(5)
+
+fn something(x: int)
+	x = 6
+	return
+	panic()
+

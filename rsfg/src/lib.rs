@@ -230,8 +230,7 @@ pub fn compile(text: &str, stdlib: &str) -> Result<Vec<u8>> {
         Ok(llr) => llr,
         Err(err) => return Err(CompileError::Lower(err)),
     };
-    let opt = optimizer::optimize_llr(llr);
-    Ok(codegen::gen(opt))
+    Ok(codegen::gen(llr))
 }
 
 pub fn compile_or_print(text: &str, stdlib: &str) -> Vec<u8> {
