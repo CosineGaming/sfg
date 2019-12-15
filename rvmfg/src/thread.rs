@@ -14,7 +14,7 @@ const INIT_LOCALS_SIZE: usize = 16;
 /// incorrect recursion
 /// 256MB is excessively large but within the realms of normal operation
 /// /4 means gives twice on 64-bit
-const CALL_STACK_MAX_SIZE: usize = 256*1024*1024/4;
+const CALL_STACK_MAX_SIZE: usize = 256 * 1024 * 1024 / 4;
 
 #[derive(PartialEq, Debug)]
 pub struct Thread {
@@ -144,12 +144,16 @@ impl Thread {
                     Some(tuple) => tuple,
                     _ => self.thread_panic(&format!("could not find extern function at {}", index)),
                 };
-                thread_assert!(self, func.ip == 0, "extern fn call calling non-extern function");
+                thread_assert!(
+                    self,
+                    func.ip == 0,
+                    "extern fn call calling non-extern function"
+                );
                 match &name[..] {
                     "_log" => sfg_std::log(self),
-                    _ => {
-                        self.thread_panic("special reflection business not yet supported and stdlib not found")
-                    }
+                    _ => self.thread_panic(
+                        "special reflection business not yet supported and stdlib not found",
+                    ),
                 };
             }
             Deser::FnCall => {
@@ -170,7 +174,7 @@ impl Thread {
             Deser::Xor => {
                 let b = self.pop();
                 let a = self.pop();
-                self.push(a^b);
+                self.push(a ^ b);
             }
             Deser::Less => {
                 let b = self.pop();
@@ -336,12 +340,14 @@ impl Thread {
             None => self.thread_panic("stack underflow"),
         }
     }
-    fn push(&mut self, p: i32) { self.stack.push(p) }
+    fn push(&mut self, p: i32) {
+        self.stack.push(p)
+    }
     fn pop_f(&mut self) -> f32 {
-    	i_as_f(self.pop())
+        i_as_f(self.pop())
     }
     fn push_f(&mut self, f: f32) {
-    	self.push(f_as_i(f))
+        self.push(f_as_i(f))
     }
     // I can't believe this works
     // I have no idea how this works

@@ -597,7 +597,7 @@ fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Vec<Result<
                         // fake vector error (sigh)
                         let v = v.into_iter().next().unwrap();
                         match v {
-                            ParseError::Expected(_,_) => (),
+                            ParseError::Expected(_, _) => (),
                             // this is in a rollback of an error, no need to report
                             ParseError::EOF(_) => break,
                         }

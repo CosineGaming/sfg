@@ -66,8 +66,8 @@ fn main() {
 #[cfg(debug_assertions)]
 fn update_tests() {
     // TODO: Actually write the tests this tests (and deduplicate)
-    use std::io::*;
     use log::debug;
+    use std::io::*;
     let mut failed = 0;
     for entry in std::fs::read_dir("tests/scripts/error").unwrap() {
         let entry = entry.unwrap();
@@ -92,12 +92,14 @@ fn update_tests() {
                     continue;
                 } else {
                     println!(
-"{}:
+                        "{}:
 OUTPUT:
 {}
 OLD OUTPUT:
 {}
-save Y/n?", pathstr, out, old);
+save Y/n?",
+                        pathstr, out, old
+                    );
                 }
             }
             let do_write = loop {

@@ -4,7 +4,7 @@ extern crate test;
 use test::Bencher;
 
 use rsfg::{compile, CompileError};
-use rvmfg::{Thread, call};
+use rvmfg::{call, Thread};
 
 // copied from test_scripts.rs, cause idk how to import it
 fn get_stdlib() -> String {
@@ -19,16 +19,12 @@ fn compile_file(path: &str) -> Result<Vec<u8>, CompileError> {
 
 #[bench]
 fn compile_hodge(b: &mut Bencher) {
-    b.iter(||
-        compile_file("benches/scripts/hodgepodge.sfg").expect("bench failed"));
+    b.iter(|| compile_file("benches/scripts/hodgepodge.sfg").expect("bench failed"));
 }
 
 #[bench]
 fn run_hodge(b: &mut Bencher) {
     let compiled = compile_file("benches/scripts/hodgepodge.sfg").expect("bench failed");
     let mut thread = Thread::new(compiled);
-    b.iter(|| {
-        call![thread.main()]
-    });
+    b.iter(|| call![thread.main()]);
 }
-

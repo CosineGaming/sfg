@@ -1,7 +1,7 @@
 extern crate rsfg;
 use rsfg::{compile, CompileError};
-use std::path::Path;
 use std::error::Error;
+use std::path::Path;
 // We use rvmfg for convenient integration testing
 // Not a build dependency, just for this test.
 extern crate rvmfg;
@@ -51,9 +51,9 @@ fn decompile() {
             1,    // parameter count
             // parameters:
             0x12, // type: string
-            0x6c, 0x6f, 0x67, 0, // "log\0"
+            0x6c, 0x6f, 0x67, 0,    // "log\0"
             0x01, // string lit
-            0x68, 0x69, 0, // "hi\0"
+            0x68, 0x69, 0,    // "hi\0"
             0x20, // push
             0x08, 0x00, 0x00, 0x00, // 8
             0x20, 0x08, 0x00, 0x00, 0x00, // push 8 again
@@ -70,7 +70,7 @@ fn decompile() {
             // AFTER:
             0x28, 0x01, // Delet 1 local x
             0x24, // Return
-        ]
+        ],
     );
 }
 
@@ -104,7 +104,11 @@ fn compile_safe(path: &Path) -> Vec<u8> {
 struct StateError(usize, usize, usize);
 impl std::fmt::Display for StateError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "improper state, stack length was {}, call stack length was {}, locals len was {}", self.0, self.1, self.2)
+        write!(
+            f,
+            "improper state, stack length was {}, call stack length was {}, locals len was {}",
+            self.0, self.1, self.2
+        )
     }
 }
 impl Error for StateError {}

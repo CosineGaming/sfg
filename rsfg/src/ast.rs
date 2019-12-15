@@ -1,4 +1,4 @@
-use super::{Span, Type, llr};
+use super::{llr, Span, Type};
 
 pub type AST = Vec<ASTNode>;
 

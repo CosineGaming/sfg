@@ -10,4 +10,3 @@ pub fn log(thread: &mut Thread) {
     let string = &thread.strings[string_index as usize];
     print!("{}", string);
 }
-

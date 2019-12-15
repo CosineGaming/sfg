@@ -1,5 +1,5 @@
 /// optimization pass over low level bytecode
-use crate::llr::{*, Instruction::*};
+use crate::llr::{Instruction::*, *};
 
 static OPTIMIZE: bool = true;
 static INLINE_THRESHOLD: isize = 64;
@@ -60,14 +60,18 @@ fn inline_and_deps(fns: &mut Vec<Fn>, adj: &mut Adj, fn_i: usize, next_label: &m
         // performance check only ("are there instructions to change")
         if adj[caller_i][fn_i] != 0 {
             let mut count_inlined = 0;
-            caller.instructions = caller.instructions.iter_mut().flat_map(|inst| {
-                if FnCall(fn_i as u16) == *inst {
-                    count_inlined += 1;
-                    inline_fn(callee.clone(), next_label)
-                } else {
-                    vec![*inst]
-                }
-            }).collect();
+            caller.instructions = caller
+                .instructions
+                .iter_mut()
+                .flat_map(|inst| {
+                    if FnCall(fn_i as u16) == *inst {
+                        count_inlined += 1;
+                        inline_fn(callee.clone(), next_label)
+                    } else {
+                        vec![*inst]
+                    }
+                })
+                .collect();
             // make sure we got them all i guess
             debug_assert_eq!(count_inlined, adj[caller_i][fn_i]);
             // now they no longer depend on us
@@ -85,27 +89,31 @@ fn inline_and_deps(fns: &mut Vec<Fn>, adj: &mut Adj, fn_i: usize, next_label: &m
 fn inline_fn(func: Fn, next_label: &mut usize) -> Vec<Instruction> {
     let label = *next_label; // CHECK something cleaner than passing all this around
     *next_label += 1;
-    let mut mapped: Vec<Instruction> = func.instructions.into_iter().map(|i| {
-        // since we'll have this inline function and n others, we need
-        // to change the labels somehow
-        // our approach: use the label, but add an incremented label
-        // note we only increment per inline, NOT per mark because then they wouldn't match
-        // we let adding the original label do the job of disambiguating within the fn
-        // we could get a duplicate with n(4) + lbl(6), n(3) + lbl(7) for example
-        // so we multiply the label part with a constant that makes it magnitudinally different
-        // CHECK this isn't exactly clean....
-        static LABEL_DISAM: usize = 0x1000;
-        match i {
-            // for the return jump, we simply use the per-inline label,
-            // as we know it's not a conflict and it doesn't conflict with the
-            // modified labels
-            Return => Jump(label),
-            LabelMark(n) => LabelMark(n + label * LABEL_DISAM),
-            JumpZero(n) => JumpZero(n + label * LABEL_DISAM),
-            Jump(n) => Jump(n + label * LABEL_DISAM),
-            _ => i,
-        }
-    }).collect();
+    let mut mapped: Vec<Instruction> = func
+        .instructions
+        .into_iter()
+        .map(|i| {
+            // since we'll have this inline function and n others, we need
+            // to change the labels somehow
+            // our approach: use the label, but add an incremented label
+            // note we only increment per inline, NOT per mark because then they wouldn't match
+            // we let adding the original label do the job of disambiguating within the fn
+            // we could get a duplicate with n(4) + lbl(6), n(3) + lbl(7) for example
+            // so we multiply the label part with a constant that makes it magnitudinally different
+            // CHECK this isn't exactly clean....
+            static LABEL_DISAM: usize = 0x1000;
+            match i {
+                // for the return jump, we simply use the per-inline label,
+                // as we know it's not a conflict and it doesn't conflict with the
+                // modified labels
+                Return => Jump(label),
+                LabelMark(n) => LabelMark(n + label * LABEL_DISAM),
+                JumpZero(n) => JumpZero(n + label * LABEL_DISAM),
+                Jump(n) => Jump(n + label * LABEL_DISAM),
+                _ => i,
+            }
+        })
+        .collect();
     // the return has to jump to end because we don't have a call stack to do it
     mapped.push(LabelMark(label));
     debug!("mapped {:?}", mapped);
@@ -343,15 +351,9 @@ mod test {
                 ],
             },
             // to be inlined
-            Fn {
-                signature: Signature::default(),
-                instructions: vec![Push(42), Return, Pop],
-            },
+            Fn { signature: Signature::default(), instructions: vec![Push(42), Return, Pop] },
             // recurses
-            Fn {
-                signature: Signature::default(),
-                instructions: vec![FnCall(2)],
-            },
+            Fn { signature: Signature::default(), instructions: vec![FnCall(2)] },
         ];
         let expected = Fn {
             signature: Signature::default(),
@@ -369,12 +371,7 @@ mod test {
     }
     #[test]
     fn adj_ops() {
-        let mut adj = vec![
-            vec![0, 0, 0, 0],
-            vec![0, 1, 0, 0],
-            vec![2, 0, 0, 3],
-            vec![0, 0, 4, 0],
-        ];
+        let mut adj = vec![vec![0, 0, 0, 0], vec![0, 1, 0, 0], vec![2, 0, 0, 3], vec![0, 0, 4, 0]];
         assert_eq!(col_sum(&mut adj, 0), 2);
         assert_eq!(col_sum(&mut adj, 1), 1);
         assert_eq!(col_sum(&mut adj, 2), 4);

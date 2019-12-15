@@ -46,7 +46,7 @@ fn serialize(what: Serializable) -> u8 {
         S::Instruction(I::Store(_)) => 0x2b,
         S::Instruction(I::Load(_)) => 0x2c,
         S::Instruction(I::DeclLit(_)) => 0x2d,
-        S::Instruction(I::StoreLit(_,_)) => 0x2e,
+        S::Instruction(I::StoreLit(_, _)) => 0x2e,
         S::Instruction(I::Jump(_)) => 0x2f,
         // Float 4x
         S::Instruction(I::FAdd) => 0x40,
@@ -139,9 +139,7 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
         use Instruction::*;
         match instr {
             // u32 arg
-            | Push(what)
-            | DeclLit(what)
-            => {
+            Push(what) | DeclLit(what) => {
                 code.extend_from_slice(&u32_bytes(*what));
             }
             // Two u32 args
@@ -150,18 +148,13 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
                 code.extend_from_slice(&u32_bytes(*c));
             }
             // u8 argument
-            | Load(what)
-            | Store(what)
-            | DeVars(what)
-            => code.push(*what),
+            Load(what) | Store(what) | DeVars(what) => code.push(*what),
             // is label
             LabelMark(label) => {
                 labels.marks.insert(*label, code.len());
             }
             // label argument
-            | JumpZero(label)
-            | Jump(label)
-            => {
+            JumpZero(label) | Jump(label) => {
                 labels.refs.push((*label, code.len()));
                 // 4-byte jumps, which i choose simply to avoid needing a 16-bit deserialize method
                 for _ in 0..2 {
@@ -169,14 +162,9 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
                 }
             }
             // u16 argument
-            | FnCall(what)
-            | ExternFnCall(what)
-            => {
-                code.extend_from_slice(&u16_bytes(*what))
-            }
+            FnCall(what) | ExternFnCall(what) => code.extend_from_slice(&u16_bytes(*what)),
             // u8, u32
-            | StoreLit(i, lit)
-            => {
+            StoreLit(i, lit) => {
                 code.push(*i);
                 code.extend_from_slice(&u32_bytes(*lit));
             }
@@ -199,7 +187,7 @@ fn resolve_labels(labeled: &mut LabeledCode) {
         );
         let bs = u16_bytes(*refers as u16);
         for i in 0..2 {
-            labeled.code[location+i] = bs[i];
+            labeled.code[location + i] = bs[i];
         }
     }
 }
@@ -284,7 +272,7 @@ mod test {
             code: vec![
                 serialize(Serializable::Placeholder),
                 serialize(Serializable::Placeholder),
-                b'm'
+                b'm',
             ],
             labels: Labels { marks, refs: vec![(label, 0)] },
         };

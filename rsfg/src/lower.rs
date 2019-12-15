@@ -1,7 +1,7 @@
 // Most static analysis occurs here. Lower the AST which matches syntax into
 // LLR which matches bytecode
 
-use crate::{ast::*, llr, vec_errs_to_res, Span, Type, optimizer::optimize_llr};
+use crate::{ast::*, llr, optimizer::optimize_llr, vec_errs_to_res, Span, Type};
 use indexmap::IndexMap;
 
 #[derive(Debug, PartialEq)]
@@ -48,9 +48,11 @@ impl std::fmt::Display for LowerError {
             NoOperation(op, on_type, span) => {
                 write!(f, "no operation {:?} for {} at {}", op, on_type, span)
             }
-            Shadow(id) => {
-                write!(f, "shadowing is illegal within the same scope with {} at {}", id.name, id.span)
-            }
+            Shadow(id) => write!(
+                f,
+                "shadowing is illegal within the same scope with {} at {}",
+                id.name, id.span
+            ),
         }
     }
 }
@@ -101,13 +103,18 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> OneResult<Type>
         Expression::Identifier(id) => match var_search(state, id)? {
             (_, t) => t,
         },
-        Expression::Not(of) => {
-            match expression_type(state, of) {
-                Ok(Type::Bool) => Type::Bool,
-                Ok(what) => return Err(LowerError::MismatchedType(Type::Bool, of.full_span(), what, of.full_span())),
-                Err(e) => return Err(e),
+        Expression::Not(of) => match expression_type(state, of) {
+            Ok(Type::Bool) => Type::Bool,
+            Ok(what) => {
+                return Err(LowerError::MismatchedType(
+                    Type::Bool,
+                    of.full_span(),
+                    what,
+                    of.full_span(),
+                ))
             }
-        }
+            Err(e) => return Err(e),
+        },
         Expression::FnCall(func) => {
             let node = match state.fn_map.get(&func.name.name) {
                 Some(func) => func,
@@ -210,14 +217,7 @@ impl<'a> LowerState<'a> {
             };
             fn_map.insert(name, node);
         }
-        Self {
-            fn_map,
-            locals: vec![],
-            strings,
-            next_label: 0,
-            stack_length: 0,
-            error_state: false,
-        }
+        Self { fn_map, locals: vec![], strings, next_label: 0, stack_length: 0, error_state: false }
     }
     fn get_label(&mut self) -> usize {
         self.next_label += 1;
@@ -361,9 +361,15 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
                 let string_id = strings.len() - 1;
                 InstResults::from_inst(state, llr::Instruction::Push(string_id as u32))
             }
-            LiteralData::Int(int) => InstResults::from_inst(state, llr::Instruction::Push(i_as_u(int))),
-            LiteralData::Bool(val) => InstResults::from_inst(state, llr::Instruction::Push(i_as_u(val as i32))),
-            LiteralData::Float(val) => InstResults::from_inst(state, llr::Instruction::Push(f_as_u(val))),
+            LiteralData::Int(int) => {
+                InstResults::from_inst(state, llr::Instruction::Push(i_as_u(int)))
+            }
+            LiteralData::Bool(val) => {
+                InstResults::from_inst(state, llr::Instruction::Push(i_as_u(val as i32)))
+            }
+            LiteralData::Float(val) => {
+                InstResults::from_inst(state, llr::Instruction::Push(f_as_u(val)))
+            }
         },
         Expression::Not(expr) => {
             let mut insts = InstResults::default();
@@ -375,8 +381,7 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
         Expression::FnCall(call) => lower_fn_call(state, call, false),
         Expression::Identifier(var) => {
             let mut insts = InstResults::default();
-            let load = var_rindex(state, var)
-                .and_then(|i| Ok(llr::Instruction::Load(i)));
+            let load = var_rindex(state, var).and_then(|i| Ok(llr::Instruction::Load(i)));
             insts.push(state, load);
             insts
         }
@@ -414,20 +419,18 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
                     not_eq.op = NotEqual;
                     let desugared = Expression::Not(Box::new(Expression::Binary(not_eq)));
                     insts.append(&mut expression_to_push(state, &desugared))
-                },
+                }
                 // Arguments reversed previously
                 // implements Less (Greater has been reversed)
-                Greater | Less => {
-                    match left_type {
-                        Type::Int => {
-                            insts.push(state, Ok(llr::Instruction::Less));
-                        }
-                        Type::Float => {
-                            insts.push(state, Ok(llr::Instruction::FLess));
-                        }
-                        _ => unreachable!(),
+                Greater | Less => match left_type {
+                    Type::Int => {
+                        insts.push(state, Ok(llr::Instruction::Less));
                     }
-                }
+                    Type::Float => {
+                        insts.push(state, Ok(llr::Instruction::FLess));
+                    }
+                    _ => unreachable!(),
+                },
                 GreaterEqual | LessEqual => {
                     // Dummy the !this
                     let op = match expr.op {
@@ -478,26 +481,20 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
                                 condition: expr.right.clone(),
                                 statements: vec![
                                     // true -- a && b
-                                    Statement::LLRInsts(vec![
-                                        llr::Instruction::Push(1),
-                                    ])
+                                    Statement::LLRInsts(vec![llr::Instruction::Push(1)]),
                                 ],
                                 // else
                                 else_statements: vec![
                                     // false -- a && !b
-                                    Statement::LLRInsts(vec![
-                                        llr::Instruction::Push(0),
-                                    ]),
+                                    Statement::LLRInsts(vec![llr::Instruction::Push(0)]),
                                 ],
                                 span,
-                            })
+                            }),
                         ],
                         else_statements: vec![
                             // short circuit
                             // push false
-                            Statement::LLRInsts(vec![
-                                llr::Instruction::Push(0),
-                            ])
+                            Statement::LLRInsts(vec![llr::Instruction::Push(0)]),
                         ],
                         span,
                     });
@@ -505,19 +502,21 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
                     state.stack_length += 1;
                     insts.append(&mut lower_statement(state, &desugared, &Signature::default()))
                 }
-                NotEqual => {
-                    match left_type {
-                        Type::Int | Type::Bool => insts.push(state, Ok(llr::Instruction::Xor)),
-                        Type::Float => {
-                            let desugared = Expression::FnCall(FnCall {
-                                name: Id { name: "_epsilon_not_eq".to_string(), id_type: None, span: expr.span },
-                                arguments: vec![expr.left.clone(), expr.right.clone()],
+                NotEqual => match left_type {
+                    Type::Int | Type::Bool => insts.push(state, Ok(llr::Instruction::Xor)),
+                    Type::Float => {
+                        let desugared = Expression::FnCall(FnCall {
+                            name: Id {
+                                name: "_epsilon_not_eq".to_string(),
+                                id_type: None,
                                 span: expr.span,
-                            });
-                            insts.append(&mut expression_to_push(state, &desugared));
-                        }
-                        _ => insts.push(state, type_error),
+                            },
+                            arguments: vec![expr.left.clone(), expr.right.clone()],
+                            span: expr.span,
+                        });
+                        insts.append(&mut expression_to_push(state, &desugared));
                     }
+                    _ => insts.push(state, type_error),
                 },
             };
             insts
@@ -618,7 +617,8 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> I
     let mut insts = InstResults::default();
     // begin a fake scope for arguments, to allow declaring them without state-declaring them
     // it's a hack but shrug CHECK
-    lower_scope_begin(state); {
+    lower_scope_begin(state);
+    {
         // Typecheck all arguments calls with their found IDs
         for (i, arg) in call.arguments.iter().enumerate() {
             let param = &params[i];
@@ -626,24 +626,32 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> I
             match type_r {
                 Ok(given_type) => {
                     if types_match(Some(given_type), param.id_type) == Some(false) {
-                        insts.push(state, Err(LowerError::MismatchedType(
-                            param.id_type.expect("type definitely given for mismatch"),
-                            param.span,
-                            given_type,
-                            arg.full_span(),
-                        )));
+                        insts.push(
+                            state,
+                            Err(LowerError::MismatchedType(
+                                param.id_type.expect("type definitely given for mismatch"),
+                                param.span,
+                                given_type,
+                                arg.full_span(),
+                            )),
+                        );
                     }
                 }
                 Err(e) => insts.push(state, Err(e)),
             }
-            insts.append(&mut lower_statement(state, &Statement::Declaration(Assignment {
-                lvalue: param.clone(), // TODO: uneccesary clone?
-                rvalue: arg.clone(),
-                span: arg.full_span(),
-            }), signature));
+            insts.append(&mut lower_statement(
+                state,
+                &Statement::Declaration(Assignment {
+                    lvalue: param.clone(), // TODO: uneccesary clone?
+                    rvalue: arg.clone(),
+                    span: arg.full_span(),
+                }),
+                signature,
+            ));
         }
-    } state.locals.pop(); // don't actually add end scope instructions, but end fake scope
-    // Generate lowered call
+    }
+    state.locals.pop(); // don't actually add end scope instructions, but end fake scope
+                        // Generate lowered call
     let call = if is_extern {
         // TODO (minor) check the conversion
         llr::Instruction::ExternFnCall(index as u16)
@@ -762,18 +770,22 @@ fn var_search(state: &mut LowerState, name: &Id) -> OneResult<(u8, Type)> {
             forward = Ok(((lower_scopes + i) as u8, *id_type));
             // We use shadowing so keep searching for a closer one
         } // otherwise keep searching
-        // track the lower scopes so when we get the final scope result we can get a total
+          // track the lower scopes so when we get the final scope result we can get a total
         lower_scopes += scope.len();
     }
     if state.error_state {
         // avoid underflow issue
         return forward;
     }
-    forward.and_then(|(i, t)| Ok((
-        // now we subtract the COMPILER locals length minus the forward
-        // index for the VM reverse index minus one because vars is length,
-        // index is index
-        total_vars(state) as u8 - i - 1, t)))
+    forward.and_then(|(i, t)| {
+        Ok((
+            // now we subtract the COMPILER locals length minus the forward
+            // index for the VM reverse index minus one because vars is length,
+            // index is index
+            total_vars(state) as u8 - i - 1,
+            t,
+        ))
+    })
 }
 fn var_rindex(state: &mut LowerState, name: &Id) -> OneResult<u8> {
     let (i, _) = var_search(state, name)?;
@@ -794,12 +806,15 @@ fn lower_statement(
             match cond_type {
                 Ok(cond_type) => {
                     if cond_type != Type::Bool {
-                        insts.push(state, Err(LowerError::MismatchedType(
-                            Type::Bool,
-                            signature.span,
-                            cond_type,
-                            if_stmt.condition.full_span(),
-                        )));
+                        insts.push(
+                            state,
+                            Err(LowerError::MismatchedType(
+                                Type::Bool,
+                                signature.span,
+                                cond_type,
+                                if_stmt.condition.full_span(),
+                            )),
+                        );
                     }
                 }
                 Err(e) => insts.push(state, Err(e)),
@@ -857,7 +872,9 @@ fn lower_statement(
                     // best recovery for illegal shadow is to still insert new type
                     // because most likely cause is "i thought they were legal"
                     // so do what they expect
-                    if let Some(_) = state.locals.last_mut().unwrap().insert(decl.lvalue.name.clone(), o) {
+                    if let Some(_) =
+                        state.locals.last_mut().unwrap().insert(decl.lvalue.name.clone(), o)
+                    {
                         // TODO wouldn't it be nice if IndexMap held spans
                         // so we could indicate who shadows it
                         insts.push(state, Err(LowerError::Shadow(decl.lvalue.clone())));
@@ -973,7 +990,7 @@ mod test {
     use crate::fmt_vec;
     #[test]
     fn no_returns_stack_balance() {
-        use super::{lower, inst_stack};
+        use super::{inst_stack, lower};
         use crate::{lexer::lex, parser::parse};
         let script_string = std::fs::read_to_string("tests/scripts/no-returns.sfg")
             .expect("could not load given file");
@@ -1001,7 +1018,7 @@ mod test {
     }
     #[test]
     fn locals_balance() {
-        use super::{lower, llr::Instruction::*};
+        use super::{llr::Instruction::*, lower};
         use crate::{lexer::lex, parser::parse};
         let script_string = std::fs::read_to_string("tests/scripts/no-returns.sfg")
             .expect("could not load given file");

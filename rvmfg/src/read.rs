@@ -96,8 +96,8 @@ pub fn deser(what: u8) -> Deser {
     }
 }
 pub fn deser_header(what: u8) -> Option<DeserHeader> {
-    use DeserHeader::*;
     use self::Type::*;
+    use DeserHeader::*;
     Some(match what {
         // Sections
         0x01 => StringLit,

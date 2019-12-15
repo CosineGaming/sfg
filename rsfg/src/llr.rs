@@ -59,7 +59,7 @@ pub enum Instruction {
     Xor,
     Decl,
     Store(u8),
-    DeclLit(u32), // opt
+    DeclLit(u32),      // opt
     StoreLit(u8, u32), // opt
     Load(u8),
 }

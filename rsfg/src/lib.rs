@@ -8,8 +8,8 @@ mod codegen;
 mod lexer;
 mod llr;
 mod lower;
-mod parser;
 mod optimizer;
+mod parser;
 
 #[derive(Debug)]
 pub enum CompileError {
