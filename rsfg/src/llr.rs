@@ -7,7 +7,7 @@
 
 // We're racing to hello world so there's a lot commented out
 
-use crate::{fmt_vec, Type};
+use crate::{fmt_vec, fmt_vec_with, Type};
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct LLR {
@@ -79,7 +79,7 @@ impl std::fmt::Display for LLR {
             "\nFNS:\n{}\nEXTERNS:\n{}\nSTRINGS:\n{:?}",
             fmt_vec(&self.fns),
             fmt_vec(&self.extern_fns),
-            fmt_vec(&self.strings)
+            fmt_vec_with(&self.strings, "", ",")
         )
     }
 }

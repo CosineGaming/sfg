@@ -30,17 +30,15 @@ pub fn optimize_llr(mut llr: LLR, mut next_label: usize) -> LLR {
 /// row = caller
 /// col = callee
 type Adj = Vec<Vec<usize>>;
+type BorAdj = [Vec<usize>];
 
-fn column(adj: &mut Adj, col: usize) -> Vec<&mut usize> {
-    adj.iter_mut().map(|row| &mut row[col]).collect()
-}
 fn zero_col(adj: &mut Adj, col: usize) {
-    for i in column(adj, col) {
-        *i = 0;
+    for row in adj {
+        row[col] = 0;
     }
 }
-fn col_sum(adj: &mut Adj, col: usize) -> usize {
-    column(adj, col).into_iter().map(|i| *i).sum()
+fn col_sum(adj: &BorAdj, col: usize) -> usize {
+    adj.iter().map(|row| &row[col]).sum()
 }
 
 /// inlines a function only if its safe to do so
@@ -112,7 +110,7 @@ fn sanitize_inline(func: Fn, next_label: &mut usize) -> Vec<Instruction> {
     mapped
 }
 
-fn total_deps(adj: &Adj) -> usize {
+fn total_deps(adj: &BorAdj) -> usize {
     adj.iter().map(|row| -> usize { row.iter().sum() }).sum()
 }
 
@@ -132,7 +130,7 @@ fn inline_all(fns: &mut Vec<Fn>, next_label: &mut usize) {
         let recurses = fn_adj[func_i][func_i] != 0;
         let fn_size = func.instructions.len();
         // add up all counts referencing this
-        let fn_uses: usize = col_sum(&mut fn_adj, func_i);
+        let fn_uses: usize = col_sum(&fn_adj, func_i);
         // TODO: fn_uses is minus 1 for one canonical representation once we can delete fns
         // fn_size is minus 2 for FnCall / Return
         let size_impact = fn_uses as isize * (fn_size as isize - 2);
@@ -157,16 +155,17 @@ fn inline_all(fns: &mut Vec<Fn>, next_label: &mut usize) {
             // we decide not to inline an arbitrary (first wanted) function
             // and then try the whole process over again
             for i in 0..fns.len() {
-                if col_sum(&mut fn_adj, i) != 0 {
+                if col_sum(&fn_adj, i) != 0 {
                     // this should NOT be common, it indicates a two-function
                     // recursion system that are both short
                     debug!(
                         "internal compiler WARNING: cannot resolve an inline \
-                        graph. cancelling inlining for  {}. this should not \
-                        be common, it indicates multi-function recursion in \
-                        which all fns are short. the adj matrix was: {}",
+                         graph. cancelling inlining for  {}. this should not \
+                         be common, it indicates multi-function recursion in \
+                         which all fns are short. the adj matrix was: {}",
                         fns[i].signature.name,
-                        fmt_adj(fns, &fn_adj));
+                        fmt_adj(fns, &fn_adj)
+                    );
                     zero_col(&mut fn_adj, i);
                     break;
                 }
@@ -180,14 +179,18 @@ fn inline_all(fns: &mut Vec<Fn>, next_label: &mut usize) {
 }
 
 /// pretty-prints an fn adjacency matrix
-fn fmt_adj(fns: &Vec<Fn>, adj: &Adj) -> String {
+fn fmt_adj(fns: &[Fn], adj: &BorAdj) -> String {
     // assume pad to one digit because unlikely >9 calls atm
-    let mut fmt = String::from("
+    let mut fmt = String::from(
+        "
         callee (same labels)
 caller
-");
-    let longest_name = adj.iter().enumerate().fold(0, |acc, (i, _)|
-        std::cmp::max(acc, fns[i].signature.name.len()));
+",
+    );
+    let longest_name = adj
+        .iter()
+        .enumerate()
+        .fold(0, |acc, (i, _)| std::cmp::max(acc, fns[i].signature.name.len()));
     for (i, caller) in adj.iter().enumerate() {
         let mut line = String::new();
         let name = &fns[i].signature.name;

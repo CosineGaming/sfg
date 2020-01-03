@@ -20,8 +20,8 @@ impl std::fmt::Display for CompileError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use CompileError::*;
         match self {
-            Parse(errs) => write!(f, "{}", fmt_vec_with(errs, "[ERROR] ")),
-            Lower(errs) => write!(f, "{}", fmt_vec_with(errs, "[ERROR] ")),
+            Parse(errs) => write!(f, "{}", fmt_vec_with(errs, "[ERROR] ", "\n")),
+            Lower(errs) => write!(f, "{}", fmt_vec_with(errs, "[ERROR] ", "\n")),
         }
     }
 }
@@ -30,10 +30,10 @@ impl std::error::Error for CompileError {}
 type Result<T> = std::result::Result<T, CompileError>;
 
 pub fn fmt_vec<T: std::fmt::Display>(vec: &[T]) -> String {
-    fmt_vec_with(vec, "")
+    fmt_vec_with(vec, "", "\n")
 }
-pub fn fmt_vec_with<T: std::fmt::Display>(vec: &[T], with: &str) -> String {
-    vec.iter().map(|e| format!("{}{}", with, e)).collect::<Vec<String>>().join("\n")
+pub fn fmt_vec_with<T: std::fmt::Display>(vec: &[T], with: &str, sep: &str) -> String {
+    vec.iter().map(|e| format!("{}{}", with, e)).collect::<Vec<String>>().join(sep)
 }
 
 fn vec_errs_to_res<T, E>(

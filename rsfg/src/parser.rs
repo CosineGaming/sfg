@@ -115,46 +115,44 @@ fn expect_token(rtokens: &mut Tokens, what: TokenType, during: &str) -> Result<T
     }
 }
 
-fn parse_id(rtokens: &mut Tokens, type_required: bool) -> Result<Id> {
+fn parse_name(rtokens: &mut Tokens) -> Result<NameSpan> {
     let token = pop_no_eof(rtokens, "identifier")?;
-    let mut id_span = token.span;
     let mut expected_id = expect_any!("identifier", Some(&token) => {
         Identifier(_, String::new()) => (),
     });
-    let mut id_type = None;
-    // Can't use expect_any! because not Some(got) has special semantics
-    match rtokens.last() {
-        Some(Token { kind: TokenType::Colon, .. }) => {
-            let t = rtokens.pop().unwrap();
-            let mut certain_type = expect_any!("identifier type", rtokens.pop() => {
-                Type(id_type,Type::Int) => id_type,
-            });
-            resolve!(expected_id, certain_type);
-            id_type = Some(certain_type);
-            id_span = Span::set(vec![t.span, id_span]);
-        }
-        Some(got) => {
-            if type_required {
-                let mut no_type: Result<()> = Err(ParseError::Expected(
-                    vec![TokenType::Type(Type::Str), TokenType::Type(Type::Int)],
-                    got.clone(),
-                )
-                .v());
-                resolve!(expected_id, no_type);
-            } else {
-                resolve!(expected_id);
-            }
-        }
-        None => {
-            let mut eof: Result<()> = Err(ParseError::EOF("identifier".to_string()).v());
-            resolve!(expected_id, eof);
-        }
-    }
+    resolve!(expected_id);
     let name = match token.kind {
         TokenType::Identifier(name) => name,
         _ => panic!("identifier wasn't identifier (compiler bug)"),
     };
-    Ok(Id { name, id_type, span: id_span })
+    Ok(NameSpan { name, span: token.span })
+}
+
+// TODO: split up into required func and not required to remove unwrap
+fn parse_explicit_type(rtokens: &mut Tokens, type_required: bool) -> Result<Option<Type>> {
+    // Can't use expect_any! because not Some(got) has special semantics
+    match rtokens.last() {
+        Some(Token { kind: TokenType::Colon, .. }) => {
+            rtokens.pop().unwrap(); // the colon
+            let mut certain_type = expect_any!("identifier type", rtokens.pop() => {
+                Type(id_type,Type::Int) => id_type,
+            });
+            resolve!(certain_type);
+            Ok(Some(certain_type))
+        }
+        Some(got) => {
+            if type_required {
+                Err(ParseError::Expected(
+                    vec![TokenType::Type(Type::Str), TokenType::Type(Type::Int)],
+                    got.clone(),
+                )
+                .v())
+            } else {
+                Ok(None)
+            }
+        }
+        None => Err(ParseError::EOF("identifier".to_string()).v()),
+    }
 }
 
 fn token_to_binary_op(token: Option<Token>) -> Result<BinaryOp> {
@@ -268,10 +266,9 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
                 Some(_) => {
                     let t = rtokens.pop().unwrap();
                     let name = known!(t.kind, Identifier);
-                    Ok(Expression::Identifier(Id {
+                    Ok(Expression::Identifier(NameSpan {
                         name: name,
-                        id_type: None,
-                        span: t.span
+                        span: t.span,
                     }))
                 }
                 None => return Err(ParseError::EOF("expression".to_string()).v()),
@@ -342,10 +339,11 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
         _ => (),
     }
     let total_span = Span::set(vec![token.span, final_span]);
-    Ok(FnCall { name: Id { name, id_type: None, span: token.span }, arguments, span: total_span })
+    let name_span = NameSpan { name, span: token.span };
+    Ok(FnCall { name: name_span, arguments, span: total_span })
 }
 
-fn parse_args(rtokens: &mut Tokens) -> Result<Vec<Id>> {
+fn parse_params(rtokens: &mut Tokens) -> Result<Vec<TypedName>> {
     let mut args = vec![];
     let mut paren = expect_token(rtokens, TokenType::LParen, "fn parameters");
     let mut arg_errors = vec![];
@@ -354,7 +352,14 @@ fn parse_args(rtokens: &mut Tokens) -> Result<Vec<Id>> {
         #[allow(unreachable_code)]
         arg_errors.push(expect_any!("parameters", rtokens.last() => {
             Identifier(__,String::from("")) => {
-                args.push(parse_id(rtokens, true));
+                let name = parse_name(rtokens);
+                let id_type = parse_explicit_type(rtokens, true);
+                let wrapped = name.and_then(|name| id_type.and_then(|id_type|
+                    Ok(TypedName {
+                        name: name,
+                        id_type: id_type.unwrap(),
+                    })));
+                args.push(wrapped);
             }
             RParen => {
                 rtokens.pop();
@@ -435,11 +440,10 @@ fn parse_loop(rtokens: &mut Tokens, tabs: usize) -> Result<WhileLoop> {
     Ok(WhileLoop { condition, statements, span })
 }
 
-fn parse_assignment(rtokens: &mut Tokens) -> Result<Assignment> {
-    let mut lvalue = parse_id(rtokens, false);
+fn parse_assignment_part(rtokens: &mut Tokens, lvalue: NameSpan) -> Result<Assignment> {
     let op = rtokens.pop();
     let mut rvalue = parse_expression(rtokens);
-    resolve!(lvalue, rvalue);
+    resolve!(rvalue);
     expect_any!("assignment", op => {
         Assignment => {
             Assignment {
@@ -466,10 +470,19 @@ fn parse_assignment(rtokens: &mut Tokens) -> Result<Assignment> {
         }
     })
 }
+
+fn parse_assignment(rtokens: &mut Tokens) -> Result<Assignment> {
+    let name = parse_name(rtokens)?;
+    parse_assignment_part(rtokens, name)
+}
 /// Declaration is just an assignment starting with var
-fn parse_declaration(rtokens: &mut Tokens) -> Result<Assignment> {
-    expect_token(rtokens, TokenType::Declare, "declaration")?;
-    parse_assignment(rtokens)
+fn parse_declaration(rtokens: &mut Tokens) -> Result<Declaration> {
+    expect_token(rtokens, TokenType::Declare, "declaration").expect("L1 violation");
+    let mut name = parse_name(rtokens);
+    // the only known place a type is optional but allowed
+    let mut id_type = parse_explicit_type(rtokens, false);
+    resolve!(name, id_type);
+    Ok(Declaration { assignment: parse_assignment_part(rtokens, name)?, id_type })
 }
 
 fn parse_statement(rtokens: &mut Tokens, tabs: usize) -> Result<Statement> {
@@ -499,7 +512,7 @@ fn parse_signature(rtokens: &mut Tokens) -> Result<Signature> {
         Identifier(name,String::from("")) => name,
         ExternFnCall(name,String::from("")) => name,
     });
-    let mut parameters = parse_args(rtokens);
+    let mut parameters = parse_params(rtokens);
     let mut final_char_expect = expect_any!("signature", rtokens.last() => {
         Type(__,Type::Int) => match rtokens.pop() {
             Some(Token { kind: TokenType::Type(r_type), span }) => (Some(r_type), span),
@@ -512,9 +525,9 @@ fn parse_signature(rtokens: &mut Tokens) -> Result<Signature> {
     });
     resolve!(name, parameters, final_char_expect, final_newline);
     let (return_type, final_span) = final_char_expect;
-    let id = Id { name, id_type: return_type, span };
+    let name_span = NameSpan { name, span };
     let span = Span::set(vec![span, final_span]);
-    Ok(Signature { id, parameters, span })
+    Ok(Signature { name: name_span, return_type, parameters, span })
 }
 
 /// Strips empty/tab/comment lines, does nothing if no empty lines, rolls back on error state
@@ -715,12 +728,13 @@ mod test {
             ast,
             vec![ASTNode::Fn(crate::ast::Fn {
                 signature: Signature {
-                    id: Id::fake("main"),
+                    name: NameSpan { name: String::from("main"), span: Default::default() },
+                    return_type: None,
                     parameters: vec![],
                     span: Span::new(),
                 },
                 statements: vec![Statement::FnCall(FnCall {
-                    name: Id::fake("main"),
+                    name: NameSpan { name: String::from("main"), span: Default::default() },
                     arguments: vec![],
                     span: Span::new(),
                 })],

@@ -186,8 +186,8 @@ fn resolve_labels(labeled: &mut LabeledCode) {
             "tried to write label to non-placeholder"
         );
         let bs = u16_bytes(*refers as u16);
-        for i in 0..2 {
-            labeled.code[location + i] = bs[i];
+        for (i, &byte) in bs.iter().enumerate() {
+            labeled.code[location + i] = byte;
         }
     }
 }

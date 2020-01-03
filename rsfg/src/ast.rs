@@ -18,17 +18,22 @@ pub struct ExternFn {
 }
 #[derive(PartialEq, Debug, Default)]
 pub struct Signature {
-    pub id: Id,
-    pub parameters: Vec<Id>,
+    pub name: NameSpan,
+    pub return_type: Option<Type>, // None => Void, Some(t) => Type
+    pub parameters: Vec<TypedName>,
     pub span: Span,
+}
+#[derive(PartialEq, Clone, Debug)]
+pub struct TypedName {
+    pub name: NameSpan,
+    pub id_type: Type,
 }
 #[derive(PartialEq, Clone, Debug, Default)]
-pub struct Id {
+pub struct NameSpan {
     pub name: String,
-    pub id_type: Option<Type>,
     pub span: Span,
 }
-impl Id {
+impl NameSpan {
     pub fn fake(name: &'static str) -> Self {
         Self { name: name.to_string(), ..Default::default() }
     }
@@ -37,7 +42,7 @@ impl Id {
 pub enum Statement {
     Assignment(Assignment),
     /// The data in a declaration is the same as assignment
-    Declaration(Assignment),
+    Declaration(Declaration),
     FnCall(FnCall),
     Return(Option<Expression>),
     If(If),
@@ -47,7 +52,7 @@ pub enum Statement {
 #[derive(PartialEq, Clone, Debug)]
 pub enum Expression {
     Literal(Literal),
-    Identifier(Id),
+    Identifier(NameSpan),
     Not(Box<Expression>),
     // A FnCall can be an expression as well as a statement
     // A statement FnCall is lowered differently than an expression FnCall
@@ -68,13 +73,18 @@ pub enum LiteralData {
 }
 #[derive(PartialEq, Clone, Debug)]
 pub struct Assignment {
-    pub lvalue: Id,
+    pub lvalue: NameSpan,
     pub rvalue: Expression,
     pub span: Span,
 }
 #[derive(PartialEq, Clone, Debug)]
+pub struct Declaration {
+    pub assignment: Assignment,
+    pub id_type: Option<Type>,
+}
+#[derive(PartialEq, Clone, Debug)]
 pub struct FnCall {
-    pub name: Id,
+    pub name: NameSpan,
     pub arguments: Vec<Expression>,
     pub span: Span,
 }

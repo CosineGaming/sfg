@@ -1,4 +1,4 @@
-[ERROR] explicit_return expected return with type int (defined at 3:4), got explicit return with type str at 4:9
+[ERROR] explicit_return expected return with type int (defined at 3:4), got return with type str at 4:9
 [ERROR] fail_to_return expected return with type int (defined at 6:4), got void or no return at internal
 [ERROR] return_void expected return with type int (defined at 8:4), got void or no return at internal
-[ERROR] return_in_void expected void or no return (defined at 11:4), got explicit return with type str at 12:9
+[ERROR] return_in_void expected void or no return (defined at 11:4), got return with type str at 12:9

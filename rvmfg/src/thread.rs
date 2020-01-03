@@ -67,7 +67,7 @@ macro_rules! thread_assert {
 
 impl std::fmt::Display for Thread {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        for stack in vec![&vec![self.ip], &self.call_stack] {
+        for &stack in &[&[self.ip], &self.call_stack[..]] {
             for ip in stack {
                 for (name, func) in &self.fns {
                     let begin = &func.ip;
@@ -294,7 +294,7 @@ impl Thread {
             }
             Deser::Not => {
                 let a = self.pop();
-                self.push(!(a != 0) as i32);
+                self.push((a == 0) as i32);
             }
         }
         false

@@ -7,13 +7,13 @@ use indexmap::IndexMap;
 #[derive(Debug, PartialEq)]
 pub enum LowerError {
     MismatchedType(Type, Span, Type, Span),
-    MismatchedReturn(Id, Option<Type>, Span),
-    ArgumentCount(Id, usize, usize, Span),
+    MismatchedReturn(NameSpan, Option<Type>, Option<Type>, Span),
+    ArgumentCount(NameSpan, usize, usize, Span),
     NonLiteral(&'static str, Span),
-    UnknownFn(Id),
-    UnknownIdent(Id),
+    UnknownFn(NameSpan),
+    UnknownIdent(NameSpan),
     NoOperation(BinaryOp, Type, Span),
-    Shadow(Id),
+    Shadow(NameSpan),
 }
 impl std::fmt::Display for LowerError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -22,17 +22,11 @@ impl std::fmt::Display for LowerError {
             MismatchedType(a, a_s, b, b_s) => {
                 write!(f, "mismatched type, expected {} at {}, got {} at {}", a, a_s, b, b_s)
             }
-            MismatchedReturn(needed, id_type, span) => {
-                write!(f, "{} expected ", needed.name)?;
-                match needed.id_type {
-                    Some(t) => write!(f, "return with type {}", t)?,
-                    None => write!(f, "void or no return")?,
-                };
-                write!(f, " (defined at {}), got ", needed.span)?;
-                match id_type {
-                    Some(t) => write!(f, "explicit return with type {}", t)?,
-                    None => write!(f, "void or no return")?,
-                };
+            MismatchedReturn(fn_name, needed, id_type, span) => {
+                write!(f, "{} expected ", fn_name.name)?;
+                write!(f, "{}", fmt_voidable(*needed))?;
+                write!(f, " (defined at {}), got ", fn_name.span)?;
+                write!(f, "{}", fmt_voidable(*id_type))?;
                 write!(f, " at {}", span)
             }
             ArgumentCount(id, expected, given, span) => write!(
@@ -41,7 +35,7 @@ impl std::fmt::Display for LowerError {
                 id.name, id.span, expected, given, span
             ),
             NonLiteral(name, span) => write!(f, "literal value required for {} at {}", name, span),
-            UnknownFn(id) => write!(f, "called unknown function {} at {}", id.name, id.span),
+            UnknownFn(ns) => write!(f, "called unknown function {} at {}", ns.name, ns.span),
             UnknownIdent(id) => {
                 write!(f, "referenced unknown identifier {} at {}", id.name, id.span)
             }
@@ -58,6 +52,12 @@ impl std::fmt::Display for LowerError {
 }
 // All relevant details in Display and Debug
 impl std::error::Error for LowerError {}
+fn fmt_voidable(what: Option<Type>) -> String {
+    match what {
+        Some(t) => format!("return with type {}", t),
+        None => "void or no return".to_string(),
+    }
+}
 
 fn vec_to_res<T, E>(vec: Vec<std::result::Result<T, E>>) -> std::result::Result<Vec<T>, Vec<E>> {
     let mut oks = vec![];
@@ -121,8 +121,8 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> OneResult<Type>
                 None => return Err(LowerError::UnknownFn(func.name.clone())),
             };
             let return_type = match node {
-                ASTNode::Fn(f) => &f.signature.id.id_type,
-                ASTNode::ExternFn(f) => &f.signature.id.id_type,
+                ASTNode::Fn(f) => &f.signature.return_type,
+                ASTNode::ExternFn(f) => &f.signature.return_type,
             };
             match return_type {
                 Some(what) => *what,
@@ -163,19 +163,6 @@ fn expression_type(state: &mut LowerState, expr: &Expression) -> OneResult<Type>
     })
 }
 
-// Some(true) is like (Int, Int) OR (Int, Infer)
-// Some(false) is like (Int, String)
-// None is (Infer, Infer)
-fn types_match(a: Option<Type>, b: Option<Type>) -> Option<bool> {
-    if a == None && b == None {
-        None
-    } else if a == b {
-        Some(true)
-    } else {
-        Some(false)
-    }
-}
-
 fn i_as_u(what: i32) -> u32 {
     unsafe { std::mem::transmute::<i32, u32>(what) }
 }
@@ -204,7 +191,7 @@ impl<'a> LowerState<'a> {
         // Add all functions to the map
         for node in ast.iter() {
             let name = match node {
-                ASTNode::Fn(func) => func.signature.id.name.clone(),
+                ASTNode::Fn(func) => func.signature.name.name.clone(),
                 ASTNode::ExternFn(_) => continue,
             };
             fn_map.insert(name, node);
@@ -213,7 +200,7 @@ impl<'a> LowerState<'a> {
         for node in ast.iter() {
             let name = match node {
                 ASTNode::Fn(_) => continue,
-                ASTNode::ExternFn(func) => func.signature.id.name.clone(),
+                ASTNode::ExternFn(func) => func.signature.name.name.clone(),
             };
             fn_map.insert(name, node);
         }
@@ -270,9 +257,9 @@ impl InstResults {
         debug!("warning: pushing unsafe vec");
         Self(nonsafe)
     }
-    fn from_insts_unsafe(insts: &Vec<llr::Instruction>) -> Self {
+    fn from_insts_unsafe(insts: &[llr::Instruction]) -> Self {
         debug!("warning: creating unsafe vec");
-        Self(insts.into_iter().map(|i| Ok(*i)).collect())
+        Self(insts.iter().map(|i| Ok(*i)).collect())
     }
     fn from_res(state: &mut LowerState, res: OneResult<llr::Instruction>) -> Self {
         Self::from_vec(state, vec![res])
@@ -506,11 +493,7 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
                     Type::Int | Type::Bool => insts.push(state, Ok(llr::Instruction::Xor)),
                     Type::Float => {
                         let desugared = Expression::FnCall(FnCall {
-                            name: Id {
-                                name: "_epsilon_not_eq".to_string(),
-                                id_type: None,
-                                span: expr.span,
-                            },
+                            name: NameSpan { name: "_epsilon_not_eq".to_string(), span: expr.span },
                             arguments: vec![expr.left.clone(), expr.right.clone()],
                             span: expr.span,
                         });
@@ -566,9 +549,9 @@ fn lower_assert(state: &mut LowerState, call: &FnCall) -> InstResults {
     let col = call.arguments[2].clone();
     // panic(line, col)
     let panic_statement = Statement::FnCall(FnCall {
-        name: Id::fake("panic"),
+        name: NameSpan { name: "panic".to_string(), span: call.name.span },
         arguments: vec![line, col],
-        span: call.span,
+        ..*call
     });
     // if !condition
     // 	panic(line, col)
@@ -579,7 +562,7 @@ fn lower_assert(state: &mut LowerState, call: &FnCall) -> InstResults {
         span: call.span,
     });
     // Completely arbitrary, but lower_statement expects it in case of return
-    let dummy_sig = Signature { id: Id::fake(""), parameters: vec![], span: call.span };
+    let dummy_sig = Signature { span: call.span, ..Default::default() };
     lower_statement(state, &desugared, &dummy_sig)
 }
 
@@ -608,7 +591,7 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> I
     let params = &signature.parameters;
     if call.arguments.len() != params.len() {
         return InstResults::from(LowerError::ArgumentCount(
-            signature.id.clone(),
+            signature.name.clone(),
             params.len(),
             call.arguments.len(),
             call.span,
@@ -625,12 +608,12 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> I
             let type_r = expression_type(state, arg);
             match type_r {
                 Ok(given_type) => {
-                    if types_match(Some(given_type), param.id_type) == Some(false) {
+                    if given_type != param.id_type {
                         insts.push(
                             state,
                             Err(LowerError::MismatchedType(
-                                param.id_type.expect("type definitely given for mismatch"),
-                                param.span,
+                                param.id_type,
+                                param.name.span,
                                 given_type,
                                 arg.full_span(),
                             )),
@@ -641,10 +624,13 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> I
             }
             insts.append(&mut lower_statement(
                 state,
-                &Statement::Declaration(Assignment {
-                    lvalue: param.clone(), // TODO: uneccesary clone?
-                    rvalue: arg.clone(),
-                    span: arg.full_span(),
+                &Statement::Declaration(Declaration {
+                    assignment: Assignment {
+                        lvalue: param.name.clone(), // TODO: uneccesary clone?
+                        rvalue: arg.clone(),
+                        span: arg.full_span(),
+                    },
+                    id_type: Some(param.id_type),
                 }),
                 signature,
             ));
@@ -659,7 +645,7 @@ fn lower_fn_call(state: &mut LowerState, call: &FnCall, is_statement: bool) -> I
         llr::Instruction::FnCall(index as u16)
     };
     insts.push(state, Ok(call));
-    if signature.id.id_type.is_some() {
+    if signature.return_type.is_some() {
         // Return value is unused if so it needs to be popped for balance
         if is_statement {
             // this has to be unsafe because we never noted the return push
@@ -719,15 +705,19 @@ fn lower_return(
     let mut insts = vec![];
     // Typecheck return value
     // None == None -> return == void
-    match (signature.id.id_type, expr) {
-        (Some(_), None) => {
-            insts.push(Err(LowerError::MismatchedReturn(signature.id.clone(), None, Span::new())))
-        }
+    match (signature.return_type, expr) {
+        (Some(_), None) => insts.push(Err(LowerError::MismatchedReturn(
+            signature.name.clone(),
+            signature.return_type,
+            None,
+            Span::new(),
+        ))),
         (a, Some(b)) => match expression_type(state, b) {
             Ok(b_type) => {
                 if a != Some(b_type) {
                     insts.push(Err(LowerError::MismatchedReturn(
-                        signature.id.clone(),
+                        signature.name.clone(),
+                        signature.return_type,
                         Some(b_type),
                         b.full_span(),
                     )));
@@ -760,7 +750,7 @@ fn lower_return(
     InstResults::from_vec_unsafe(insts)
 }
 
-fn var_search(state: &mut LowerState, name: &Id) -> OneResult<(u8, Type)> {
+fn var_search(state: &mut LowerState, name: &NameSpan) -> OneResult<(u8, Type)> {
     let mut lower_scopes = 0;
     // First we find the forward index before finding the reverse one
     // Assume not found until proven otherwise
@@ -787,7 +777,7 @@ fn var_search(state: &mut LowerState, name: &Id) -> OneResult<(u8, Type)> {
         ))
     })
 }
-fn var_rindex(state: &mut LowerState, name: &Id) -> OneResult<u8> {
+fn var_rindex(state: &mut LowerState, name: &NameSpan) -> OneResult<u8> {
     let (i, _) = var_search(state, name)?;
     Ok(i)
 }
@@ -851,7 +841,34 @@ fn lower_statement(
         Statement::WhileLoop(loop_data) => lower_loop(state, loop_data, signature),
         Statement::Assignment(assign) => {
             let mut insts = InstResults::default();
-            // Compile rvalue first in case it depends on lvalue
+            let rtype_res = expression_type(state, &assign.rvalue);
+            match expression_type(state, &Expression::Identifier(assign.lvalue.clone())) {
+                Ok(ltype) => {
+                    let rtype = rtype_res.unwrap_or_else(|e| {
+                        insts.push(state, Err(e));
+                        // remove redundant mismatched type err by matching ltype
+                        ltype
+                    });
+                    if ltype != rtype {
+                        insts.push(
+                            state,
+                            Err(LowerError::MismatchedType(
+                                ltype,
+                                assign.lvalue.span,
+                                rtype,
+                                assign.rvalue.full_span(),
+                            )),
+                        );
+                    } // otherwise a-ok
+                }
+                Err(e) => {
+                    insts.push(state, Err(e));
+                    if let Err(e) = rtype_res {
+                        insts.push(state, Err(e));
+                        // no redundant mismatched type error
+                    }
+                }
+            }
             insts.append(&mut expression_to_push(state, &assign.rvalue));
             let store = var_rindex(state, &assign.lvalue)
                 // Swap the old value to the top, new value is in old spot
@@ -863,21 +880,37 @@ fn lower_statement(
             // Declaration is just a push where we change locals
             let mut insts = InstResults::default();
             // have to change locals AFTER push ofc
-            match expression_type(state, &decl.rvalue) {
-                Ok(o) => {
-                    insts.append(&mut expression_to_push(state, &decl.rvalue));
+            match expression_type(state, &decl.assignment.rvalue) {
+                Ok(rtype) => {
+                    if decl.id_type.is_some() && decl.id_type != Some(rtype) {
+                        // mismatched type
+                        insts.push(
+                            state,
+                            Err(LowerError::MismatchedType(
+                                decl.id_type.unwrap(),
+                                decl.assignment.lvalue.span,
+                                rtype,
+                                decl.assignment.rvalue.full_span(),
+                            )),
+                        )
+                    }
+                    insts.append(&mut expression_to_push(state, &decl.assignment.rvalue));
                     insts.push(state, Ok(llr::Instruction::Decl));
                     // shadows within same scope are illegal
                     // TODO: make shadows within any scope illegal(?)
                     // best recovery for illegal shadow is to still insert new type
                     // because most likely cause is "i thought they were legal"
                     // so do what they expect
-                    if let Some(_) =
-                        state.locals.last_mut().unwrap().insert(decl.lvalue.name.clone(), o)
+                    if state
+                        .locals
+                        .last_mut()
+                        .unwrap()
+                        .insert(decl.assignment.lvalue.name.clone(), rtype)
+                        .is_some()
                     {
                         // TODO wouldn't it be nice if IndexMap held spans
                         // so we could indicate who shadows it
-                        insts.push(state, Err(LowerError::Shadow(decl.lvalue.clone())));
+                        insts.push(state, Err(LowerError::Shadow(decl.assignment.lvalue.clone())));
                     }
                 }
                 Err(e) => insts.push(state, Err(e)),
@@ -924,12 +957,12 @@ fn lower_signature(signature: &Signature) -> llr::Signature {
     // Lower parameters
     let mut parameters = vec![];
     for param in &signature.parameters {
-        parameters.push(param.id_type.expect("untyped parameter let through parser"));
+        parameters.push(param.id_type);
     }
     llr::Signature {
-        name: signature.id.name.clone(),
+        name: signature.name.name.clone(),
         parameters,
-        return_type: signature.id.id_type,
+        return_type: signature.return_type,
     }
 }
 
@@ -937,10 +970,7 @@ fn lower_fn(state: &mut LowerState, func: &Fn) -> Result<llr::Fn> {
     lower_scope_begin(state);
     {
         for param in &func.signature.parameters {
-            state.locals.last_mut().unwrap().insert(
-                param.name.clone(),
-                param.id_type.expect("untyped parameter let through parser"),
-            );
+            state.locals.last_mut().unwrap().insert(param.name.name.clone(), param.id_type);
         }
         let rv = llr::Fn {
             instructions: vec_to_res(lower_fn_statements(state, func).0)?,

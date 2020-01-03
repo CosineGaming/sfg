@@ -101,6 +101,15 @@ save Y/n?",
                         pathstr, out, old
                     );
                 }
+            } else {
+                println!(
+                    "{}:
+OUTPUT:
+{}
+TEST OUTPUT NOT YET SAVED
+save Y/n?",
+                    pathstr, out
+                );
             }
             let do_write = loop {
                 let mut input = String::new();
