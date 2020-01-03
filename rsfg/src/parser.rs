@@ -32,9 +32,9 @@ impl ParseError {
 
 type Result<T> = std::result::Result<T, Vec<ParseError>>;
 
-static PANIC_ON_ERROR: bool = false;
+const PANIC_ON_ERROR: bool = false;
 
-static IDENT: &str = "identifier";
+const IDENT: &str = "identifier";
 
 macro_rules! expect_any {
     ( $during:literal, $to_match:expr => { $($token_type:ident$(($subordinate:pat,$literal:expr))? => $expr:expr $(,)?)* } ) => {

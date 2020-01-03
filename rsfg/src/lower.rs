@@ -394,7 +394,7 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
                 // no prep, (mostly gonna desugar and try again)
                 And | Equal => (),
                 // depends on type
-                GreaterEqual | LessEqual if left_type == Type::Int => (),
+                GreaterEqual | LessEqual => (),
                 NotEqual if left_type == Type::Float => (),
                 // otherwise we usual left/right
                 // Right, left, op-to-follow

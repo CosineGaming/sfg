@@ -1,8 +1,8 @@
 /// optimization pass over low level bytecode
 use crate::llr::{Instruction::*, *};
 
-static OPTIMIZE: bool = true;
-static INLINE_THRESHOLD: isize = 64;
+const OPTIMIZE: bool = true;
+const INLINE_THRESHOLD: isize = 64;
 
 /// general principles:
 /// MORE INSTRUCTIONS IS WORSE almost all the time (reading from bytecode is slow)
@@ -43,8 +43,8 @@ fn col_sum(adj: &mut Adj, col: usize) -> usize {
     column(adj, col).into_iter().map(|i| *i).sum()
 }
 
-/// returns which fns were successfully inlined,
-fn inline_and_deps(fns: &mut Vec<Fn>, adj: &mut Adj, fn_i: usize, next_label: &mut usize) {
+/// inlines a function only if its safe to do so
+fn inline_fn(fns: &mut Vec<Fn>, adj: &mut Adj, fn_i: usize, next_label: &mut usize) {
     if adj[fn_i].iter().sum::<usize>() != 0 {
         // we still call people that we want to inline, nothing we can do
         return;
@@ -63,12 +63,12 @@ fn inline_and_deps(fns: &mut Vec<Fn>, adj: &mut Adj, fn_i: usize, next_label: &m
             caller.instructions = caller
                 .instructions
                 .iter_mut()
-                .flat_map(|inst| {
-                    if FnCall(fn_i as u16) == *inst {
+                .flat_map(|&mut inst| {
+                    if FnCall(fn_i as u16) == inst {
                         count_inlined += 1;
-                        inline_fn(callee.clone(), next_label)
+                        sanitize_inline(callee.clone(), next_label)
                     } else {
-                        vec![*inst]
+                        vec![inst]
                     }
                 })
                 .collect();
@@ -78,15 +78,8 @@ fn inline_and_deps(fns: &mut Vec<Fn>, adj: &mut Adj, fn_i: usize, next_label: &m
             adj[caller_i][fn_i] = 0;
         }
     }
-    // now that we've removed one of their dependencies,
-    // maybe they're ready to inline as well?
-    for caller_i in 0..fns.len() {
-        if adj[caller_i][fn_i] != 0 {
-            inline_and_deps(fns, adj, caller_i, next_label);
-        }
-    }
 }
-fn inline_fn(func: Fn, next_label: &mut usize) -> Vec<Instruction> {
+fn sanitize_inline(func: Fn, next_label: &mut usize) -> Vec<Instruction> {
     let label = *next_label; // CHECK something cleaner than passing all this around
     *next_label += 1;
     let mut mapped: Vec<Instruction> = func
@@ -101,7 +94,7 @@ fn inline_fn(func: Fn, next_label: &mut usize) -> Vec<Instruction> {
             // we could get a duplicate with n(4) + lbl(6), n(3) + lbl(7) for example
             // so we multiply the label part with a constant that makes it magnitudinally different
             // CHECK this isn't exactly clean....
-            static LABEL_DISAM: usize = 0x1000;
+            const LABEL_DISAM: usize = 0x1000;
             match i {
                 // for the return jump, we simply use the per-inline label,
                 // as we know it's not a conflict and it doesn't conflict with the
@@ -116,8 +109,11 @@ fn inline_fn(func: Fn, next_label: &mut usize) -> Vec<Instruction> {
         .collect();
     // the return has to jump to end because we don't have a call stack to do it
     mapped.push(LabelMark(label));
-    debug!("mapped {:?}", mapped);
     mapped
+}
+
+fn total_deps(adj: &Adj) -> usize {
+    adj.iter().map(|row| -> usize { row.iter().sum() }).sum()
 }
 
 fn inline_all(fns: &mut Vec<Fn>, next_label: &mut usize) {
@@ -146,28 +142,67 @@ fn inline_all(fns: &mut Vec<Fn>, next_label: &mut usize) {
         }
     }
     loop {
-        for i in 0..fns.len() {
-            inline_and_deps(fns, &mut fn_adj, i, next_label);
-        }
-        if fn_adj.iter().map(|row| -> usize { row.iter().sum() }).sum::<usize>() == 0 {
-            // no more functions expecting functions to be inlined to them! (we win)
+        let original_total = total_deps(&fn_adj);
+        if original_total == 0 {
+            // no more deps, we're done
             break;
-        } else {
-            // we made it all the way through and were never able to resolve some.
+        }
+        for i in 0..fns.len() {
+            inline_fn(fns, &mut fn_adj, i, next_label);
+        }
+        let new_total = total_deps(&fn_adj);
+        if original_total == new_total {
+            // we made it all the way through and were unable able to resolve any deps.
             // to make a continued effort to inline as much as possible + wanted,
             // we decide not to inline an arbitrary (first wanted) function
             // and then try the whole process over again
             for i in 0..fns.len() {
                 if col_sum(&mut fn_adj, i) != 0 {
-                    debug!("cannot resolve an inline graph, cancelling {}", i);
+                    // this should NOT be common, it indicates a two-function
+                    // recursion system that are both short
+                    debug!(
+                        "internal compiler WARNING: cannot resolve an inline \
+                        graph. cancelling inlining for  {}. this should not \
+                        be common, it indicates multi-function recursion in \
+                        which all fns are short. the adj matrix was: {}",
+                        fns[i].signature.name,
+                        fmt_adj(fns, &fn_adj));
                     zero_col(&mut fn_adj, i);
                     break;
                 }
             }
         }
+        // if we've changed the dep graph, starting from the beginning we
+        // might be able to inline more fns
     }
     // TODO figure out how to delete now-inlined functions when we mark pubs
     // until then we'll just have dead code i guess
+}
+
+/// pretty-prints an fn adjacency matrix
+fn fmt_adj(fns: &Vec<Fn>, adj: &Adj) -> String {
+    // assume pad to one digit because unlikely >9 calls atm
+    let mut fmt = String::from("
+        callee (same labels)
+caller
+");
+    let longest_name = adj.iter().enumerate().fold(0, |acc, (i, _)|
+        std::cmp::max(acc, fns[i].signature.name.len()));
+    for (i, caller) in adj.iter().enumerate() {
+        let mut line = String::new();
+        let name = &fns[i].signature.name;
+        let pad = longest_name - name.len();
+        for _ in 0..pad {
+            line.push_str(" ");
+        }
+        line.push_str(&format!("{} ", name));
+        for callee in caller {
+            line.push_str(&format!("{} ", callee));
+        }
+        line.push_str("\n");
+        fmt.push_str(&line);
+    }
+    fmt
 }
 
 fn peephole(insts: &mut Vec<Instruction>) -> Vec<Instruction> {
