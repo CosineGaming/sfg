@@ -1,34 +1,42 @@
-// Low-level representation, this is the final goal form before converting
-// to bytecode
-
-// Note that this representation is meant to mirror BYTECODE not SYNTAX. as
-// such, until it can be generated, it doesn't belong in this representation
-// (so some AST constructs are simply lost in lower())
-
-// We're racing to hello world so there's a lot commented out
+//! Low-level representation, the [LLR] (root node) is practically bytecode.
+//!
+//! the only real difference is we're using enums and labels. You'd be surprised
+//! how much easier that makes it both to create and translate to bytecode.
+//! Because llr is practically bytecode, it's composed exclusively of
+//! quasi-bytecode [Instruction].
 
 use crate::{fmt_vec, fmt_vec_with, Type};
 
+/// Root node, this is what you're getting out of lower and passing around
 #[derive(PartialEq, Eq, Debug)]
 pub struct LLR {
     pub fns: Vec<Fn>,
     pub extern_fns: Vec<Signature>,
+    /// String literals need to be stored somehow right
     pub strings: Vec<String>,
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Fn {
     pub instructions: Vec<Instruction>,
     pub signature: Signature,
-    //pub namespace: Namespace,// my idea is to use the namespace as where variables are placed
 }
 #[derive(PartialEq, Eq, Clone, Debug, Default)]
 pub struct Signature {
-    pub parameters: Vec<TypedVar>, // When namespace is added, this should be Vec<NameKey> and point to the namespace
-    pub return_type: Option<Type>, // Can be void (None)
-    pub name: String,              // All fns are public and may need to interact with ABI
+    pub parameters: Vec<TypedVar>,
+    /// Can be void (None)
+    pub return_type: Option<Type>,
+    /// All fns are public and may need to interact with ABI
+    // (CHECK: might wanna change that)
+    pub name: String,
 }
+/// NameKey is actually just an index into the fns / extern_fns vectors,
+/// but it's 16-bit because that's how it's serialized
 pub type NameKey = u16;
-//pub type Namespace = Vec<TypedVar>;
+/// An instruction is one bytecode instruction, except it includes its
+/// subsequent *in-code* operands. in-code means it follows in the bytecode
+/// (ie in a literal push, or a jump instruction), not in data like the stack.
+/// When serialized, it'll pretty much exactly match the data structure:  
+/// Instruction opcode, tuple data as bytes, rinse and repeat.
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Instruction {
     FnCall(NameKey),
@@ -63,7 +71,16 @@ pub enum Instruction {
     StoreLit(u8, u32), // opt
     Load(u8),
 }
+/// i've been really indecisive about whether parameters should have names
+/// attached, so i made a type to enable my own flip-flopping
 pub type TypedVar = Type;
+/// Labels are one of the more special parts of the LLR. a jump instruction
+/// needs to know where it's going, in bytes. but we are still working abstractly,
+/// we have no idea what the generated code will look like! so our solution is
+/// to generate a label (using [lower](crate::passes::lower::lower) utilities) and then add
+/// two kinds of instructions: Jump*(Label), and LabelMark(Label). LabelMark
+/// describes a place in code. A jump will be generated to refer to where
+/// the labelmark ends up when generated
 pub type Label = usize;
 
 impl LLR {

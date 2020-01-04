@@ -1,12 +1,27 @@
-use super::{llr, Span, Type};
+//! the Abstract Syntax Tree ([AST]) is the result of parsing, and contains
+//! all the data in your program in actual logical chunks, most closely
+//! resembling the frontend conceptual syntax.
+//!
+//! the actual AST is the [AST] type, which is just a list of functions. also
+//! in this file is all the data structures *below* that root in
+//! the tree. i know there's a lot of data structures here, but they
+//! mostly make sense based on their names. Just remember that they refer
+//! to the **sfg** language, not rust Ifs or Fns or Literals or anything.
 
+use crate::{llr, span::Span, Type};
+
+/// An Abstract Syntax Tree
 pub type AST = Vec<ASTNode>;
 
+/// A function really. Although it can be extern (just for typechecking,
+/// provided in the VM) or fn (real function, with code)
 #[derive(PartialEq, Debug)]
 pub enum ASTNode {
     Fn(Fn),
     ExternFn(ExternFn),
 }
+/// Fn includes the signature of the function and the entire body of code
+/// to be executed
 #[derive(PartialEq, Debug)]
 pub struct Fn {
     pub statements: Vec<Statement>,
@@ -23,11 +38,17 @@ pub struct Signature {
     pub parameters: Vec<TypedName>,
     pub span: Span,
 }
+/// A name that's guaranteed to have a type, *because it's required
+/// syntactically*. Recall that the AST mirrors frontend syntax more than
+/// compiled code, so even though identifiers and expressions need types eventually,
+/// they don't syntactically
 #[derive(PartialEq, Clone, Debug)]
 pub struct TypedName {
     pub name: NameSpan,
     pub id_type: Type,
 }
+/// Because we need spans for *everything* for error reporting, and we need
+/// Strings a lot for names, we just plop them together
 #[derive(PartialEq, Clone, Debug, Default)]
 pub struct NameSpan {
     pub name: String,
@@ -82,6 +103,7 @@ pub struct Declaration {
     pub assignment: Assignment,
     pub id_type: Option<Type>,
 }
+/// This is the actual call like add_stuff(5, 6.0), not the function
 #[derive(PartialEq, Clone, Debug)]
 pub struct FnCall {
     pub name: NameSpan,
@@ -123,23 +145,4 @@ pub enum BinaryOp {
     Times,
     Divide,
     Mod,
-}
-
-impl Expression {
-    pub fn full_span(&self) -> Span {
-        match self {
-            Self::Literal(lit) => lit.span,
-            Self::Identifier(id) => id.span,
-            Self::Not(expr) => {
-                warn!("unimplemented span on not to include ! symbol");
-                expr.full_span()
-            }
-            // A FnCall can be an expression as well as a statement
-            // A statement FnCall is lowered differently than an expression FnCall
-            Self::FnCall(call) => call.span,
-            Self::Binary(binary) => {
-                Span::set(vec![binary.left.full_span(), binary.right.full_span()])
-            }
-        }
-    }
 }

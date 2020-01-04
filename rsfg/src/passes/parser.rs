@@ -1,7 +1,16 @@
 // This is the parser. yay.
 
-use crate::{ast::*, vec_errs_to_res, Span, Token, TokenType, Type};
+use crate::{
+    ast::*,
+    span::Span,
+    token::{Token, TokenType},
+    vec_errs_to_res, Type,
+};
 
+/// it's a fine line when an incorrect program will be
+/// detected by parse vs lower. i supposed the technical answer is syntactic
+/// vs semantic, but that just raises more questions. perhaps examples are
+/// easier: expected one token, got another, or unexpected EOF
 #[derive(Debug)]
 pub enum ParseError {
     // Expected, got
@@ -638,6 +647,13 @@ fn parse_extern_fn(rtokens: &mut Tokens) -> Result<ExternFn> {
     Ok(ExternFn { signature })
 }
 
+/// The parser takes the flat list of tokens and structures them their actual
+/// syntactical meanings.
+///
+/// this is a recursive descent parser using predictive parsing (ie no
+/// backtracking) resembling an LL1 parser. the only exception to the LL(1)
+/// rule is in offsides rule (indent / block) detection, in which it becomes
+/// LL(k) for k nested blocks
 pub fn parse(mut tokens: Vec<Token>) -> Result<AST> {
     tokens.reverse();
     let mut rtokens = Tokens(tokens);

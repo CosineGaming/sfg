@@ -1,6 +1,7 @@
 extern crate docopt;
 extern crate rsfg;
 use docopt::Docopt;
+use rsfg::STDLIB;
 use rsfg::{compile, CompileError};
 use rvmfg::{call, Thread};
 use std::path::Path;
@@ -18,15 +19,9 @@ Options:
     [<dest>]        can be directory (in which case it will be named source.bcfg) or filename
 ";
 
-fn get_stdlib() -> String {
-    let std_filename = "src/sfg/std.sfg";
-    std::fs::read_to_string(std_filename).expect("couldn't find std library")
-}
-
 fn compile_file(filename: &Path) -> Result<Vec<u8>, CompileError> {
     let script_string = std::fs::read_to_string(filename).expect("could not load given file");
-    let stdlib = get_stdlib();
-    compile(&script_string, &stdlib)
+    compile(&script_string, STDLIB)
 }
 
 fn main() {

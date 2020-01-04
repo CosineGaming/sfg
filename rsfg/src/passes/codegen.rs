@@ -201,7 +201,10 @@ fn u16_bytes(word: u16) -> [u8; 2] {
     unsafe { transmute(word.to_le()) }
 }
 
-/// fn_headers / sep | strings / fn_bodies
+/// turn low level representation into actual, bona fide, writeable,
+/// runnable, bytecode. this means writing headers, resolving labels, and
+/// serializing instructions, with the latter being surprisingly the easiest
+/// of those
 pub fn gen(tree: LLR) -> Vec<u8> {
     let mut labeled = LabeledCode::default();
     labeled.code = b"bcfg".to_vec();

@@ -24,8 +24,8 @@ mod read;
 mod sfg_std;
 mod thread;
 
-pub use thread::StateError;
 pub use thread::Thread;
+pub use thread::StateError;
 
 /// Convenience macro for dealing with function calls with arguments. Note
 /// you have to have [Argable] in scope and macro_use for the crate.

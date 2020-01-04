@@ -1,6 +1,9 @@
 // Hello, welcome to my lexer. Please like and subscribe
 
-use crate::{Span, Token, TokenType};
+use crate::{
+    span::Span,
+    token::{Token, TokenType},
+};
 
 // A-Z or 0-9
 fn is_id(c: char) -> bool {
@@ -114,6 +117,9 @@ impl<'src> Lexer<'src> {
     }
 }
 
+/// the lexing pass turns source code into Tokens. it chunks symbols,
+/// punctuation, whitespace, and identifiers, and also classifies them.
+/// panics on fail, which has to be fixed
 pub fn lex(text: &str) -> Vec<Token> {
     use TokenType::*;
     let mut lexer = Lexer::new(text);

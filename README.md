@@ -83,7 +83,7 @@ comparison to other projects
 pro is more like "exceeds expectations of sfg" and con is "doesn't match
 expectations of sfg," it's not a value judgement on language design
 
-## [dyon](https://github.com/PistonDevelopers/dyon)
+### [dyon](https://github.com/PistonDevelopers/dyon)
 
 pros
 
@@ -104,7 +104,7 @@ cons
 allows for ECS to efficiently dispatch without requiring mut tags on nearly
 every variable
 
-## [lily](https://fascinatedbox.gitlab.io/lily-docs/)
+### [lily](https://fascinatedbox.gitlab.io/lily-docs/)
 
 pros
 
@@ -116,7 +116,7 @@ cons
 - tracing + RC GC
 - braces
 
-## [haxe](https://haxe.org/)
+### [haxe](https://haxe.org/)
 
 pros
 
@@ -128,7 +128,7 @@ cons
 - tracing GC
 - really unscripty syntax (){};
 
-## [rhai](https://github.com/jonathandturner/rhai)
+### [rhai](https://github.com/jonathandturner/rhai)
 
 pros
 
@@ -141,7 +141,7 @@ cons
 
 garbage collection model unknown
 
-## [mun](https://github.com/mun-lang/mun)
+### [mun](https://github.com/mun-lang/mun)
 
 pros
 

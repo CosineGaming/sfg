@@ -1,5 +1,5 @@
 extern crate rsfg;
-use rsfg::{compile, CompileError};
+use rsfg::{compile, CompileError, STDLIB};
 use std::path::Path;
 // We use rvmfg for convenient integration testing
 // Not a build dependency, just for this test.
@@ -79,14 +79,9 @@ fn ensure_log_init() {
     });
 }
 
-fn get_stdlib() -> String {
-    let std_filename = "src/sfg/std.sfg";
-    std::fs::read_to_string(std_filename).expect("couldn't find std library")
-}
-
 fn compile_file(path: &Path) -> Result<Vec<u8>, CompileError> {
     let script_string = std::fs::read_to_string(path).expect("could not load given file");
-    compile(&script_string, &get_stdlib())
+    compile(&script_string, STDLIB)
 }
 
 fn compile_safe(path: &Path) -> Vec<u8> {

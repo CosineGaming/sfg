@@ -1,16 +1,28 @@
-/// optimization pass over low level bytecode
+//! optimization pass over low level bytecode
+//!
+//! general principles:
+//!
+//! 1. MORE INSTRUCTIONS IS WORSE almost all the time (reading from bytecode
+//! is sloooow)
+//! 2. within instructions, avoid function calls
+//! 3. the stack is FAST (caching), much faster than Load/Store
+//! 4. i've heard jumps are very slow in actual machine code, but i haven't
+//! tested it in rvmfg
+
 use crate::llr::{Instruction::*, *};
 
 const OPTIMIZE: bool = true;
 const INLINE_THRESHOLD: isize = 64;
 
-/// general principles:
-/// MORE INSTRUCTIONS IS WORSE almost all the time (reading from bytecode is slow)
-/// within instructions, the stack is FAST (caching), much faster than Load/Store
-/// method calls are worse yet
-
-/// should never error, because given a valid program bytecode, and outputs
-/// one too
+/// just do some basic optimizations on the llr. called from lower,
+/// not as a pass, because of a hack, but there's no reason you can't call
+/// it from elsewhere. should never error, because given a valid program bytecode, and damned
+/// to hell better output one too. next_label is the next label that we know
+/// doesn't already refer to something.
+///
+/// next_label is needed for further code
+/// generation / manipulation and it's hard to figure it out which is why
+/// this is called by lower
 pub fn optimize_llr(mut llr: LLR, mut next_label: usize) -> LLR {
     if !OPTIMIZE {
         return llr;

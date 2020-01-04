@@ -1,9 +1,11 @@
 // Most static analysis occurs here. Lower the AST which matches syntax into
 // LLR which matches bytecode
 
-use crate::{ast::*, llr, optimizer::optimize_llr, vec_errs_to_res, Span, Type};
+use crate::{ast::*, llr, optimize_llr, span::Span, vec_errs_to_res, Type};
 use indexmap::IndexMap;
 
+/// The semantic compiler errors like type errors, unknown identifier,
+/// argument mismatch, etc
 #[derive(Debug, PartialEq)]
 pub enum LowerError {
     MismatchedType(Type, Span, Type, Span),
@@ -985,6 +987,14 @@ fn lower_fn(state: &mut LowerState, func: &Fn) -> Result<llr::Fn> {
     } // note missing scope end (must be careful about returns)
 }
 
+/// Lowering is the actual compilation stage. At the moment it takes code
+/// all the way from the AST (closely resembling syntax) to the LLR (extremely
+/// closely resembling bytecode) so in general *all* semantic processing is done
+/// by this pass
+///
+/// now i've got some bad news (TODO) and it's that lower calls optimize,
+/// so if you don't want optimize, you're gonna wanna change the const
+/// OPTIMIZE over there in the source code
 pub fn lower(ast: AST) -> Result<llr::LLR> {
     let mut strings = vec![];
     let mut state = LowerState::new(&ast, &mut strings);
@@ -1017,11 +1027,10 @@ pub fn lower(ast: AST) -> Result<llr::LLR> {
 
 #[cfg(test)]
 mod test {
-    use crate::fmt_vec;
+    use crate::{fmt_vec, lex, lower, parse};
     #[test]
     fn no_returns_stack_balance() {
-        use super::{inst_stack, lower};
-        use crate::{lexer::lex, parser::parse};
+        use super::inst_stack;
         let script_string = std::fs::read_to_string("tests/scripts/no-returns.sfg")
             .expect("could not load given file");
         let lexed = lex(&script_string);
@@ -1048,8 +1057,7 @@ mod test {
     }
     #[test]
     fn locals_balance() {
-        use super::{llr::Instruction::*, lower};
-        use crate::{lexer::lex, parser::parse};
+        use super::llr::Instruction::*;
         let script_string = std::fs::read_to_string("tests/scripts/no-returns.sfg")
             .expect("could not load given file");
         let lexed = lex(&script_string);
