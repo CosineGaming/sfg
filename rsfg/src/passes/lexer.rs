@@ -320,7 +320,10 @@ pub fn lex(text: &str) -> Vec<Token> {
         } else {
             (lexer.line, lexer.col - 1) // -1 inclusive span
         };
-        lexer.tokens.push(Token { kind: token.clone(), span: Span { hi, lo } });
+        lexer.tokens.push(Token {
+            kind: token.clone(),
+            span: Span { hi, lo },
+        });
     }
     lexer.tokens
 }
@@ -356,11 +359,41 @@ mod test {
         assert_eq!(
             lexed,
             vec![
-                Token { kind: IntLit(578), span: Span { lo: (1, 1), hi: (1, 3) } },
-                Token { kind: IntLit(980), span: Span { lo: (1, 5), hi: (1, 7) } },
-                Token { kind: FloatLit(4.2), span: Span { lo: (1, 9), hi: (1, 11) } },
-                Token { kind: FloatLit(6.0), span: Span { lo: (1, 13), hi: (1, 14) } },
-                Token { kind: FloatLit(0.0001), span: Span { lo: (1, 16), hi: (1, 21) } },
+                Token {
+                    kind: IntLit(578),
+                    span: Span {
+                        lo: (1, 1),
+                        hi: (1, 3)
+                    }
+                },
+                Token {
+                    kind: IntLit(980),
+                    span: Span {
+                        lo: (1, 5),
+                        hi: (1, 7)
+                    }
+                },
+                Token {
+                    kind: FloatLit(4.2),
+                    span: Span {
+                        lo: (1, 9),
+                        hi: (1, 11)
+                    }
+                },
+                Token {
+                    kind: FloatLit(6.0),
+                    span: Span {
+                        lo: (1, 13),
+                        hi: (1, 14)
+                    }
+                },
+                Token {
+                    kind: FloatLit(0.0001),
+                    span: Span {
+                        lo: (1, 16),
+                        hi: (1, 21)
+                    }
+                },
             ]
         );
     }
@@ -370,10 +403,34 @@ mod test {
         assert_eq!(
             lexed,
             vec![
-                Token { kind: Newline, span: Span { lo: (1, 1), hi: (1, 1) } },
-                Token { kind: Tab, span: Span { lo: (2, 1), hi: (2, 1) } },
-                Token { kind: Tab, span: Span { lo: (2, 2), hi: (2, 2) } },
-                Token { kind: IntLit(5), span: Span { lo: (2, 3), hi: (2, 3) } },
+                Token {
+                    kind: Newline,
+                    span: Span {
+                        lo: (1, 1),
+                        hi: (1, 1)
+                    }
+                },
+                Token {
+                    kind: Tab,
+                    span: Span {
+                        lo: (2, 1),
+                        hi: (2, 1)
+                    }
+                },
+                Token {
+                    kind: Tab,
+                    span: Span {
+                        lo: (2, 2),
+                        hi: (2, 2)
+                    }
+                },
+                Token {
+                    kind: IntLit(5),
+                    span: Span {
+                        lo: (2, 3),
+                        hi: (2, 3)
+                    }
+                },
             ]
         );
     }

@@ -178,7 +178,11 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
 /// Should only be called ONCE, when everything has been generated
 fn resolve_labels(labeled: &mut LabeledCode) {
     for (label, location) in &labeled.labels.refs {
-        let refers = labeled.labels.marks.get(&label).expect("referred to non-existent label");
+        let refers = labeled
+            .labels
+            .marks
+            .get(&label)
+            .expect("referred to non-existent label");
         // Ensure that the ref location is in fact a placeholder byte
         assert_eq!(
             labeled.code[*location],
@@ -277,7 +281,10 @@ mod test {
                 serialize(Serializable::Placeholder),
                 b'm',
             ],
-            labels: Labels { marks, refs: vec![(label, 0)] },
+            labels: Labels {
+                marks,
+                refs: vec![(label, 0)],
+            },
         };
         let expected = vec![10, 0, b'm'];
         resolve_labels(&mut labeled);

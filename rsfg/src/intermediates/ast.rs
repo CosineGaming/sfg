@@ -56,7 +56,10 @@ pub struct NameSpan {
 }
 impl NameSpan {
     pub fn fake(name: &'static str) -> Self {
-        Self { name: name.to_string(), ..Default::default() }
+        Self {
+            name: name.to_string(),
+            ..Default::default()
+        }
     }
 }
 #[derive(PartialEq, Clone, Debug)]

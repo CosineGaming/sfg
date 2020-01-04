@@ -75,7 +75,10 @@ fn decompile() {
 
 fn ensure_log_init() {
     LOGGER_INIT.call_once(|| {
-        env_logger::builder().filter_level(log::LevelFilter::Debug).is_test(true).init()
+        env_logger::builder()
+            .filter_level(log::LevelFilter::Debug)
+            .is_test(true)
+            .init()
     });
 }
 

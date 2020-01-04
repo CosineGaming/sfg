@@ -25,7 +25,11 @@ impl std::fmt::Display for ParseError {
                 let expected_strings: Vec<String> =
                     expected.iter().map(|e| format!("{}", e)).collect();
                 let expected_str = expected_strings.join(", ");
-                write!(f, "expected {}, got {} at {}", expected_str, got.kind, got.span)
+                write!(
+                    f,
+                    "expected {}, got {} at {}",
+                    expected_str, got.kind, got.span
+                )
             }
             EOF(parsing) => write!(f, "unexpected EOF parsing {}", parsing),
         }
@@ -134,14 +138,20 @@ fn parse_name(rtokens: &mut Tokens) -> Result<NameSpan> {
         TokenType::Identifier(name) => name,
         _ => panic!("identifier wasn't identifier (compiler bug)"),
     };
-    Ok(NameSpan { name, span: token.span })
+    Ok(NameSpan {
+        name,
+        span: token.span,
+    })
 }
 
 // TODO: split up into required func and not required to remove unwrap
 fn parse_explicit_type(rtokens: &mut Tokens, type_required: bool) -> Result<Option<Type>> {
     // Can't use expect_any! because not Some(got) has special semantics
     match rtokens.last() {
-        Some(Token { kind: TokenType::Colon, .. }) => {
+        Some(Token {
+            kind: TokenType::Colon,
+            ..
+        }) => {
             rtokens.pop().unwrap(); // the colon
             let mut certain_type = expect_any!("identifier type", rtokens.pop() => {
                 Type(id_type,Type::Int) => id_type,
@@ -188,7 +198,12 @@ fn parse_binary(rtokens: &mut Tokens, left: Expression) -> Result<BinaryExpr> {
     let mut op = token_to_binary_op(token);
     let mut right = parse_expression(rtokens);
     resolve!(op, right);
-    Ok(BinaryExpr { left, op, right, span })
+    Ok(BinaryExpr {
+        left,
+        op,
+        right,
+        span,
+    })
 }
 
 fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
@@ -304,11 +319,17 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
     let final_span;
     loop {
         arguments.push(match rtokens.last() {
-            Some(Token { kind: TokenType::RParen, .. }) => {
+            Some(Token {
+                kind: TokenType::RParen,
+                ..
+            }) => {
                 final_span = rtokens.pop().unwrap().span;
                 break;
             }
-            Some(Token { kind: TokenType::Comma, .. }) => {
+            Some(Token {
+                kind: TokenType::Comma,
+                ..
+            }) => {
                 rtokens.pop();
                 continue;
             }
@@ -338,18 +359,31 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
             arguments.push(Expression::Literal(Literal {
                 data: LiteralData::Int(token.span.lo.0 as i32),
                 // span immediatly following token
-                span: Span { lo: token.span.hi, hi: token.span.hi },
+                span: Span {
+                    lo: token.span.hi,
+                    hi: token.span.hi,
+                },
             }));
             arguments.push(Expression::Literal(Literal {
                 data: LiteralData::Int(token.span.lo.1 as i32),
-                span: Span { lo: token.span.hi, hi: token.span.hi },
+                span: Span {
+                    lo: token.span.hi,
+                    hi: token.span.hi,
+                },
             }));
         }
         _ => (),
     }
     let total_span = Span::set(vec![token.span, final_span]);
-    let name_span = NameSpan { name, span: token.span };
-    Ok(FnCall { name: name_span, arguments, span: total_span })
+    let name_span = NameSpan {
+        name,
+        span: token.span,
+    };
+    Ok(FnCall {
+        name: name_span,
+        arguments,
+        span: total_span,
+    })
 }
 
 fn parse_params(rtokens: &mut Tokens) -> Result<Vec<TypedName>> {
@@ -437,7 +471,12 @@ fn parse_if(rtokens: &mut Tokens, tabs: usize) -> Result<If> {
         Ok(vec![])
     };
     resolve!(condition, else_statements; statements);
-    Ok(If { condition, statements, else_statements, span })
+    Ok(If {
+        condition,
+        statements,
+        else_statements,
+        span,
+    })
 }
 
 fn parse_loop(rtokens: &mut Tokens, tabs: usize) -> Result<WhileLoop> {
@@ -446,7 +485,11 @@ fn parse_loop(rtokens: &mut Tokens, tabs: usize) -> Result<WhileLoop> {
     let mut condition = parse_expression(rtokens);
     let statements = parse_indented_block(rtokens, tabs + 1);
     resolve!(span, condition; statements);
-    Ok(WhileLoop { condition, statements, span })
+    Ok(WhileLoop {
+        condition,
+        statements,
+        span,
+    })
 }
 
 fn parse_assignment_part(rtokens: &mut Tokens, lvalue: NameSpan) -> Result<Assignment> {
@@ -491,7 +534,10 @@ fn parse_declaration(rtokens: &mut Tokens) -> Result<Declaration> {
     // the only known place a type is optional but allowed
     let mut id_type = parse_explicit_type(rtokens, false);
     resolve!(name, id_type);
-    Ok(Declaration { assignment: parse_assignment_part(rtokens, name)?, id_type })
+    Ok(Declaration {
+        assignment: parse_assignment_part(rtokens, name)?,
+        id_type,
+    })
 }
 
 fn parse_statement(rtokens: &mut Tokens, tabs: usize) -> Result<Statement> {
@@ -536,7 +582,12 @@ fn parse_signature(rtokens: &mut Tokens) -> Result<Signature> {
     let (return_type, final_span) = final_char_expect;
     let name_span = NameSpan { name, span };
     let span = Span::set(vec![span, final_span]);
-    Ok(Signature { name: name_span, return_type, parameters, span })
+    Ok(Signature {
+        name: name_span,
+        return_type,
+        parameters,
+        span,
+    })
 }
 
 /// Strips empty/tab/comment lines, does nothing if no empty lines, rolls back on error state
@@ -554,9 +605,15 @@ fn strip_white_lines(rtokens: &mut Tokens) {
         let empty = loop {
             match rtokens.n(count) {
                 // If there's an extra tab, get ALL the extra tabs
-                Some(Token { kind: TokenType::Tab, .. }) => count += 1,
+                Some(Token {
+                    kind: TokenType::Tab,
+                    ..
+                }) => count += 1,
                 // Otherwise, *allow* no expression
-                Some(Token { kind: TokenType::Newline, .. }) => break true,
+                Some(Token {
+                    kind: TokenType::Newline,
+                    ..
+                }) => break true,
                 // Not tab or newline, this line can't be stripped
                 _ => break false,
             }
@@ -599,7 +656,11 @@ fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Vec<Result<
     let mut statements = vec![];
     loop {
         // Allow empty lines amongst function an indented statement
-        if let Some(Token { kind: TokenType::Newline, .. }) = rtokens.last() {
+        if let Some(Token {
+            kind: TokenType::Newline,
+            ..
+        }) = rtokens.last()
+        {
             rtokens.pop();
             continue;
         }
@@ -637,7 +698,10 @@ fn parse_fn(rtokens: &mut Tokens) -> Result<Fn> {
     let mut signature = parse_signature(rtokens);
     let statements = parse_indented_block(rtokens, 1);
     resolve!(fn_token, signature; statements);
-    Ok(Fn { signature, statements })
+    Ok(Fn {
+        signature,
+        statements,
+    })
 }
 
 fn parse_extern_fn(rtokens: &mut Tokens) -> Result<ExternFn> {
@@ -737,20 +801,29 @@ mod test {
                 RParen,
             ]
             .iter()
-            .map(|t| Token { kind: t.clone(), span: Span::new() })
+            .map(|t| Token {
+                kind: t.clone(),
+                span: Span::new(),
+            })
             .collect(),
         ));
         assert_eq!(
             ast,
             vec![ASTNode::Fn(crate::ast::Fn {
                 signature: Signature {
-                    name: NameSpan { name: String::from("main"), span: Default::default() },
+                    name: NameSpan {
+                        name: String::from("main"),
+                        span: Default::default()
+                    },
                     return_type: None,
                     parameters: vec![],
                     span: Span::new(),
                 },
                 statements: vec![Statement::FnCall(FnCall {
-                    name: NameSpan { name: String::from("main"), span: Default::default() },
+                    name: NameSpan {
+                        name: String::from("main"),
+                        span: Default::default()
+                    },
                     arguments: vec![],
                     span: Span::new(),
                 })],
@@ -763,10 +836,21 @@ mod test {
         // We need to test to make sure it can roll back properly
         use super::TokenType::*;
         let ast = dexpect(parse(
-            vec![Fn, Identifier("main".to_string()), LParen, RParen, Newline, Tab, Return]
-                .iter()
-                .map(|t| Token { kind: t.clone(), span: Span::new() })
-                .collect(),
+            vec![
+                Fn,
+                Identifier("main".to_string()),
+                LParen,
+                RParen,
+                Newline,
+                Tab,
+                Return,
+            ]
+            .iter()
+            .map(|t| Token {
+                kind: t.clone(),
+                span: Span::new(),
+            })
+            .collect(),
         ));
         if let ASTNode::Fn(func) = &ast[0] {
             assert_eq!(func.statements, vec![Statement::Return(None),]);

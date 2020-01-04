@@ -54,9 +54,23 @@ mod test {
     use super::Span;
     #[test]
     fn test_span_set() {
-        let set =
-            Span::set(vec![Span { lo: (4, 4), hi: (5, 5) }, Span { lo: (4, 2), hi: (4, 10) }]);
-        assert_eq!(set, Span { lo: (4, 2), hi: (5, 5) });
+        let set = Span::set(vec![
+            Span {
+                lo: (4, 4),
+                hi: (5, 5),
+            },
+            Span {
+                lo: (4, 2),
+                hi: (4, 10),
+            },
+        ]);
+        assert_eq!(
+            set,
+            Span {
+                lo: (4, 2),
+                hi: (5, 5)
+            }
+        );
     }
 }
 

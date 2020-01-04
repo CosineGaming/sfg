@@ -199,10 +199,9 @@ fn fmt_adj(fns: &[Fn], adj: &BorAdj) -> String {
 caller
 ",
     );
-    let longest_name = adj
-        .iter()
-        .enumerate()
-        .fold(0, |acc, (i, _)| std::cmp::max(acc, fns[i].signature.name.len()));
+    let longest_name = adj.iter().enumerate().fold(0, |acc, (i, _)| {
+        std::cmp::max(acc, fns[i].signature.name.len())
+    });
     for (i, caller) in adj.iter().enumerate() {
         let mut line = String::new();
         let name = &fns[i].signature.name;
@@ -401,9 +400,15 @@ mod test {
                 ],
             },
             // to be inlined
-            Fn { signature: Signature::default(), instructions: vec![Push(42), Return, Pop] },
+            Fn {
+                signature: Signature::default(),
+                instructions: vec![Push(42), Return, Pop],
+            },
             // recurses
-            Fn { signature: Signature::default(), instructions: vec![FnCall(2)] },
+            Fn {
+                signature: Signature::default(),
+                instructions: vec![FnCall(2)],
+            },
         ];
         let expected = Fn {
             signature: Signature::default(),
@@ -421,7 +426,12 @@ mod test {
     }
     #[test]
     fn adj_ops() {
-        let mut adj = vec![vec![0, 0, 0, 0], vec![0, 1, 0, 0], vec![2, 0, 0, 3], vec![0, 0, 4, 0]];
+        let mut adj = vec![
+            vec![0, 0, 0, 0],
+            vec![0, 1, 0, 0],
+            vec![2, 0, 0, 3],
+            vec![0, 0, 4, 0],
+        ];
         assert_eq!(col_sum(&mut adj, 0), 2);
         assert_eq!(col_sum(&mut adj, 1), 1);
         assert_eq!(col_sum(&mut adj, 2), 4);

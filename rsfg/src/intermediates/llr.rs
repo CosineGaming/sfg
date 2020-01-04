@@ -8,7 +8,7 @@
 use crate::{fmt_vec, fmt_vec_with, Type};
 
 /// Root node, this is what you're getting out of lower and passing around
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Default)]
 pub struct LLR {
     pub fns: Vec<Fn>,
     pub extern_fns: Vec<Signature>,
@@ -83,11 +83,6 @@ pub type TypedVar = Type;
 /// the labelmark ends up when generated
 pub type Label = usize;
 
-impl LLR {
-    pub fn new() -> Self {
-        Self { fns: vec![], extern_fns: vec![], strings: vec![] }
-    }
-}
 impl std::fmt::Display for LLR {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         // TODO find a way to display where in the code these are

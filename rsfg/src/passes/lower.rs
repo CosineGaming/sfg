@@ -21,9 +21,11 @@ impl std::fmt::Display for LowerError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use LowerError::*;
         match self {
-            MismatchedType(a, a_s, b, b_s) => {
-                write!(f, "mismatched type, expected {} at {}, got {} at {}", a, a_s, b, b_s)
-            }
+            MismatchedType(a, a_s, b, b_s) => write!(
+                f,
+                "mismatched type, expected {} at {}, got {} at {}",
+                a, a_s, b, b_s
+            ),
             MismatchedReturn(fn_name, needed, id_type, span) => {
                 write!(f, "{} expected ", fn_name.name)?;
                 write!(f, "{}", fmt_voidable(*needed))?;
@@ -38,9 +40,11 @@ impl std::fmt::Display for LowerError {
             ),
             NonLiteral(name, span) => write!(f, "literal value required for {} at {}", name, span),
             UnknownFn(ns) => write!(f, "called unknown function {} at {}", ns.name, ns.span),
-            UnknownIdent(id) => {
-                write!(f, "referenced unknown identifier {} at {}", id.name, id.span)
-            }
+            UnknownIdent(id) => write!(
+                f,
+                "referenced unknown identifier {} at {}",
+                id.name, id.span
+            ),
             NoOperation(op, on_type, span) => {
                 write!(f, "no operation {:?} for {} at {}", op, on_type, span)
             }
@@ -206,7 +210,14 @@ impl<'a> LowerState<'a> {
             };
             fn_map.insert(name, node);
         }
-        Self { fn_map, locals: vec![], strings, next_label: 0, stack_length: 0, error_state: false }
+        Self {
+            fn_map,
+            locals: vec![],
+            strings,
+            next_label: 0,
+            stack_length: 0,
+            error_state: false,
+        }
     }
     fn get_label(&mut self) -> usize {
         self.next_label += 1;
@@ -328,7 +339,11 @@ fn lower_loop(
     insts.push(state, Ok(llr::Instruction::JumpZero(end)));
     lower_scope_begin(state);
     {
-        insts.append(&mut lower_statements(state, &loop_data.statements, parent_signature));
+        insts.append(&mut lower_statements(
+            state,
+            &loop_data.statements,
+            parent_signature,
+        ));
         // Immediately all go out of scope
     }
     insts.append(&mut lower_scope_end(state));
@@ -398,7 +413,11 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
                     insts.append(&mut expression_to_push(state, &expr.right));
                 }
             }
-            let type_error = Err(LowerError::NoOperation(expr.op.clone(), left_type, expr.span));
+            let type_error = Err(LowerError::NoOperation(
+                expr.op.clone(),
+                left_type,
+                expr.span,
+            ));
             match expr.op {
                 Equal => {
                     // Even tho float and int have different NotEqual
@@ -489,13 +508,20 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
                     });
                     // LLRInsts does nothing to state
                     state.stack_length += 1;
-                    insts.append(&mut lower_statement(state, &desugared, &Signature::default()))
+                    insts.append(&mut lower_statement(
+                        state,
+                        &desugared,
+                        &Signature::default(),
+                    ))
                 }
                 NotEqual => match left_type {
                     Type::Int | Type::Bool => insts.push(state, Ok(llr::Instruction::Xor)),
                     Type::Float => {
                         let desugared = Expression::FnCall(FnCall {
-                            name: NameSpan { name: "_epsilon_not_eq".to_string(), span: expr.span },
+                            name: NameSpan {
+                                name: "_epsilon_not_eq".to_string(),
+                                span: expr.span,
+                            },
                             arguments: vec![expr.left.clone(), expr.right.clone()],
                             span: expr.span,
                         });
@@ -509,7 +535,13 @@ fn expression_to_push(state: &mut LowerState, expression: &Expression) -> InstRe
     };
     if !state.error_state {
         #[cfg(debug_assertions)]
-        debug_assert_eq!(state.stack_length, old_plus + 1, "{:?}\n{:#?}", expression, insts);
+        debug_assert_eq!(
+            state.stack_length,
+            old_plus + 1,
+            "{:?}\n{:#?}",
+            expression,
+            insts
+        );
     }
     insts
 }
@@ -551,7 +583,10 @@ fn lower_assert(state: &mut LowerState, call: &FnCall) -> InstResults {
     let col = call.arguments[2].clone();
     // panic(line, col)
     let panic_statement = Statement::FnCall(FnCall {
-        name: NameSpan { name: "panic".to_string(), span: call.name.span },
+        name: NameSpan {
+            name: "panic".to_string(),
+            span: call.name.span,
+        },
         arguments: vec![line, col],
         ..*call
     });
@@ -564,7 +599,10 @@ fn lower_assert(state: &mut LowerState, call: &FnCall) -> InstResults {
         span: call.span,
     });
     // Completely arbitrary, but lower_statement expects it in case of return
-    let dummy_sig = Signature { span: call.span, ..Default::default() };
+    let dummy_sig = Signature {
+        span: call.span,
+        ..Default::default()
+    };
     lower_statement(state, &desugared, &dummy_sig)
 }
 
@@ -833,7 +871,11 @@ fn lower_statement(
                 // ELSE BLOCK
                 lower_scope_begin(state);
                 {
-                    insts.append(&mut lower_statements(state, &if_stmt.else_statements, signature));
+                    insts.append(&mut lower_statements(
+                        state,
+                        &if_stmt.else_statements,
+                        signature,
+                    ));
                 }
                 insts.append(&mut lower_scope_end(state));
                 insts.push(state, Ok(llr::Instruction::LabelMark(else_end)));
@@ -912,7 +954,10 @@ fn lower_statement(
                     {
                         // TODO wouldn't it be nice if IndexMap held spans
                         // so we could indicate who shadows it
-                        insts.push(state, Err(LowerError::Shadow(decl.assignment.lvalue.clone())));
+                        insts.push(
+                            state,
+                            Err(LowerError::Shadow(decl.assignment.lvalue.clone())),
+                        );
                     }
                 }
                 Err(e) => insts.push(state, Err(e)),
@@ -938,7 +983,11 @@ fn lower_statements(
 
 fn lower_fn_statements(state: &mut LowerState, func: &Fn) -> InstResults {
     let mut insts = InstResults::default();
-    insts.append(&mut lower_statements(state, &func.statements, &func.signature));
+    insts.append(&mut lower_statements(
+        state,
+        &func.statements,
+        &func.signature,
+    ));
     let last_statement_return = match insts.last() {
         Some(Ok(inst)) => inst == &llr::Instruction::Return,
         None => false,   // no last statement, isn't return
@@ -972,7 +1021,11 @@ fn lower_fn(state: &mut LowerState, func: &Fn) -> Result<llr::Fn> {
     lower_scope_begin(state);
     {
         for param in &func.signature.parameters {
-            state.locals.last_mut().unwrap().insert(param.name.name.clone(), param.id_type);
+            state
+                .locals
+                .last_mut()
+                .unwrap()
+                .insert(param.name.name.clone(), param.id_type);
         }
         let rv = llr::Fn {
             instructions: vec_to_res(lower_fn_statements(state, func).0)?,
@@ -1008,7 +1061,7 @@ pub fn lower(ast: AST) -> Result<llr::LLR> {
             ASTNode::ExternFn(func) => externs.push(lower_signature(&func.signature)),
         }
     }
-    let mut out = llr::LLR::new();
+    let mut out = llr::LLR::default();
     out.fns = match vec_errs_to_res(fns) {
         Ok(o) => o,
         Err(mut e) => {
@@ -1017,7 +1070,10 @@ pub fn lower(ast: AST) -> Result<llr::LLR> {
         }
     };
     out.extern_fns = externs;
-    assert!(!state.error_state, "if in error state error should've been reported");
+    assert!(
+        !state.error_state,
+        "if in error state error should've been reported"
+    );
     // also here for a borrowck fanciness
     let pass_label = state.next_label;
     // here for a borrowck fanciness

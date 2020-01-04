@@ -75,7 +75,10 @@ fn fmt_vec<T: std::fmt::Display>(vec: &[T]) -> String {
     fmt_vec_with(vec, "", "\n")
 }
 fn fmt_vec_with<T: std::fmt::Display>(vec: &[T], with: &str, sep: &str) -> String {
-    vec.iter().map(|e| format!("{}{}", with, e)).collect::<Vec<String>>().join(sep)
+    vec.iter()
+        .map(|e| format!("{}{}", with, e))
+        .collect::<Vec<String>>()
+        .join(sep)
 }
 
 fn vec_errs_to_res<T, E>(

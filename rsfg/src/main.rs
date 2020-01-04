@@ -26,7 +26,9 @@ fn compile_file(filename: &Path) -> Result<Vec<u8>, CompileError> {
 
 fn main() {
     env_logger::init();
-    let args = Docopt::new(USAGE).and_then(|d| d.parse()).unwrap_or_else(|e| e.exit());
+    let args = Docopt::new(USAGE)
+        .and_then(|d| d.parse())
+        .unwrap_or_else(|e| e.exit());
     let script_filename = args.get_str("<source>");
     #[cfg(debug_assertions)]
     {
@@ -56,7 +58,9 @@ fn main() {
             if out_path.is_file() {
                 Path::new(&out_path).to_path_buf()
             } else {
-                out_path.join(script_path.file_name().unwrap()).with_extension("bcfg")
+                out_path
+                    .join(script_path.file_name().unwrap())
+                    .with_extension("bcfg")
             }
         };
         std::fs::write(out, compiled).expect("couldn't output compiled file");
