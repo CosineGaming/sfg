@@ -1,11 +1,10 @@
 extern crate rsfg;
 use rsfg::{compile, CompileError};
-use std::error::Error;
 use std::path::Path;
 // We use rvmfg for convenient integration testing
 // Not a build dependency, just for this test.
 extern crate rvmfg;
-use rvmfg::Thread;
+use rvmfg::{StateError, Thread};
 
 // Log needs to be initialized once in the async mess that is cargo test
 use std::sync::Once;
@@ -100,38 +99,8 @@ fn compile_safe(path: &Path) -> Vec<u8> {
     }
 }
 
-#[derive(Debug)]
-struct StateError(usize, usize, usize);
-impl std::fmt::Display for StateError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "improper state, stack length was {}, call stack length was {}, locals len was {}",
-            self.0, self.1, self.2
-        )
-    }
-}
-impl Error for StateError {}
-
 type ThreadResult = (std::thread::Result<()>, Result<(), StateError>);
 type SetResult = Vec<(String, ThreadResult)>;
-
-// There are some additional tests we can make on all programs
-// Like assert various things about the final state of the program
-// By convention IN THIS TEST SUITE ONLY main() is void main(void)
-// This allows us to assume no returns
-// Note that there is a test in lower that checks for total push/pop balance
-// So a problem here should indicate a VM problem
-fn state_tests(thread: &Thread) -> Result<(), StateError> {
-    let tsl = thread.stack.len();
-    let tcsl = thread.call_stack.len();
-    let tll = thread.locals.len();
-    if tsl != 0 || tcsl != 0 || tll != 0 {
-        Err(StateError(tsl, tcsl, tll))
-    } else {
-        Ok(())
-    }
-}
 
 fn show_failures(fails: SetResult) {
     let mut should_panic = false;
@@ -210,7 +179,13 @@ fn run_test(path: &Path) -> ThreadResult {
     // print the result in time so we can trace easier
     println!("TEST RESULT for {}: {:?}", path.to_string_lossy(), result);
     // These should PASS. Thus not wrappend in catch_unwind
-    let state_res = state_tests(&thread); // TODO: return somehow idk how to type this
+    // There are some additional tests we can make on all programs
+    // Like assert various things about the final state of the program
+    // By convention IN THIS TEST SUITE ONLY main() is void main(void)
+    // This allows us to assume no returns
+    // Note that there is a test in lower that checks for total push/pop balance
+    // So a problem here should indicate a VM problem
+    let state_res = thread.is_sane_state(false);
     (result, state_res)
 }
 

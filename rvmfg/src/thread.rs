@@ -1,3 +1,4 @@
+use crate::f_as_i;
 use crate::read::*;
 use crate::sfg_std;
 
@@ -16,24 +17,46 @@ const INIT_LOCALS_SIZE: usize = 16;
 /// /4 means gives twice on 64-bit
 const CALL_STACK_MAX_SIZE: usize = 256 * 1024 * 1024 / 4;
 
+/// Start here, i.e. to run code, you use a Thread.
+///
+/// A Thread is created using bcfg bytecode only, however sfg
+/// code can be interpreted simply by running rsfg compile as a library and then
+/// running rvmfg with the in-memory result. In fact, rsfg depends on rvmfg
+/// specifically for this purpose so you can run `rsfg --run interpret_this.sfg`
+///
+/// Once created, a thread's state is maintained until destroyed, however
+/// note there are currently no faculties for global state in sfg. There are
+/// two ways to run a thread:
+///
+/// 1. Using [Thread::arg] and
+/// [Thread::call_name]. This method is the true API, and is the recommended
+/// way to build C or other language APIs out of rvmfg. Because all data is
+/// stored internally as i32, we know that any VM types can be stored as
+/// i32 except for string literals, hence the [Thread::arg_str_lit]
+/// function. Rust users can use the given [crate::Argable] implementations to help you
+/// push the builtin VM types, or even your own, but it is merely sugar for
+/// an eventual `arg` call.
+///
+/// 2. Using the [call] macro. This is recommended for rust programs when
+/// dynamic args len is not necessary, eg when calling known code. It
+/// allows you to simply write a rust-style function call with values.
 #[derive(PartialEq, Debug)]
 pub struct Thread {
-    pub stack: Vec<i32>,
+    stack: Vec<i32>,
     /// The call stack is managed by the VM, containing calls only
     /// It's kept separate as opposed to machine architectures because
     /// the use of the data stack is made harder by combining them.
     /// Each usize is a ip
-    pub call_stack: Vec<usize>,
+    call_stack: Vec<usize>,
     code: Vec<u8>,
     // Code pointer
     ip: usize,
-    pub strings: Vec<String>,
+    strings: Vec<String>,
     fns: IndexMap<String, Fn>,
-    /// shouldn't really be public but used for testing in rsfg (TODO)
-    pub locals: Vec<i32>,
+    locals: Vec<i32>,
 }
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Debug)]
 pub struct Fn {
     // ip will be 0 for externs (TODO: make this safer)
     ip: usize,
@@ -52,9 +75,6 @@ impl Fn {
 
 fn i_as_f(what: i32) -> f32 {
     f32::from_bits(what as u32)
-}
-fn f_as_i(what: f32) -> i32 {
-    f32::to_bits(what) as i32
 }
 
 macro_rules! thread_assert {
@@ -83,11 +103,14 @@ impl std::fmt::Display for Thread {
 }
 
 impl Thread {
-    fn thread_panic(&mut self, msg: &str) -> ! {
-        self.sane_state();
-        eprintln!("vm panic: {}\nBACKTRACE:\n{}", msg, self);
-        panic!("vm panic");
-    }
+    /// Construct a new thread with the given bcfg bytecode. This can have
+    /// been compiled with rsfg in memory just now or loaded from disk after
+    /// being compiled. You need a Vec because I don't wanna dabble in const
+    /// generics rn, and I need an owned, dynamic length array.
+    /// ```
+    /// let program = include_bytes!("../tests/rvmfg-call-doc.bcfg").to_vec();
+    /// let mut thread = rvmfg::Thread::new(program);
+    /// ```
     pub fn new(code: Vec<u8>) -> Self {
         let mut ip = 0;
         if read_u8(&code, &mut ip) != b'b'
@@ -124,6 +147,63 @@ impl Thread {
             locals: Vec::with_capacity(INIT_LOCALS_SIZE),
         }
     }
+    /// Push a value to locals as in an argument to a function.
+    /// It should be used in the calling of a function that requires arguments.
+    /// Because DeVars is in the end of functions, there is no need to pop
+    /// the arguments.
+    /// ```
+    /// # let program = include_bytes!("../tests/rvmfg-call-doc.bcfg").to_vec();
+    /// # let mut thread = rvmfg::Thread::new(program);
+    /// thread.arg(4);
+    /// thread.arg(8);
+    /// thread.call_name("fn_to_call");
+    /// ```
+    pub fn arg(&mut self, what: i32) {
+        self.locals.push(what);
+    }
+    /// Push a string as an argument, becoming a string literal that will
+    /// not be modifyable
+    pub fn arg_str_lit(&mut self, string: String) {
+        self.locals.push(self.strings.len() as i32);
+        self.strings.push(string);
+    }
+    /// Calls a function. To pass arguments, you have to have called [Thread::arg]
+    /// in proper order before calling this.
+    /// In rust, you can use the [call] macro for convenience.
+    /// ```
+    /// # let program = include_bytes!("../tests/rvmfg-call-doc.bcfg").to_vec();
+    /// # let mut thread = rvmfg::Thread::new(program);
+    /// thread.call_name("main");
+    /// ```
+    pub fn call_name(&mut self, name: &str) {
+        let func = match self.fns.get(name) {
+            Some(func) => func,
+            None => self.thread_panic(&format!("could not find function {}", name)),
+        };
+        Self::set_fn(&mut self.ip, func);
+        self.run();
+    }
+    /// At the *end* of a top-level function call (ie our conception of main)
+    /// There are some state guarantees we could make. Properly compiled
+    /// sfg code executed by a properly implemented VM should *never* reach an
+    /// unsane state (ie it's not a programming error). Additionally, rsfg has
+    /// some runtime checks to ensure push/pop balance, so this *most likely*
+    /// indicates an internal VM error
+    pub fn is_sane_state(&self, has_return: bool) -> Result<(), StateError> {
+        let stack = self.stack.len();
+        let call_stack = self.call_stack.len();
+        let locals = self.locals.len();
+        if stack != (has_return as usize) || call_stack != 0 || locals != 0 {
+            Err(StateError(stack, call_stack, locals))
+        } else {
+            Ok(())
+        }
+    }
+    fn thread_panic(&mut self, msg: &str) -> ! {
+        self.sane_state();
+        eprintln!("vm panic: {}\nBACKTRACE:\n{}", msg, self);
+        panic!("vm panic");
+    }
     /// Returns whether a return has been called requiring exit
     fn exec_next(&mut self) -> bool {
         // The stack is a rust Vec. rust vecs don't deallocate
@@ -150,11 +230,12 @@ impl Thread {
                     "extern fn call calling non-extern function"
                 );
                 match &name[..] {
-                    "_log" => sfg_std::log(self),
-                    _ => self.thread_panic(
-                        "special reflection business not yet supported and stdlib not found",
-                    ),
-                };
+                    "_log" => sfg_std::log(&self.strings, &mut self.locals),
+                    other => {
+                        let msg = format!("vm std lib fn {} not found", other);
+                        self.thread_panic(&msg);
+                    }
+                }
             }
             Deser::FnCall => {
                 let index = read_u16(&self.code, &mut self.ip);
@@ -349,25 +430,33 @@ impl Thread {
     fn push_f(&mut self, f: f32) {
         self.push(f_as_i(f))
     }
-    // I can't believe this works
-    // I have no idea how this works
-    // Do not ask me how this works
-    // Owned string necessary for evil pointer arithmetic
-    #[allow(clippy::ptr_arg)]
-    pub fn push_string(&mut self, string: &String) {
-        let as_number = string as *const String as i32;
-        self.push(as_number);
+}
+
+/// Used for [Thread::is_sane_state], if it's not sane this error is returned.
+/// In order: stack length, call stack length, locals length.
+#[derive(Debug)]
+pub struct StateError(usize, usize, usize);
+impl std::fmt::Display for StateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "improper state, stack length was {}, call stack length was {}, locals len was {}",
+            self.0, self.1, self.2
+        )
     }
-    /// This ONLY calls the function, does NOT push to stack
-    /// use the c! macro to perform a call. It's only public because
-    /// it has to be
-    #[doc(hidden)]
-    pub fn call_name(&mut self, name: &str) {
-        let func = match self.fns.get(name) {
-            Some(func) => func,
-            None => self.thread_panic(&format!("could not find function {}", name)),
-        };
-        Self::set_fn(&mut self.ip, func);
-        self.run();
+}
+impl std::error::Error for StateError {}
+
+#[cfg(test)]
+mod test {
+    use super::Thread;
+    use crate::{call, Argable};
+    #[test]
+    fn arg_stuff() {
+        let program = include_bytes!("../tests/rvmfg-add.bcfg").to_vec();
+        let mut thread = Thread::new(program);
+        call![thread.add(5, 8)];
+        thread.is_sane_state(true).expect("unsane state");
+        assert!(thread.stack.pop() == Some(13));
     }
 }

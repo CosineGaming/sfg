@@ -1,0 +1,5 @@
+fn fn_to_call(num: int, words: str)
+
+// so the /rsfg/ test passes
+fn main()
+

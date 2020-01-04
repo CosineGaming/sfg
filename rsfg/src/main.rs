@@ -15,6 +15,7 @@ Usage: rsfg <source> [<dest>]
 Options:
     -r, --run       [DEBUG ONLY] Use rvmfg virtual machine to immediately run code
     --update-tests  [DEBUG ONLY] Spawn interactive prompt to update stdout of tests if correct
+    [<dest>]        can be directory (in which case it will be named source.bcfg) or filename
 ";
 
 fn get_stdlib() -> String {
@@ -35,7 +36,6 @@ fn main() {
     #[cfg(debug_assertions)]
     {
         if args.get_bool("--update-tests") {
-            // TODO deal with needing <source>
             update_tests();
             std::process::exit(0);
         }
@@ -57,7 +57,12 @@ fn main() {
         let out = if out_path == "" {
             script_path.with_extension("bcfg")
         } else {
-            Path::new(&out_path).to_path_buf()
+            let out_path = Path::new(out_path);
+            if out_path.is_file() {
+                Path::new(&out_path).to_path_buf()
+            } else {
+                out_path.join(script_path.file_name().unwrap()).with_extension("bcfg")
+            }
         };
         std::fs::write(out, compiled).expect("couldn't output compiled file");
     }

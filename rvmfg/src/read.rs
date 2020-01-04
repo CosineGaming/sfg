@@ -2,7 +2,7 @@
 /// instructions / types / etc
 use crate::thread::Fn;
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum Type {
     Str,
     Int,
@@ -44,7 +44,7 @@ pub enum Deser {
     Xor,
 }
 
-/// much less perf heavy, able to sub type
+/// much less perf heavy, able to sub-type
 #[derive(PartialEq, Eq, Debug)]
 pub enum DeserHeader {
     Type(Type),
