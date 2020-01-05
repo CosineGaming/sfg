@@ -183,7 +183,7 @@ fn run_test(path: &Path) -> ThreadResult {
     // This allows us to assume no returns
     // Note that there is a test in lower that checks for total push/pop balance
     // So a problem here should indicate a VM problem
-    let state_res = thread.is_sane_state(false);
+    let state_res = thread.is_sane_state();
     (result, state_res)
 }
 

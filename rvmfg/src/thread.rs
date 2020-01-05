@@ -175,6 +175,7 @@ impl Thread {
     /// # let mut thread = rvmfg::Thread::new(program);
     /// thread.call_name("main");
     /// ```
+    /// panics on nonexistant function
     pub fn call_name(&mut self, name: &str) {
         let func = match self.fns.get(name) {
             Some(func) => func,
@@ -183,17 +184,38 @@ impl Thread {
         Self::set_fn(&mut self.ip, func);
         self.run();
     }
+    /// Functions in sfg can only return one 32-bit value. Although the
+    /// type could be ascertained by the function signature, there's no way to
+    /// guarantee it compile-time so instead we merely ask that you convert
+    /// from i32 to whatever type it was meant to be
+    pub fn pop_return(&mut self) -> i32 {
+        return self.pop();
+    }
+    /// Typechecking is not doen by the thread, that's your responsibility
+    /// and your responsibility to choose how to deal with that. None => Void
+    ///
+    /// panics on nonexistant function
+    pub fn get_return_type(&self, name: &str) -> Option<Type> {
+        let func = match self.fns.get(name) {
+            Some(func) => func,
+            None => panic!("could not find function {}", name)
+        };
+        func.return_type
+    }
     /// At the *end* of a top-level function call (ie our conception of main)
     /// There are some state guarantees we could make. Properly compiled
     /// sfg code executed by a properly implemented VM should *never* reach an
     /// unsane state (ie it's not a programming error). Additionally, rsfg has
     /// some runtime checks to ensure push/pop balance, so this *most likely*
     /// indicates an internal VM error
-    pub fn is_sane_state(&self, has_return: bool) -> Result<(), StateError> {
+    ///
+    /// Note that stack length assumes there hasn't been a return, so you
+    /// need to have called pop_return to prevent that false negative
+    pub fn is_sane_state(&self) -> Result<(), StateError> {
         let stack = self.stack.len();
         let call_stack = self.call_stack.len();
         let locals = self.locals.len();
-        if stack != (has_return as usize) || call_stack != 0 || locals != 0 {
+        if stack != 0 || call_stack != 0 || locals != 0 {
             Err(StateError(stack, call_stack, locals))
         } else {
             Ok(())
@@ -455,8 +477,8 @@ mod test {
     fn arg_stuff() {
         let program = include_bytes!("../tests/rvmfg-add.bcfg").to_vec();
         let mut thread = Thread::new(program);
-        call![thread.add(5, 8)];
-        thread.is_sane_state(true).expect("unsane state");
-        assert!(thread.stack.pop() == Some(13));
+        let rv = call![thread.add(5, 8)];
+        thread.is_sane_state().expect("unsane state");
+        assert_eq!(rv, Some(13));
     }
 }

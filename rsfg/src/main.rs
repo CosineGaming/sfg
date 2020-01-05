@@ -55,7 +55,7 @@ fn main() {
             script_path.with_extension("bcfg")
         } else {
             let out_path = Path::new(out_path);
-            if out_path.is_file() {
+            if !out_path.is_dir() {
                 Path::new(&out_path).to_path_buf()
             } else {
                 out_path

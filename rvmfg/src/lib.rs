@@ -44,6 +44,9 @@ macro_rules! call {
                 $push.push_arg(&mut $thread);
             )*
             $thread.call_name(stringify!($function));
+            if $thread.get_return_type(stringify!($function)).is_some() {
+                Some($thread.pop_return())
+            } else { None }
         }
     };
 }

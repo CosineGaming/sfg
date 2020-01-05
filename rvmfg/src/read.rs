@@ -2,7 +2,7 @@
 /// instructions / types / etc
 use crate::thread::Fn;
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Type {
     Str,
     Int,
