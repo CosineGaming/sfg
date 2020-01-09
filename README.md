@@ -7,7 +7,7 @@ game development
 This language is intended to script systems in an ECS scalably, safely,
 and cleanly. These are my goals:
 
-- Performant
+- Performant * (>50% speed of lua)
 	- games are one of the most performance-critical softwares we
 	make these days
 - Script-like *
@@ -66,4 +66,95 @@ rvmfg
 
 the Virtual Machine is also written in Rust, but with a clean C interface,
 in [`rvmfg`](rvmfg/). `cargo doc --open` should get you started
+
+the bytecode is not necessarily planned to be stable in step with
+the VM even after 1.0, but a best-effort reference is located at
+[`rvmfg/bcfg.md`](rvmfg/bcfg.md). once the VM is much more stable, perhaps
+the bytecode will be stabilized and other VMs could be implemented
+
+If your `cargo test` is failing, you probably haven't generated the
+bytecode. Since the VM doesn't depend on the compiler, and the bytecode is
+not yet incredibly stable, you'll want to be in the `rsfg` dir and run
+`tests/update_rvmfg_tests.sh`.
+
+comparison to other projects
+----------------------------
+
+pro is more like "exceeds expectations of sfg" and con is "doesn't match
+expectations of sfg," it's not a value judgement on language design
+
+### [dyon](https://github.com/PistonDevelopers/dyon)
+
+pros
+
+- feature rich / far along in development
+    - implements all goals of sfg except those in cons list and more
+- neat new syntax like
+    - global closures ([current objects](https://github.com/PistonDevelopers/dyon/issues/224))
+    - [inferred for loops](https://github.com/PistonDevelopers/dyon/issues/116)
+
+cons
+
+- targetting rust only (may be true of others)
+- no intermediate representation / non-compiler-driven
+- { braces }
+- immutable-by-default\*
+
+\* games are all about mutable state. sfg plans a mutation detector that
+allows for ECS to efficiently dispatch without requiring mut tags on nearly
+every variable
+
+### [lily](https://fascinatedbox.gitlab.io/lily-docs/)
+
+pros
+
+- only always-statically-typed lang i found
+
+cons
+
+- OOP
+- tracing + RC GC
+- braces
+
+### [haxe](https://haxe.org/)
+
+pros
+
+- performant, battle-tested VM with intermediate representation and static analysis
+
+cons
+
+- OOP
+- tracing GC
+- really unscripty syntax (){};
+
+### [rhai](https://github.com/jonathandturner/rhai)
+
+pros
+
+- very strong host-side API
+- some hot reloading
+
+cons
+
+- {};
+
+garbage collection model unknown
+
+### [mun](https://github.com/mun-lang/mun)
+
+pros
+
+- fully statically typed
+- first-class hot reloading
+
+cons
+
+- while AOT is nice, it's to platform-specific code
+- {};
+
+GC model unknown
+
+**go ahead and let me know if i have mischaracterized your project or if
+you're aware of another project in this niche, i'd love to research it**
 

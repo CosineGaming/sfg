@@ -1,12 +1,27 @@
-use super::{Span, Type};
+//! the Abstract Syntax Tree ([AST]) is the result of parsing, and contains
+//! all the data in your program in actual logical chunks, most closely
+//! resembling the frontend conceptual syntax.
+//!
+//! the actual AST is the [AST] type, which is just a list of functions. also
+//! in this file is all the data structures *below* that root in
+//! the tree. i know there's a lot of data structures here, but they
+//! mostly make sense based on their names. Just remember that they refer
+//! to the **sfg** language, not rust Ifs or Fns or Literals or anything.
 
+use crate::{llr, span::Span, Type};
+
+/// An Abstract Syntax Tree
 pub type AST = Vec<ASTNode>;
 
+/// A function really. Although it can be extern (just for typechecking,
+/// provided in the VM) or fn (real function, with code)
 #[derive(PartialEq, Debug)]
 pub enum ASTNode {
     Fn(Fn),
     ExternFn(ExternFn),
 }
+/// Fn includes the signature of the function and the entire body of code
+/// to be executed
 #[derive(PartialEq, Debug)]
 pub struct Fn {
     pub statements: Vec<Statement>,
@@ -16,37 +31,52 @@ pub struct Fn {
 pub struct ExternFn {
     pub signature: Signature,
 }
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Default)]
 pub struct Signature {
-    pub id: Id,
-    pub parameters: Vec<Id>,
+    pub name: NameSpan,
+    pub return_type: Option<Type>, // None => Void, Some(t) => Type
+    pub parameters: Vec<TypedName>,
     pub span: Span,
 }
+/// A name that's guaranteed to have a type, *because it's required
+/// syntactically*. Recall that the AST mirrors frontend syntax more than
+/// compiled code, so even though identifiers and expressions need types eventually,
+/// they don't syntactically
 #[derive(PartialEq, Clone, Debug)]
-pub struct Id {
+pub struct TypedName {
+    pub name: NameSpan,
+    pub id_type: Type,
+}
+/// Because we need spans for *everything* for error reporting, and we need
+/// Strings a lot for names, we just plop them together
+#[derive(PartialEq, Clone, Debug, Default)]
+pub struct NameSpan {
     pub name: String,
-    pub id_type: Option<Type>,
     pub span: Span,
 }
-impl Id {
+impl NameSpan {
     pub fn fake(name: &'static str) -> Self {
-        Self { name: name.to_string(), id_type: None, span: Span::new() }
+        Self {
+            name: name.to_string(),
+            ..Default::default()
+        }
     }
 }
 #[derive(PartialEq, Clone, Debug)]
 pub enum Statement {
     Assignment(Assignment),
     /// The data in a declaration is the same as assignment
-    Declaration(Assignment),
+    Declaration(Declaration),
     FnCall(FnCall),
     Return(Option<Expression>),
     If(If),
     WhileLoop(WhileLoop),
+    LLRInsts(Vec<llr::Instruction>),
 }
 #[derive(PartialEq, Clone, Debug)]
 pub enum Expression {
     Literal(Literal),
-    Identifier(Id),
+    Identifier(NameSpan),
     Not(Box<Expression>),
     // A FnCall can be an expression as well as a statement
     // A statement FnCall is lowered differently than an expression FnCall
@@ -67,13 +97,19 @@ pub enum LiteralData {
 }
 #[derive(PartialEq, Clone, Debug)]
 pub struct Assignment {
-    pub lvalue: Id,
+    pub lvalue: NameSpan,
     pub rvalue: Expression,
     pub span: Span,
 }
 #[derive(PartialEq, Clone, Debug)]
+pub struct Declaration {
+    pub assignment: Assignment,
+    pub id_type: Option<Type>,
+}
+/// This is the actual call like add_stuff(5, 6.0), not the function
+#[derive(PartialEq, Clone, Debug)]
 pub struct FnCall {
-    pub name: Id,
+    pub name: NameSpan,
     pub arguments: Vec<Expression>,
     pub span: Span,
 }
@@ -111,23 +147,5 @@ pub enum BinaryOp {
     Minus,
     Times,
     Divide,
-}
-
-impl Expression {
-    pub fn full_span(&self) -> Span {
-        match self {
-            Self::Literal(lit) => lit.span,
-            Self::Identifier(id) => id.span,
-            Self::Not(expr) => {
-                warn!("unimplemented span on not to include ! symbol");
-                expr.full_span()
-            }
-            // A FnCall can be an expression as well as a statement
-            // A statement FnCall is lowered differently than an expression FnCall
-            Self::FnCall(call) => call.span,
-            Self::Binary(binary) => {
-                Span::set(vec![binary.left.full_span(), binary.right.full_span()])
-            }
-        }
-    }
+    Mod,
 }

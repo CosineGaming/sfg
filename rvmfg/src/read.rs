@@ -2,7 +2,7 @@
 /// instructions / types / etc
 use crate::thread::Fn;
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Type {
     Str,
     Int,
@@ -11,9 +11,12 @@ pub enum Type {
 }
 
 #[derive(PartialEq, Eq, Debug)]
+#[repr(u8)]
 pub enum Deser {
     Add,
-    BAnd,
+    Decl,
+    DeclLit,
+    DeVars,
     Div,
     Dup,
     FAdd,
@@ -22,72 +25,101 @@ pub enum Deser {
     FMul,
     FSub,
     ExternFnCall,
-    ExternFnHeader,
     FnCall,
-    FnHeader,
     Panic,
+    Jump,
     JumpZero,
+    Less,
+    Load,
+    Locals,
+    Mod,
     Mul,
-    BNot,
+    Not,
     Pop,
     Push,
     Return,
-    StringLit,
     Sub,
-    Swap,
+    Store,
+    StoreLit,
+    Xor,
+}
+
+/// much less perf heavy, able to sub-type
+#[derive(PartialEq, Eq, Debug)]
+pub enum DeserHeader {
     Type(Type),
     Void,
+    StringLit,
+    FnHeader,
+    ExternFnHeader,
 }
 
-pub fn deser(what: u8) -> Option<Deser> {
-    use Deser as D;
-    use Type::*;
+// deser is a really tightly called function and inlining it shows 25% speedups
+#[inline(always)]
+pub fn deser(what: u8) -> Deser {
+    use Deser::*;
     match what {
-        // Types 1x
-        0x10 => Some(D::Type(Int)),
-        0x11 => Some(D::Type(Str)),
-        0x12 => Some(D::Type(Bool)),
-        0x13 => Some(D::Type(Float)),
-        // Other 2x
-        0x21 => Some(D::Void),
-        // Instructions 3x
-        0x30 => Some(D::Push),
-        0x31 => Some(D::ExternFnCall),
-        0x32 => Some(D::StringLit),
-        0x33 => Some(D::FnHeader),
-        0x34 => Some(D::ExternFnHeader),
-        0x35 => Some(D::Return),
-        0x36 => Some(D::FnCall),
-        0x37 => Some(D::Pop),
-        0x38 => Some(D::BAnd),
-        0x39 => Some(D::JumpZero),
-        0x3a => Some(D::Dup),
-        0x3b => Some(D::Panic),
-        0x3c => Some(D::Add),
-        0x3d => Some(D::Sub),
-        0x3e => Some(D::Swap),
-        0x3f => Some(D::BNot),
+        // Data and Flow 2x
+        0x20 => Push,
+        0x21 => Pop,
+        0x22 => FnCall,
+        0x23 => ExternFnCall,
+        0x24 => Return,
+        0x25 => JumpZero,
+        0x26 => Panic,
+        0x27 => Locals,
+        0x28 => DeVars,
+        0x29 => Dup,
+        0x2a => Decl,
+        0x2b => Store,
+        0x2c => Load,
+        0x2d => DeclLit,
+        0x2e => StoreLit,
+        0x2f => Jump,
         // Float/?? 4x
-        0x40 => Some(D::FMul),
-        0x41 => Some(D::FDiv),
-        0x4c => Some(D::FAdd),
-        0x4d => Some(D::FSub),
-        0x4f => Some(D::FLess),
-        // 5x is used for internal panics in rsfg
-        // 6x int instructions (ctd)
-        0x60 => Some(D::Mul),
-        0x61 => Some(D::Div),
-        _ => None,
+        0x40 => FAdd,
+        0x41 => FSub,
+        0x42 => FMul,
+        0x43 => FDiv,
+        0x44 => FLess,
+        // Int 5x
+        0x50 => Add,
+        0x51 => Sub,
+        0x52 => Mul,
+        0x53 => Div,
+        0x54 => Less,
+        0x55 => Xor,
+        0x56 => Mod,
+        // Bool/?? 6x
+        0x60 => Not,
+        fail => panic!("tried to match invalid u8 0x{:X}", fail),
     }
 }
-pub fn deser_strong(what: u8) -> Deser {
-    match deser(what) {
+pub fn deser_header(what: u8) -> Option<DeserHeader> {
+    use self::Type::*;
+    use DeserHeader::*;
+    Some(match what {
+        // Sections
+        0x01 => StringLit,
+        0x02 => FnHeader,
+        0x03 => ExternFnHeader,
+        // Types 1x
+        0x10 => Void,
+        0x11 => Type(Int),
+        0x12 => Type(Str),
+        0x13 => Type(Bool),
+        0x14 => Type(Float),
+        _ => return None,
+    })
+}
+pub fn deser_header_strong(what: u8) -> DeserHeader {
+    match deser_header(what) {
         Some(res) => res,
-        None => panic!("tried to match invalid u8 0x{:X}", what),
+        None => panic!("tried to match invalid u8 0x{:X} in header", what),
     }
 }
 
-pub fn next(code: &[u8], ip: &mut usize) -> u8 {
+pub fn read_u8(code: &[u8], ip: &mut usize) -> u8 {
     let rv = code[*ip];
     *ip += 1;
     rv
@@ -99,6 +131,14 @@ pub fn read_u32(code: &[u8], ip: &mut usize) -> u32 {
     four.copy_from_slice(&code[*ip..*ip + 4]);
     let rv = u32::from_le(unsafe { transmute(four) });
     *ip += 4;
+    rv
+}
+pub fn read_u16(code: &[u8], ip: &mut usize) -> u16 {
+    use std::mem::transmute;
+    let mut region: [u8; 2] = Default::default();
+    region.copy_from_slice(&code[*ip..*ip + 2]);
+    let rv = u16::from_le(unsafe { transmute(region) });
+    *ip += 2;
     rv
 }
 pub fn read_i32(code: &[u8], ip: &mut usize) -> i32 {
@@ -113,7 +153,7 @@ pub fn read_i32(code: &[u8], ip: &mut usize) -> i32 {
 pub fn read_to_zero(code: &[u8], mut ip: &mut usize) -> Vec<u8> {
     let mut rv = Vec::new();
     loop {
-        let b = next(code, &mut ip);
+        let b = read_u8(code, &mut ip);
         if b == 0 {
             break;
         }
@@ -132,18 +172,18 @@ pub fn read_string(code: &[u8], mut ip: &mut usize) -> String {
 
 /// Returns (name, function)
 pub fn read_fn_header(code: &[u8], mut ip: &mut usize, is_extern: bool) -> (String, Fn) {
-    let return_type_u8 = next(code, &mut ip);
-    let return_type = match deser_strong(return_type_u8) {
-        Deser::Type(t) => Some(t),
-        Deser::Void => None,
+    let return_type_u8 = read_u8(code, &mut ip);
+    let return_type = match deser_header_strong(return_type_u8) {
+        DeserHeader::Type(t) => Some(t),
+        DeserHeader::Void => None,
         _ => panic!("expected type or void, got {}", return_type_u8),
     };
-    let param_count = next(code, &mut ip);
+    let param_count = read_u8(code, &mut ip);
     let mut parameters = vec![];
     for _ in 0..param_count {
-        let type_u8 = next(code, &mut ip);
-        let param = match deser_strong(type_u8) {
-            Deser::Type(t) => t,
+        let type_u8 = read_u8(code, &mut ip);
+        let param = match deser_header_strong(type_u8) {
+            DeserHeader::Type(t) => t,
             _ => panic!("expected type, got {}", type_u8),
         };
         parameters.push(param);

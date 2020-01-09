@@ -13,10 +13,10 @@ fn main()
 		// USEFUL break
 		var running = true
 		while (factor <= of) && running
-			if mod(of, factor) == 0
+			if (of % factor) == 0
 				of /= factor
 				running = false
 			else
-    			factor += 1 // don't bother checking prime it's not faster (??)
+				factor += 1 // don't bother checking prime it's not faster (??)
     assert(factor == 7)
 

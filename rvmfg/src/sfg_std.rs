@@ -3,11 +3,8 @@
 // That which cannot be is supposed to be implemented by the order of
 // one or two parent-app functions, and is here
 
-use crate::thread::Thread;
-
-pub fn log(thread: &mut Thread) {
-    let string_index = thread.stack.pop().expect("param not provided");
-    let string = &thread.strings[string_index as usize];
+pub fn log(strings: &[String], locals: &mut Vec<i32>) {
+    let string_index = locals.pop().expect("param not provided");
+    let string = &strings[string_index as usize];
     print!("{}", string);
 }
-

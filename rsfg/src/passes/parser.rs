@@ -1,7 +1,16 @@
 // This is the parser. yay.
 
-use crate::{ast::*, vec_errs_to_res, Span, Token, TokenType, Type};
+use crate::{
+    ast::*,
+    span::Span,
+    token::{Token, TokenType},
+    vec_errs_to_res, Type,
+};
 
+/// it's a fine line when an incorrect program will be
+/// detected by parse vs lower. i supposed the technical answer is syntactic
+/// vs semantic, but that just raises more questions. perhaps examples are
+/// easier: expected one token, got another, or unexpected EOF
 #[derive(Debug)]
 pub enum ParseError {
     // Expected, got
@@ -16,7 +25,11 @@ impl std::fmt::Display for ParseError {
                 let expected_strings: Vec<String> =
                     expected.iter().map(|e| format!("{}", e)).collect();
                 let expected_str = expected_strings.join(", ");
-                write!(f, "expected {}, got {} at {}", expected_str, got.kind, got.span)
+                write!(
+                    f,
+                    "expected {}, got {} at {}",
+                    expected_str, got.kind, got.span
+                )
             }
             EOF(parsing) => write!(f, "unexpected EOF parsing {}", parsing),
         }
@@ -32,9 +45,9 @@ impl ParseError {
 
 type Result<T> = std::result::Result<T, Vec<ParseError>>;
 
-static PANIC_ON_ERROR: bool = false;
+const PANIC_ON_ERROR: bool = false;
 
-static IDENT: &str = "identifier";
+const IDENT: &str = "identifier";
 
 macro_rules! expect_any {
     ( $during:literal, $to_match:expr => { $($token_type:ident$(($subordinate:pat,$literal:expr))? => $expr:expr $(,)?)* } ) => {
@@ -115,46 +128,50 @@ fn expect_token(rtokens: &mut Tokens, what: TokenType, during: &str) -> Result<T
     }
 }
 
-fn parse_id(rtokens: &mut Tokens, type_required: bool) -> Result<Id> {
+fn parse_name(rtokens: &mut Tokens) -> Result<NameSpan> {
     let token = pop_no_eof(rtokens, "identifier")?;
-    let mut id_span = token.span;
     let mut expected_id = expect_any!("identifier", Some(&token) => {
         Identifier(_, String::new()) => (),
     });
-    let mut id_type = None;
-    // Can't use expect_any! because not Some(got) has special semantics
-    match rtokens.last() {
-        Some(Token { kind: TokenType::Colon, .. }) => {
-            let t = rtokens.pop().unwrap();
-            let mut certain_type = expect_any!("identifier type", rtokens.pop() => {
-                Type(id_type,Type::Int) => id_type,
-            });
-            resolve!(expected_id, certain_type);
-            id_type = Some(certain_type);
-            id_span = Span::set(vec![t.span, id_span]);
-        }
-        Some(got) => {
-            if type_required {
-                let mut no_type: Result<()> = Err(ParseError::Expected(
-                    vec![TokenType::Type(Type::Str), TokenType::Type(Type::Int)],
-                    got.clone(),
-                )
-                .v());
-                resolve!(expected_id, no_type);
-            } else {
-                resolve!(expected_id);
-            }
-        }
-        None => {
-            let mut eof: Result<()> = Err(ParseError::EOF("identifier".to_string()).v());
-            resolve!(expected_id, eof);
-        }
-    }
+    resolve!(expected_id);
     let name = match token.kind {
         TokenType::Identifier(name) => name,
         _ => panic!("identifier wasn't identifier (compiler bug)"),
     };
-    Ok(Id { name, id_type, span: id_span })
+    Ok(NameSpan {
+        name,
+        span: token.span,
+    })
+}
+
+// TODO: split up into required func and not required to remove unwrap
+fn parse_explicit_type(rtokens: &mut Tokens, type_required: bool) -> Result<Option<Type>> {
+    // Can't use expect_any! because not Some(got) has special semantics
+    match rtokens.last() {
+        Some(Token {
+            kind: TokenType::Colon,
+            ..
+        }) => {
+            rtokens.pop().unwrap(); // the colon
+            let mut certain_type = expect_any!("identifier type", rtokens.pop() => {
+                Type(id_type,Type::Int) => id_type,
+            });
+            resolve!(certain_type);
+            Ok(Some(certain_type))
+        }
+        Some(got) => {
+            if type_required {
+                Err(ParseError::Expected(
+                    vec![TokenType::Type(Type::Str), TokenType::Type(Type::Int)],
+                    got.clone(),
+                )
+                .v())
+            } else {
+                Ok(None)
+            }
+        }
+        None => Err(ParseError::EOF("identifier".to_string()).v()),
+    }
 }
 
 fn token_to_binary_op(token: Option<Token>) -> Result<BinaryOp> {
@@ -171,6 +188,7 @@ fn token_to_binary_op(token: Option<Token>) -> Result<BinaryOp> {
         Minus => BinaryOp::Minus,
         Times => BinaryOp::Times,
         Divide => BinaryOp::Divide,
+        Mod => BinaryOp::Mod,
     })
 }
 
@@ -180,7 +198,12 @@ fn parse_binary(rtokens: &mut Tokens, left: Expression) -> Result<BinaryExpr> {
     let mut op = token_to_binary_op(token);
     let mut right = parse_expression(rtokens);
     resolve!(op, right);
-    Ok(BinaryExpr { left, op, right, span })
+    Ok(BinaryExpr {
+        left,
+        op,
+        right,
+        span,
+    })
 }
 
 fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
@@ -267,10 +290,9 @@ fn parse_expression(rtokens: &mut Tokens) -> Result<Expression> {
                 Some(_) => {
                     let t = rtokens.pop().unwrap();
                     let name = known!(t.kind, Identifier);
-                    Ok(Expression::Identifier(Id {
+                    Ok(Expression::Identifier(NameSpan {
                         name: name,
-                        id_type: None,
-                        span: t.span
+                        span: t.span,
                     }))
                 }
                 None => return Err(ParseError::EOF("expression".to_string()).v()),
@@ -297,11 +319,17 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
     let final_span;
     loop {
         arguments.push(match rtokens.last() {
-            Some(Token { kind: TokenType::RParen, .. }) => {
+            Some(Token {
+                kind: TokenType::RParen,
+                ..
+            }) => {
                 final_span = rtokens.pop().unwrap().span;
                 break;
             }
-            Some(Token { kind: TokenType::Comma, .. }) => {
+            Some(Token {
+                kind: TokenType::Comma,
+                ..
+            }) => {
                 rtokens.pop();
                 continue;
             }
@@ -331,20 +359,34 @@ fn parse_call(rtokens: &mut Tokens) -> Result<FnCall> {
             arguments.push(Expression::Literal(Literal {
                 data: LiteralData::Int(token.span.lo.0 as i32),
                 // span immediatly following token
-                span: Span { lo: token.span.hi, hi: token.span.hi },
+                span: Span {
+                    lo: token.span.hi,
+                    hi: token.span.hi,
+                },
             }));
             arguments.push(Expression::Literal(Literal {
                 data: LiteralData::Int(token.span.lo.1 as i32),
-                span: Span { lo: token.span.hi, hi: token.span.hi },
+                span: Span {
+                    lo: token.span.hi,
+                    hi: token.span.hi,
+                },
             }));
         }
         _ => (),
     }
     let total_span = Span::set(vec![token.span, final_span]);
-    Ok(FnCall { name: Id { name, id_type: None, span: token.span }, arguments, span: total_span })
+    let name_span = NameSpan {
+        name,
+        span: token.span,
+    };
+    Ok(FnCall {
+        name: name_span,
+        arguments,
+        span: total_span,
+    })
 }
 
-fn parse_args(rtokens: &mut Tokens) -> Result<Vec<Id>> {
+fn parse_params(rtokens: &mut Tokens) -> Result<Vec<TypedName>> {
     let mut args = vec![];
     let mut paren = expect_token(rtokens, TokenType::LParen, "fn parameters");
     let mut arg_errors = vec![];
@@ -353,7 +395,14 @@ fn parse_args(rtokens: &mut Tokens) -> Result<Vec<Id>> {
         #[allow(unreachable_code)]
         arg_errors.push(expect_any!("parameters", rtokens.last() => {
             Identifier(__,String::from("")) => {
-                args.push(parse_id(rtokens, true));
+                let name = parse_name(rtokens);
+                let id_type = parse_explicit_type(rtokens, true);
+                let wrapped = name.and_then(|name| id_type.and_then(|id_type|
+                    Ok(TypedName {
+                        name: name,
+                        id_type: id_type.unwrap(),
+                    })));
+                args.push(wrapped);
             }
             RParen => {
                 rtokens.pop();
@@ -422,7 +471,12 @@ fn parse_if(rtokens: &mut Tokens, tabs: usize) -> Result<If> {
         Ok(vec![])
     };
     resolve!(condition, else_statements; statements);
-    Ok(If { condition, statements, else_statements, span })
+    Ok(If {
+        condition,
+        statements,
+        else_statements,
+        span,
+    })
 }
 
 fn parse_loop(rtokens: &mut Tokens, tabs: usize) -> Result<WhileLoop> {
@@ -431,14 +485,17 @@ fn parse_loop(rtokens: &mut Tokens, tabs: usize) -> Result<WhileLoop> {
     let mut condition = parse_expression(rtokens);
     let statements = parse_indented_block(rtokens, tabs + 1);
     resolve!(span, condition; statements);
-    Ok(WhileLoop { condition, statements, span })
+    Ok(WhileLoop {
+        condition,
+        statements,
+        span,
+    })
 }
 
-fn parse_assignment(rtokens: &mut Tokens) -> Result<Assignment> {
-    let mut lvalue = parse_id(rtokens, false);
+fn parse_assignment_part(rtokens: &mut Tokens, lvalue: NameSpan) -> Result<Assignment> {
     let op = rtokens.pop();
     let mut rvalue = parse_expression(rtokens);
-    resolve!(lvalue, rvalue);
+    resolve!(rvalue);
     expect_any!("assignment", op => {
         Assignment => {
             Assignment {
@@ -465,10 +522,22 @@ fn parse_assignment(rtokens: &mut Tokens) -> Result<Assignment> {
         }
     })
 }
+
+fn parse_assignment(rtokens: &mut Tokens) -> Result<Assignment> {
+    let name = parse_name(rtokens)?;
+    parse_assignment_part(rtokens, name)
+}
 /// Declaration is just an assignment starting with var
-fn parse_declaration(rtokens: &mut Tokens) -> Result<Assignment> {
-    expect_token(rtokens, TokenType::Declare, "declaration")?;
-    parse_assignment(rtokens)
+fn parse_declaration(rtokens: &mut Tokens) -> Result<Declaration> {
+    expect_token(rtokens, TokenType::Declare, "declaration").expect("L1 violation");
+    let mut name = parse_name(rtokens);
+    // the only known place a type is optional but allowed
+    let mut id_type = parse_explicit_type(rtokens, false);
+    resolve!(name, id_type);
+    Ok(Declaration {
+        assignment: parse_assignment_part(rtokens, name)?,
+        id_type,
+    })
 }
 
 fn parse_statement(rtokens: &mut Tokens, tabs: usize) -> Result<Statement> {
@@ -498,7 +567,7 @@ fn parse_signature(rtokens: &mut Tokens) -> Result<Signature> {
         Identifier(name,String::from("")) => name,
         ExternFnCall(name,String::from("")) => name,
     });
-    let mut parameters = parse_args(rtokens);
+    let mut parameters = parse_params(rtokens);
     let mut final_char_expect = expect_any!("signature", rtokens.last() => {
         Type(__,Type::Int) => match rtokens.pop() {
             Some(Token { kind: TokenType::Type(r_type), span }) => (Some(r_type), span),
@@ -511,9 +580,14 @@ fn parse_signature(rtokens: &mut Tokens) -> Result<Signature> {
     });
     resolve!(name, parameters, final_char_expect, final_newline);
     let (return_type, final_span) = final_char_expect;
-    let id = Id { name, id_type: return_type, span };
+    let name_span = NameSpan { name, span };
     let span = Span::set(vec![span, final_span]);
-    Ok(Signature { id, parameters, span })
+    Ok(Signature {
+        name: name_span,
+        return_type,
+        parameters,
+        span,
+    })
 }
 
 /// Strips empty/tab/comment lines, does nothing if no empty lines, rolls back on error state
@@ -531,9 +605,15 @@ fn strip_white_lines(rtokens: &mut Tokens) {
         let empty = loop {
             match rtokens.n(count) {
                 // If there's an extra tab, get ALL the extra tabs
-                Some(Token { kind: TokenType::Tab, .. }) => count += 1,
+                Some(Token {
+                    kind: TokenType::Tab,
+                    ..
+                }) => count += 1,
                 // Otherwise, *allow* no expression
-                Some(Token { kind: TokenType::Newline, .. }) => break true,
+                Some(Token {
+                    kind: TokenType::Newline,
+                    ..
+                }) => break true,
                 // Not tab or newline, this line can't be stripped
                 _ => break false,
             }
@@ -576,7 +656,11 @@ fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Vec<Result<
     let mut statements = vec![];
     loop {
         // Allow empty lines amongst function an indented statement
-        if let Some(Token { kind: TokenType::Newline, .. }) = rtokens.last() {
+        if let Some(Token {
+            kind: TokenType::Newline,
+            ..
+        }) = rtokens.last()
+        {
             rtokens.pop();
             continue;
         }
@@ -596,7 +680,7 @@ fn parse_indented_block(rtokens: &mut Tokens, expect_tabs: usize) -> Vec<Result<
                         // fake vector error (sigh)
                         let v = v.into_iter().next().unwrap();
                         match v {
-                            ParseError::Expected(_,_) => (),
+                            ParseError::Expected(_, _) => (),
                             // this is in a rollback of an error, no need to report
                             ParseError::EOF(_) => break,
                         }
@@ -614,7 +698,10 @@ fn parse_fn(rtokens: &mut Tokens) -> Result<Fn> {
     let mut signature = parse_signature(rtokens);
     let statements = parse_indented_block(rtokens, 1);
     resolve!(fn_token, signature; statements);
-    Ok(Fn { signature, statements })
+    Ok(Fn {
+        signature,
+        statements,
+    })
 }
 
 fn parse_extern_fn(rtokens: &mut Tokens) -> Result<ExternFn> {
@@ -624,6 +711,13 @@ fn parse_extern_fn(rtokens: &mut Tokens) -> Result<ExternFn> {
     Ok(ExternFn { signature })
 }
 
+/// The parser takes the flat list of tokens and structures them their actual
+/// syntactical meanings.
+///
+/// this is a recursive descent parser using predictive parsing (ie no
+/// backtracking) resembling an LL1 parser. the only exception to the LL(1)
+/// rule is in offsides rule (indent / block) detection, in which it becomes
+/// LL(k) for k nested blocks
 pub fn parse(mut tokens: Vec<Token>) -> Result<AST> {
     tokens.reverse();
     let mut rtokens = Tokens(tokens);
@@ -707,19 +801,29 @@ mod test {
                 RParen,
             ]
             .iter()
-            .map(|t| Token { kind: t.clone(), span: Span::new() })
+            .map(|t| Token {
+                kind: t.clone(),
+                span: Span::new(),
+            })
             .collect(),
         ));
         assert_eq!(
             ast,
             vec![ASTNode::Fn(crate::ast::Fn {
                 signature: Signature {
-                    id: Id::fake("main"),
+                    name: NameSpan {
+                        name: String::from("main"),
+                        span: Default::default()
+                    },
+                    return_type: None,
                     parameters: vec![],
                     span: Span::new(),
                 },
                 statements: vec![Statement::FnCall(FnCall {
-                    name: Id::fake("main"),
+                    name: NameSpan {
+                        name: String::from("main"),
+                        span: Default::default()
+                    },
                     arguments: vec![],
                     span: Span::new(),
                 })],
@@ -732,10 +836,21 @@ mod test {
         // We need to test to make sure it can roll back properly
         use super::TokenType::*;
         let ast = dexpect(parse(
-            vec![Fn, Identifier("main".to_string()), LParen, RParen, Newline, Tab, Return]
-                .iter()
-                .map(|t| Token { kind: t.clone(), span: Span::new() })
-                .collect(),
+            vec![
+                Fn,
+                Identifier("main".to_string()),
+                LParen,
+                RParen,
+                Newline,
+                Tab,
+                Return,
+            ]
+            .iter()
+            .map(|t| Token {
+                kind: t.clone(),
+                span: Span::new(),
+            })
+            .collect(),
         ));
         if let ASTNode::Fn(func) = &ast[0] {
             assert_eq!(func.statements, vec![Statement::Return(None),]);

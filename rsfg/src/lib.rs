@@ -1,26 +1,69 @@
-// all roads lead to lib.rs
+//! i choose to expose the compiler as a library so you can run
+//! one or two passes over the code, get the intermediate data structure
+//! out of it, and do whatever the hell
+//! you want with it. if all you want is to [compile], you can do that (or
+//! you could just call on the CLI). Otherwise, we're getting a little nitty
+//! gritty but i believe you can do great things
+//!
+//! Most of the code is split into [passes] and intermediate data structures.
+//! Here's how it flows (data on the left, passes on the right):
+//!
+//! 1. source code &[str] => [passes::lex] =>
+//! 2. [token::Token] list => [passes::parse] =>
+//! 3. [ast] => [passes::lower](passes::lower::lower) =>
+//! 4. [llr] (Low-Level Representation) => [passes::optimize_llr] =>
+//! 5. [llr] again, but faster :P => [passes::gen] =>
+//! 6. bcfg bytecode [Vec]\<[u8]\> => YOU!
+//!
+//! Now you might put this in a file or you might give it directly to [rvmfg]
 
 #[macro_use]
 extern crate log;
+/// There's no reason to keep a compiler light, so we've conveniently bundled
+/// rvmfg for your use. This helps if you're trying to interpret code, or for
+/// testing (internally)
+pub use rvmfg;
 
-mod ast;
-mod codegen;
-mod lexer;
-mod llr;
-mod lower;
-mod parser;
+pub mod intermediates;
+pub mod passes;
 
+mod span;
+pub use span::Span;
+
+/// You probably want to pass this to compile
+///
+/// The sfg standard library is composed of two parts:
+/// 1. The standard library provided by the compiler
+/// 2. The standard library provided by the VM
+///
+/// (1) is further broken down into (a) the standard library /written in/ sfg,
+/// and (b) that with special bytecode emitted by the compiler (written in rust).
+///
+/// This is implementations of section (a) of (1) and all the externs of (2)
+///
+/// You can find more details at src/sfg/std.sfg, which this is include!d from
+pub const STDLIB: &str = include_str!("sfg/std.sfg");
+
+// for internal convenience; not public
+use intermediates::*;
+use passes::*;
+
+/// For all your error handling needs.
+/// Tells you if it was a parse error or a lower error (lower errors are
+/// usually type and nuanced errors, parse are just basic wrong token here).
+/// You can also get spans out of here which tell you where, and maybe a
+/// few other things. For the most part it's most useful just to print! them
 #[derive(Debug)]
 pub enum CompileError {
-    Parse(Vec<parser::ParseError>),
-    Lower(Vec<lower::LowerError>),
+    Parse(Vec<ParseError>),
+    Lower(Vec<LowerError>),
 }
 impl std::fmt::Display for CompileError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use CompileError::*;
         match self {
-            Parse(errs) => write!(f, "{}", fmt_vec_with(errs, "[ERROR] ")),
-            Lower(errs) => write!(f, "{}", fmt_vec_with(errs, "[ERROR] ")),
+            Parse(errs) => write!(f, "{}", fmt_vec_with(errs, "[ERROR] ", "\n")),
+            Lower(errs) => write!(f, "{}", fmt_vec_with(errs, "[ERROR] ", "\n")),
         }
     }
 }
@@ -28,11 +71,14 @@ impl std::fmt::Display for CompileError {
 impl std::error::Error for CompileError {}
 type Result<T> = std::result::Result<T, CompileError>;
 
-pub fn fmt_vec<T: std::fmt::Display>(vec: &[T]) -> String {
-    fmt_vec_with(vec, "")
+fn fmt_vec<T: std::fmt::Display>(vec: &[T]) -> String {
+    fmt_vec_with(vec, "", "\n")
 }
-pub fn fmt_vec_with<T: std::fmt::Display>(vec: &[T], with: &str) -> String {
-    vec.iter().map(|e| format!("{}{}", with, e)).collect::<Vec<String>>().join("\n")
+fn fmt_vec_with<T: std::fmt::Display>(vec: &[T], with: &str, sep: &str) -> String {
+    vec.iter()
+        .map(|e| format!("{}{}", with, e))
+        .collect::<Vec<String>>()
+        .join(sep)
 }
 
 fn vec_errs_to_res<T, E>(
@@ -53,153 +99,13 @@ fn vec_errs_to_res<T, E>(
     }
 }
 
-#[derive(PartialEq, Clone, Debug)]
-pub enum TokenType {
-    Identifier(String),
-    Tab,
-    StringLit(String),
-    IntLit(i32),
-    FloatLit(f32),
-    Type(Type),
-    Fn,
-    ExternFn,
-    ExternFnCall(String),
-    Return,
-    Comma,
-    Equal,
-    Less,
-    LessEqual,
-    Greater,
-    GreaterEqual,
-    Not,
-    NotEqual,
-    Or,
-    And,
-    Colon,
-    Newline,
-    LParen,
-    RParen,
-    If,
-    Else,
-    While,
-    Declare,
-    Assignment,
-    Plus,
-    Minus,
-    Times,
-    Divide,
-    OpAssign(Box<TokenType>),
-    True,
-    False,
-}
-// TODO: is there a way to mix this with the lexer in healthier/DRYer way?
-impl std::fmt::Display for TokenType {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use TokenType::*;
-        let s = match self {
-            Identifier(_) => "identifier",
-            Tab => "tab",
-            StringLit(_) => "string literal",
-            IntLit(_) => "int literal",
-            FloatLit(_) => "float literal",
-            Type(_) => "type",
-            Fn => "fn",
-            ExternFn => "extern fn",
-            ExternFnCall(_) => "extern fn call",
-            Return => "return",
-            Comma => ",",
-            Equal => "==",
-            Less => "<",
-            LessEqual => "<=",
-            Greater => ">",
-            GreaterEqual => ">=",
-            Not => "!",
-            NotEqual => "!=",
-            Or => "||",
-            And => "&&",
-            Colon => ":",
-            Newline => "newline",
-            LParen => "(",
-            RParen => ")",
-            If => "if",
-            Else => "else",
-            While => "while",
-            Declare => "var",
-            Assignment => "=",
-            Plus => "+",
-            Minus => "-",
-            Times => "*",
-            Divide => "/",
-            OpAssign(of) => match **of {
-                Plus => "+=",
-                Minus => "-=",
-                Times => "*=",
-                Divide => "/=",
-                // TODO: this is an ugly convention for "any"
-                False => "assignment",
-                _ => panic!("unsupported opassign stringified"),
-            },
-            True => "true",
-            False => "false",
-        };
-        write!(f, "{}", s)
-    }
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub struct Token {
-    kind: TokenType,
-    span: Span,
-}
-impl std::fmt::Display for Token {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?} at {}", self.kind, self.span)
-    }
-}
-
+/// An sfg data-type that the VM understands
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Type {
     Int,
     Bool,
     Str,
     Float,
-}
-
-#[derive(PartialEq, Eq, Clone, Copy, Debug, Default)]
-pub struct Span {
-    lo: (usize, usize),
-    hi: (usize, usize),
-    // TODO: file
-}
-impl Span {
-    pub fn new() -> Self {
-        Self::default()
-    }
-    pub fn set(mut spans: Vec<Span>) -> Span {
-        let first = spans.pop().expect("cannot form set of less than one span");
-        let mut lo = first.lo;
-        let mut hi = first.hi;
-        for span in spans {
-            // if lower, go lower
-            if span.lo.0 < lo.0 || (span.lo.0 == lo.0 && span.lo.1 < lo.1) {
-                lo = span.lo;
-            }
-            // if higher go higher
-            if span.hi.0 > hi.0 || (span.hi.0 == hi.0 && span.hi.1 > hi.1) {
-                hi = span.hi;
-            }
-        }
-        Span { lo, hi }
-    }
-}
-impl std::fmt::Display for Span {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if *self == Span::new() {
-            write!(f, "internal")
-        } else {
-            write!(f, "{}:{}", self.lo.0, self.lo.1)
-        }
-    }
 }
 impl std::fmt::Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -215,38 +121,21 @@ impl std::fmt::Display for Type {
 
 // TODO: add an actual import system so that we don't use this
 // "#include-but-worse" hack for the stdlib
+/// Compile a string, with the given stdlib appended to it. Recommend using
+/// [STDLIB] for that part. Returns generated `bcfg` bytecode. If
+/// you're not sure what to do with that, you should probly check out
+/// [rvmfg].
 pub fn compile(text: &str, stdlib: &str) -> Result<Vec<u8>> {
     let full_text = format!("{}\n{}", text, stdlib);
-    let result = parser::parse(lexer::lex(&full_text));
+    let result = parse(lex(&full_text));
     let ast = match result {
         Ok(ast) => ast,
         Err(err) => return Err(CompileError::Parse(err)),
     };
-    let result = lower::lower(ast);
+    let result = lower(ast);
     let llr = match result {
         Ok(llr) => llr,
         Err(err) => return Err(CompileError::Lower(err)),
     };
-    Ok(codegen::gen(llr))
-}
-
-pub fn compile_or_print(text: &str, stdlib: &str) -> Vec<u8> {
-    match compile(text, stdlib) {
-        Ok(c) => c,
-        Err(err) => {
-            eprintln!("{}", err);
-            std::process::exit(1);
-        }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::Span;
-    #[test]
-    fn test_span_set() {
-        let set =
-            Span::set(vec![Span { lo: (4, 4), hi: (5, 5) }, Span { lo: (4, 2), hi: (4, 10) }]);
-        assert_eq!(set, Span { lo: (4, 2), hi: (5, 5) });
-    }
+    Ok(gen(llr))
 }

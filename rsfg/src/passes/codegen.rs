@@ -17,41 +17,55 @@ fn serialize(what: Serializable) -> u8 {
     let typier = match what {
         // Sep is traditionally 00
         S::Sep => 0x00,
+        // Sections
+        S::StringLit => 0x01,
+        S::FnHeader => 0x02,
+        S::ExternFnHeader => 0x03,
         // Types 1x
-        S::Type(Int) => 0x10,
-        S::Type(Str) => 0x11,
-        S::Type(Bool) => 0x12,
-        S::Type(Float) => 0x13,
-        // Other 2x
-        S::Void => 0x21,
-        // Instructions 3x
-        S::Instruction(I::Push(_)) => 0x30,
-        S::Instruction(I::ExternFnCall(_)) => 0x31,
-        S::StringLit => 0x32,
-        S::FnHeader => 0x33,
-        S::ExternFnHeader => 0x34,
-        S::Instruction(I::Return) => 0x35,
-        S::Instruction(I::FnCall(_)) => 0x36,
-        S::Instruction(I::Pop) => 0x37,
-        S::Instruction(I::BAnd) => 0x38,
-        S::Instruction(I::JumpZero(_)) => 0x39,
-        S::Instruction(I::Dup(_)) => 0x3a,
-        S::Instruction(I::Panic(_, _)) => 0x3b,
-        S::Instruction(I::Add) => 0x3c,
-        S::Instruction(I::Sub) => 0x3d,
-        S::Instruction(I::Swap(_)) => 0x3e,
-        S::Instruction(I::BNot) => 0x3f,
-        // Float/?? 4x
-        S::Instruction(I::FMul) => 0x40,
-        S::Instruction(I::FDiv) => 0x41,
-        S::Instruction(I::FAdd) => 0x4c,
-        S::Instruction(I::FSub) => 0x4d,
-        S::Instruction(I::FLess) => 0x4f,
+        S::Void => 0x10,
+        S::Type(Int) => 0x11,
+        S::Type(Str) => 0x12,
+        S::Type(Bool) => 0x13,
+        S::Type(Float) => 0x14,
+        // Data and Flow 2x
+        S::Instruction(I::Push(_)) => 0x20,
+        S::Instruction(I::Pop) => 0x21,
+        S::Instruction(I::FnCall(_)) => 0x22,
+        S::Instruction(I::ExternFnCall(_)) => 0x23,
+        S::Instruction(I::Return) => 0x24,
+        // TODO: add Jump
+        // TODO: adding 8-bit Jumps for most cases could improve performance
+        // from reading code in VM
+        // TODO: 16-bit Jumps may actually be less performant than 32-bit (alignment??? idk)
+        S::Instruction(I::JumpZero(_)) => 0x25,
+        S::Instruction(I::Panic(_, _)) => 0x26,
+        //S::Instruction(I::Locals(_)) => 0x27,
+        S::Instruction(I::DeVars(_)) => 0x28,
+        S::Instruction(I::Dup) => 0x29,
+        S::Instruction(I::Decl) => 0x2a,
+        S::Instruction(I::Store(_)) => 0x2b,
+        S::Instruction(I::Load(_)) => 0x2c,
+        S::Instruction(I::DeclLit(_)) => 0x2d,
+        S::Instruction(I::StoreLit(_, _)) => 0x2e,
+        S::Instruction(I::Jump(_)) => 0x2f,
+        // Float 4x
+        S::Instruction(I::FAdd) => 0x40,
+        S::Instruction(I::FSub) => 0x41,
+        S::Instruction(I::FMul) => 0x42,
+        S::Instruction(I::FDiv) => 0x43,
+        S::Instruction(I::FLess) => 0x44,
+        // Int 5x
+        S::Instruction(I::Add) => 0x50,
+        S::Instruction(I::Sub) => 0x51,
+        S::Instruction(I::Mul) => 0x52,
+        S::Instruction(I::Div) => 0x53,
+        S::Instruction(I::Less) => 0x54,
+        S::Instruction(I::Xor) => 0x55,
+        S::Instruction(I::Mod) => 0x56,
+        // Bool/?? 6x
+        S::Instruction(I::Not) => 0x60,
         // This should never be actually kept in the end
-        S::Placeholder => 0x50,
-        // Overflow too many instructions 6x
-        S::Instruction(I::Mul) => 0x60,
-        S::Instruction(I::Div) => 0x61,
+        S::Placeholder => 0xee,
         S::Instruction(I::LabelMark(_)) => panic!("tried to serialize unresolved label"),
     };
     typier as u8
@@ -124,35 +138,38 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
         }
         use Instruction::*;
         match instr {
-            Push(what) => {
-                code.extend_from_slice(&u32_bytes(*what as u32));
+            // u32 arg
+            Push(what) | DeclLit(what) => {
+                code.extend_from_slice(&u32_bytes(*what));
             }
             // Two u32 args
             Panic(l, c) => {
-                code.extend_from_slice(&u32_bytes(*l as u32));
-                code.extend_from_slice(&u32_bytes(*c as u32));
-            }
-            // Besides instruction, the procedure for generating
-            // FnCall and ExternFnCall is the same
-            FnCall(call) | ExternFnCall(call) => {
-                code.extend_from_slice(&u32_bytes(call.index as u32));
+                code.extend_from_slice(&u32_bytes(*l));
+                code.extend_from_slice(&u32_bytes(*c));
             }
             // u8 argument
-            Dup(what) | Swap(what) => code.push(*what),
+            Load(what) | Store(what) | DeVars(what) => code.push(*what),
             // is label
             LabelMark(label) => {
                 labels.marks.insert(*label, code.len());
             }
             // label argument
-            JumpZero(label) => {
+            JumpZero(label) | Jump(label) => {
                 labels.refs.push((*label, code.len()));
                 // 4-byte jumps, which i choose simply to avoid needing a 16-bit deserialize method
-                for _ in 0..4 {
+                for _ in 0..2 {
                     code.push(serialize(Serializable::Placeholder));
                 }
             }
+            // u16 argument
+            FnCall(what) | ExternFnCall(what) => code.extend_from_slice(&u16_bytes(*what)),
+            // u8, u32
+            StoreLit(i, lit) => {
+                code.push(*i);
+                code.extend_from_slice(&u32_bytes(*lit));
+            }
             // As simple as serializing the instruction
-            Return | Pop | BAnd | BNot | Add | Sub | Mul | Div | FAdd | FSub | FLess | FMul | FDiv => {}
+            _ => {}
         }
     }
     LabeledCode { code, labels }
@@ -161,16 +178,20 @@ fn gen_fn_body(function: &Fn) -> LabeledCode {
 /// Should only be called ONCE, when everything has been generated
 fn resolve_labels(labeled: &mut LabeledCode) {
     for (label, location) in &labeled.labels.refs {
-        let refers = labeled.labels.marks.get(&label).expect("referred to non-existent label");
+        let refers = labeled
+            .labels
+            .marks
+            .get(&label)
+            .expect("referred to non-existent label");
         // Ensure that the ref location is in fact a placeholder byte
         assert_eq!(
             labeled.code[*location],
             serialize(Serializable::Placeholder),
             "tried to write label to non-placeholder"
         );
-        let bs = u32_bytes(*refers as u32);
-        for i in 0..4 {
-            labeled.code[location+i] = bs[i];
+        let bs = u16_bytes(*refers as u16);
+        for (i, &byte) in bs.iter().enumerate() {
+            labeled.code[location + i] = byte;
         }
     }
 }
@@ -179,8 +200,15 @@ fn u32_bytes(word: u32) -> [u8; 4] {
     use std::mem::transmute;
     unsafe { transmute(word.to_le()) }
 }
+fn u16_bytes(word: u16) -> [u8; 2] {
+    use std::mem::transmute;
+    unsafe { transmute(word.to_le()) }
+}
 
-/// fn_headers / sep | strings / fn_bodies
+/// turn low level representation into actual, bona fide, writeable,
+/// runnable, bytecode. this means writing headers, resolving labels, and
+/// serializing instructions, with the latter being surprisingly the easiest
+/// of those
 pub fn gen(tree: LLR) -> Vec<u8> {
     let mut labeled = LabeledCode::default();
     labeled.code = b"bcfg".to_vec();
@@ -246,18 +274,19 @@ mod test {
         // mark byte 4: 'm'
         let mut marks = HashMap::new();
         let label = 2;
-        marks.insert(label, 4);
+        marks.insert(label, 10);
         let mut labeled = LabeledCode {
             code: vec![
                 serialize(Serializable::Placeholder),
                 serialize(Serializable::Placeholder),
-                serialize(Serializable::Placeholder),
-                serialize(Serializable::Placeholder),
-                b'm'
+                b'm',
             ],
-            labels: Labels { marks, refs: vec![(label, 0)] },
+            labels: Labels {
+                marks,
+                refs: vec![(label, 0)],
+            },
         };
-        let expected = vec![4, 0, 0, 0, b'm'];
+        let expected = vec![10, 0, b'm'];
         resolve_labels(&mut labeled);
         assert_eq!(labeled.code, expected);
     }

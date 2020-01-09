@@ -1,0 +1,9 @@
+fn main()
+	assert((2f + 3f) == 5f)
+	assert((2f * 3.5f) == 7f)
+	assert((6f / 2f) == 3f)
+	assert((5f > 3f) == true)
+	assert((5f < 3f) == false)
+	assert((3f <= 3f) == true)
+	assert((2f >= 3f) == false)
+
